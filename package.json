@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.mjs tests/*.test.ts",
     "test:e2e": "playwright test",
+    "providers:smoke": "tsx scripts/provider-smoke.ts",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",

@@ -43,6 +43,8 @@ For a hosted project, link the intended Mosaic project and apply the migrations 
 
 Email/password and Google OAuth are supported in live mode. Add `http://localhost:3000/auth/callback` (and the production equivalent) to Supabase Auth redirect URLs. Configure Google in the Supabase dashboard before using that button.
 
+Hosted Supabase, protected migration, Vercel, OAuth, and release procedures are documented in [Production bring-up](docs/production.md).
+
 ## Catalog providers
 
 Add any subset of these server-only values to `.env.local`:

@@ -1,0 +1,46 @@
+name: Deploy Mosaic database
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type "deploy-mosaic" to apply pending migrations
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mosaic-production-database
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'deploy-mosaic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Link the explicitly configured Mosaic project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: npx supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+      - name: Review pending migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --dry-run --password "$SUPABASE_DB_PASSWORD"
+      - name: Apply pending migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+      - name: Lint hosted schema
+        run: npx supabase db lint --linked --level error --fail-on error
