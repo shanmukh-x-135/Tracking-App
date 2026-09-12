@@ -1,0 +1,1 @@
+-- Catalog media is loaded on demand through provider adapters. Test fixtures live in application tests.
