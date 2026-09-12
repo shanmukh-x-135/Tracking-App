@@ -50,3 +50,20 @@ test("search and media-specific log interactions work", async ({ page }) => {
     await page.keyboard.press("Escape");
   }
 });
+
+test("mock authentication supports sign up, refresh, and sign out", async ({ page }) => {
+  await page.goto("/signup");
+  await page.getByLabel("Display name").fill("Sam Rivera");
+  await page.getByLabel("Email").fill("sam@example.com");
+  await page.getByLabel("Password").fill("storykeeper");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  await expect(page).toHaveURL(/\/library$/);
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Your profile" })).toContainText("S");
+
+  await page.goto("/profile");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+});
