@@ -7,7 +7,9 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     browserName: "chromium",
     headless: true,
-    launchOptions: { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" },
+    launchOptions: process.platform === "darwin"
+      ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }
+      : undefined,
     screenshot: "only-on-failure",
   },
 });

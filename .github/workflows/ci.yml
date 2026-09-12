@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser journeys
+        shell: bash
+        run: |
+          npm run start > /tmp/mosaic-next.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:3000 > /dev/null; then
+              npx playwright test
+              exit $?
+            fi
+            sleep 1
+          done
+          cat /tmp/mosaic-next.log
+          exit 1
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rebuild database from migrations
+        run: |
+          npx supabase start
+          npx supabase db reset
+          npx supabase db lint --local --level error --fail-on error
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup
