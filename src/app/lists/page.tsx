@@ -1,5 +1,28 @@
+"use client";
+
 import Image from "next/image";
-import { LockKeyhole, Plus } from "lucide-react";
+import { LockKeyhole, Plus, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { lists, mediaById } from "@/data/media";
-export const metadata={title:"Lists"};
-export default function Page(){return <div className="page"><div className="page-narrow"><header className="page-hero"><span className="eyebrow">Curated by people</span><h1>Lists</h1><p>Mix films, series, games, and books into collections that say something about you.</p></header><div className="toolbar"><div className="filter-bar glass" style={{marginTop:0}}><button className="filter-button active">Popular</button><button className="filter-button">Friends</button><button className="filter-button">Your lists</button></div><button className="button primary"><Plus size={16}/>Create list</button></div><div className="list-grid">{lists.map(list=><article className="list-card" key={list.id}><div className="list-covers">{list.mediaIds.slice(0,4).map(id=>{const m=mediaById(id)!;return <div key={id}><Image src={m.posterUrl} alt="" fill sizes="160px"/></div>})}</div><div className="list-copy"><h3>{list.title}</h3><p>{list.description}</p><div style={{display:"flex",alignItems:"center",gap:8,marginTop:14}}><Image className="avatar" src={list.owner.avatarUrl} width={24} height={24} alt=""/><span className="muted" style={{fontSize:11}}>{list.owner.displayName} · {list.mediaIds.length} stories</span>{list.isPrivate&&<LockKeyhole size={12}/>}</div></div></article>)}</div></div></div>}
+
+export default function Page() {
+  const { user } = useAuth();
+  const { state, mutate } = useMosaicState();
+  const [isCreating, setIsCreating] = useState(false);
+  const router = useRouter();
+
+  return <div className="page"><div className="page-narrow">
+    <header className="page-hero"><span className="eyebrow">Curated by people</span><h1>Lists</h1><p>Mix films, series, games, and books into collections that say something about you.</p></header>
+    <div className="toolbar"><div className="filter-bar glass" style={{ marginTop: 0 }}><button className="filter-button active">Popular</button><button className="filter-button">Friends</button><button className="filter-button">Your lists</button></div><button className="button primary" onClick={() => user ? setIsCreating(true) : router.push("/login")}><Plus size={16}/>Create list</button></div>
+    {isCreating && <form className="inline-form list-create" onSubmit={(event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      void mutate({ type: "list.create", title: String(form.get("title") ?? ""), description: String(form.get("description") ?? ""), visibility: String(form.get("visibility")) as "public" | "unlisted" | "private" }).then(() => setIsCreating(false));
+    }}><button type="button" className="icon-button" aria-label="Cancel creating list" onClick={() => setIsCreating(false)}><X size={16}/></button><label className="field">Title<input name="title" required maxLength={120} placeholder="A collection with a point of view"/></label><label className="field full">Description<textarea name="description" maxLength={1000} placeholder="What connects these stories?"/></label><label className="field">Visibility<select name="visibility"><option value="private">Private</option><option value="public">Public</option><option value="unlisted">Unlisted</option></select></label><button className="button accent" type="submit">Create list</button></form>}
+    {state.lists.length > 0 && <section className="section"><div className="section-head"><h2>Your lists</h2></div><div className="list-grid">{state.lists.map((list) => <article className="list-card" key={list.id}><div className="list-covers">{list.items.slice(0, 4).map((item) => <div key={`${item.media.provider}:${item.media.providerId}`}><Image src={item.media.posterUrl ?? "/media-placeholder.svg"} alt={item.media.title} fill sizes="160px"/></div>)}</div><div className="list-copy"><h3>{list.title}</h3><p>{list.description || "A new cross-media collection."}</p><span className="muted" style={{ fontSize: 11 }}>{list.items.length} stories</span>{list.visibility === "private" && <LockKeyhole size={12}/>}</div></article>)}</div></section>}
+    <section className="section"><div className="section-head"><h2>Popular lists</h2></div><div className="list-grid">{lists.map((list) => <article className="list-card" key={list.id}><div className="list-covers">{list.mediaIds.slice(0, 4).map((id) => { const media = mediaById(id)!; return <div key={id}><Image src={media.posterUrl} alt="" fill sizes="160px"/></div>; })}</div><div className="list-copy"><h3>{list.title}</h3><p>{list.description}</p><div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14 }}><Image className="avatar" src={list.owner.avatarUrl} width={24} height={24} alt=""/><span className="muted" style={{ fontSize: 11 }}>{list.owner.displayName} · {list.mediaIds.length} stories</span>{list.isPrivate && <LockKeyhole size={12}/>}</div></div></article>)}</div></section>
+  </div></div>;
+}

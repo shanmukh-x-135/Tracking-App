@@ -4,16 +4,17 @@ import Image from "next/image";
 import { AlertCircle, LoaderCircle, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { allMedia, users } from "@/data/media";
+import { allMedia } from "@/data/media";
 import { Dialog } from "@/components/ui/dialog";
 import { createProviderKey } from "@/lib/media/identity";
 import { normalizeMock } from "@/lib/media/providers/mock";
-import type { CatalogFailure, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
+import type { CatalogFailure, CatalogMedia, CatalogProfile, CatalogSearchResult } from "@/lib/media/types";
 
 interface RemoteResult {
   query: string;
   items: CatalogMedia[];
   failures: CatalogFailure[];
+  profiles: CatalogProfile[];
   error?: string;
 }
 
@@ -39,10 +40,10 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         const response = await fetch(`/api/catalog/search?q=${encodeURIComponent(normalizedQuery)}`, { signal: controller.signal });
         if (!response.ok) throw new Error("Search is temporarily unavailable.");
         const result = await response.json() as CatalogSearchResult;
-        setRemote({ query: normalizedQuery, ...result });
+        setRemote({ query: normalizedQuery, ...result, profiles: result.profiles ?? [] });
       } catch (cause) {
         if (!controller.signal.aborted) {
-          setRemote({ query: normalizedQuery, items: [], failures: [], error: cause instanceof Error ? cause.message : "Search is temporarily unavailable." });
+          setRemote({ query: normalizedQuery, items: [], failures: [], profiles: [], error: cause instanceof Error ? cause.message : "Search is temporarily unavailable." });
         }
       }
     }, 300);
@@ -53,9 +54,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const activeRemote = remote?.query === normalizedQuery ? remote : undefined;
   const items = normalizedQuery.length < 2 ? suggestions : activeRemote?.items ?? [];
   const isLoading = normalizedQuery.length >= 2 && !activeRemote;
-  const matchingUsers = normalizedQuery.length >= 2
-    ? users.filter((user) => `${user.displayName} ${user.username}`.toLowerCase().includes(normalizedQuery.toLowerCase()))
-    : [];
+  const matchingUsers = activeRemote?.profiles ?? [];
 
   function go(href: string) {
     onOpenChange(false);
@@ -88,7 +87,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           {item.communityRating !== undefined && <span className="rating">★ {item.communityRating.toFixed(1)}</span>}
         </button>)}</section>;
       })}
-      {matchingUsers.length > 0 && <section className="result-group"><div className="result-label">People</div>{matchingUsers.map((user) => <button className="result-row" key={user.id} onClick={() => go("/profile")}><Image className="avatar" src={user.avatarUrl} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
+      {matchingUsers.length > 0 && <section className="result-group"><div className="result-label">People</div>{matchingUsers.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
       {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && items.length === 0 && matchingUsers.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}
       {isLoading && <div className="search-state"><span className="skeleton-line"/><span className="skeleton-line short"/><span className="sr-only">Searching every medium…</span></div>}
     </div>

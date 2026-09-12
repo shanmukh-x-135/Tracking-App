@@ -18,7 +18,7 @@ for each row execute function private.set_updated_at();
 create table public.tv_episodes (
   id uuid primary key default gen_random_uuid(),
   series_media_id uuid not null references public.media_items(id) on delete cascade,
-  provider text not null check (provider = 'tmdb'),
+  provider text not null check (provider in ('tmdb', 'mock')),
   external_id text not null,
   season_number integer not null check (season_number >= 0),
   episode_number integer not null check (episode_number > 0),

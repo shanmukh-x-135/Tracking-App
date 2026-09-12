@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const routes = ["/", "/discover", "/library", "/lists", "/profile", "/activity", "/movie/dune-part-two", "/series/severance", "/game/red-dead-redemption-2", "/book/dune"];
+const routes = ["/", "/discover", "/library", "/lists", "/profile", "/profile/alexchen", "/activity", "/movie/dune-part-two", "/series/severance", "/game/red-dead-redemption-2", "/book/dune"];
 const widths = [1440, 1280, 1024, 768, 390];
 
 for (const width of widths) {
@@ -53,6 +53,15 @@ test("search and media-specific log interactions work", async ({ page }) => {
     await expect(page.getByText(control, { exact: false })).toBeVisible();
     await page.keyboard.press("Escape");
   }
+});
+
+test("universal search opens public people profiles", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Meta+k");
+  await page.getByRole("textbox", { name: "Search all media" }).fill("Sam Rivera");
+  await page.getByRole("button", { name: /Sam Rivera/ }).click();
+  await expect(page).toHaveURL(/\/profile\/samira$/);
+  await expect(page.getByRole("heading", { name: "Sam Rivera" })).toBeVisible();
 });
 
 test("mock authentication supports sign up, refresh, and sign out", async ({ page }) => {

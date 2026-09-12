@@ -1,8 +1,8 @@
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-type Row<T> = T;
-type Insert<T> = Partial<T>;
-type Update<T> = Partial<T>;
+type Row<T> = T & Record<string, unknown>;
+type Insert<T> = Partial<T> & Record<string, unknown>;
+type Update<T> = Partial<T> & Record<string, unknown>;
 
 export interface Database {
   public: {

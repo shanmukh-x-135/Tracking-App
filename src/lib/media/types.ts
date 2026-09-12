@@ -55,11 +55,19 @@ export interface CatalogProvider {
 }
 
 export interface CatalogFailure {
-  provider: MediaProvider;
+  provider: MediaProvider | "profiles";
   message: string;
 }
 
 export interface CatalogSearchResult {
   items: CatalogMedia[];
   failures: CatalogFailure[];
+  profiles?: CatalogProfile[];
+}
+
+export interface CatalogProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
 }
