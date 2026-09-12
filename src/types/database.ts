@@ -20,6 +20,9 @@ export interface Database {
       book_readings: { Row: Row<BookReadingRow>; Insert: Insert<BookReadingRow>; Update: Update<BookReadingRow>; Relationships: [] };
       lists: { Row: Row<ListRow>; Insert: Insert<ListRow>; Update: Update<ListRow>; Relationships: [] };
       list_items: { Row: Row<ListItemRow>; Insert: Insert<ListItemRow>; Update: Update<ListItemRow>; Relationships: [] };
+      import_jobs: { Row: Row<ImportJobRow>; Insert: Insert<ImportJobRow>; Update: Update<ImportJobRow>; Relationships: [] };
+      import_records: { Row: Row<ImportRecordRow>; Insert: Insert<ImportRecordRow>; Update: Update<ImportRecordRow>; Relationships: [] };
+      import_provenance: { Row: Row<ImportProvenanceRow>; Insert: Insert<ImportProvenanceRow>; Update: Update<ImportProvenanceRow>; Relationships: [] };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -42,3 +45,6 @@ export interface GamePlaythroughRow extends Timestamped { user_id: string; media
 export interface BookReadingRow extends Timestamped { user_id: string; media_id: string; status: string; started_at: string|null; finished_at: string|null; current_page: number|null; total_pages: number|null; progress_percent: number|null; rating: number|null }
 export interface ListRow extends Timestamped { user_id: string; title: string; description: string; visibility: "public"|"unlisted"|"private" }
 export interface ListItemRow { id: string; list_id: string; media_id: string; position: number; note: string|null; created_at: string }
+export interface ImportJobRow extends Timestamped { user_id: string; source: string; status: string; conflict_policy: string; original_filename: string; file_sha256: string; total_records: number; matched_records: number; ambiguous_records: number; skipped_records: number; failed_records: number; duplicate_records: number; started_at: string|null; completed_at: string|null; duration_ms: number|null; error_summary: string|null; metadata: Json }
+export interface ImportRecordRow extends Timestamped { user_id: string; import_job_id: string; source_record_key: string; media_type: "movie"|"tv"|"game"|"book"; source_title: string; source_year: number|null; source_metadata: Json; normalized_payload: Json; resolution_status: string; resolved_media_id: string|null; confidence: string|null; candidate_payload: Json; error_summary: string|null; imported_at: string|null }
+export interface ImportProvenanceRow { id: string; user_id: string; import_job_id: string; import_record_id: string; source: string; source_record_key: string; target_kind: string; target_row_id: string; imported_fingerprint: string; applied_snapshot: Json; target_updated_at: string|null; undo_status: string; undone_at: string|null; created_at: string }

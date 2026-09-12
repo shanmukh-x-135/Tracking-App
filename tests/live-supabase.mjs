@@ -80,4 +80,25 @@ const crossUserUpdate = await stranger
 assert.ifError(crossUserUpdate.error);
 assert.equal(crossUserUpdate.data.length, 0, "cross-user list updates must affect no rows");
 
-console.log("Live Supabase auth, profile bootstrap, and owner-scoped RLS checks passed.");
+const { data: importJob, error: importJobError } = await owner
+  .from("import_jobs")
+  .insert({ user_id: ownerUser.id, source: "generic_movies", original_filename: "movies.csv", file_sha256: "a".repeat(64) })
+  .select("id")
+  .single();
+assert.ifError(importJobError);
+
+const privateJobRead = await stranger.from("import_jobs").select("id").eq("id", importJob.id);
+assert.ifError(privateJobRead.error);
+assert.equal(privateJobRead.data.length, 0, "private import jobs must be invisible cross-user");
+
+const foreignRecord = await stranger.from("import_records").insert({
+  user_id: ownerUser.id,
+  import_job_id: importJob.id,
+  source_record_key: "forged",
+  media_type: "movie",
+  source_title: "Forged",
+  normalized_payload: {},
+});
+assert.ok(foreignRecord.error, "RLS must reject records attached to another user's import job");
+
+console.log("Live Supabase auth, profile bootstrap, import isolation, and owner-scoped RLS checks passed.");
