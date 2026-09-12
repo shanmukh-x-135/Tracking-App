@@ -69,7 +69,7 @@ for each row execute function private.handle_new_user();
 create table public.media_items (
   id uuid primary key default gen_random_uuid(),
   media_type text not null check (media_type in ('movie', 'tv', 'game', 'book')),
-  provider text not null check (provider in ('tmdb', 'igdb', 'google_books', 'mock')),
+  provider text not null check (provider in ('tmdb', 'igdb', 'googlebooks', 'mock')),
   external_id text not null check (char_length(external_id) between 1 and 255),
   title text not null check (char_length(title) between 1 and 500),
   original_title text,
@@ -84,7 +84,7 @@ create table public.media_items (
   constraint media_items_provider_domain check (
     (provider = 'tmdb' and media_type in ('movie', 'tv'))
     or (provider = 'igdb' and media_type = 'game')
-    or (provider = 'google_books' and media_type = 'book')
+    or (provider = 'googlebooks' and media_type = 'book')
     or provider = 'mock'
   )
 );
