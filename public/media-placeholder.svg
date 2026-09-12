@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title description">
+  <title id="title">Artwork unavailable</title>
+  <desc id="description">A subtle Mosaic placeholder pattern.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#242524"/>
+      <stop offset="1" stop-color="#101110"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#background)"/>
+  <circle cx="300" cy="410" r="104" fill="none" stroke="#d7a95b" stroke-opacity=".3" stroke-width="2"/>
+  <path d="M246 410h108M300 356v108" stroke="#d7a95b" stroke-opacity=".58" stroke-width="8" stroke-linecap="round"/>
+  <text x="300" y="575" fill="#d8d5cf" fill-opacity=".72" font-family="system-ui,sans-serif" font-size="26" text-anchor="middle" letter-spacing="7">MOSAIC</text>
+</svg>

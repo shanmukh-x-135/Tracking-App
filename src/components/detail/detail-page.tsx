@@ -1,16 +1,82 @@
 "use client";
+
 import Image from "next/image";
 import { Check, Heart, ListPlus, Plus, Star } from "lucide-react";
 import { useState } from "react";
 import { allMedia, reviews } from "@/data/media";
 import { MediaShelf } from "@/components/media/media-card";
-import type { Book, Game, Media, TvSeries } from "@/types/media";
+import type { CatalogBook, CatalogGame, CatalogMedia, CatalogSeries } from "@/lib/media/types";
 
-function factsFor(media:Media):[string,string][] { switch(media.mediaType){case"movie":return [["Director",media.director],["Runtime",`${media.runtime} min`],["Released",media.releaseYear.toString()],["Genres",media.genres.join(", ")]];case"tv":return [["Network",media.network],["Seasons",media.seasons.toString()],["Episodes",media.episodeCount.toString()],["Status",media.status]];case"game":return [["Developer",media.developer],["Publisher",media.publisher],["Released",media.releaseYear.toString()],["Platforms",media.platforms.join(", ")]];case"book":return [["Author",media.authors.join(", ")],["Pages",media.pageCount.toString()],["Published",media.releaseYear.toString()],["Series",media.series??"Standalone"]];} }
-const actionLabel=(type:Media["mediaType"])=>type==="movie"?"Watched":type==="tv"?"Watching":type==="game"?"Playing":"Reading";
-function SeriesSection({media}:{media:TvSeries}){const [season,setSeason]=useState(media.seasons);const [watched,setWatched]=useState<number[]>([1,2]);const episodes=["Hello, Ms. Cobel","Goodbye, Mrs. Selvig","Who Is Alive?","Woe’s Hollow","Trojan’s Horse","Attila","Chikhai Bardo","Sweet Vitriol","The After Hours","Cold Harbor"];const airDates=["Feb 7","Feb 14","Feb 21","Feb 28","Mar 7"];return <section className="section"><div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>Season {season}</h2></div><span className="muted" style={{fontSize:12}}>{watched.length} of {episodes.length} watched</span></div><div className="season-tabs">{Array.from({length:media.seasons},(_,i)=>i+1).map(s=><button key={s} onClick={()=>setSeason(s)} className={`filter-button ${season===s?"active":""}`}>Season {s}</button>)}</div><div className="episode-list">{episodes.slice(0,5).map((title,i)=><article className="episode" key={title}><div className="episode-thumb"><Image src={media.backdropUrl??media.posterUrl} alt="" fill sizes="72px"/></div><div><h4>S{String(season).padStart(2,"0")}E{String(i+1).padStart(2,"0")} · {title}</h4><p>44 min · {airDates[i]}, 2025 · <span className="rating">★ {(4.3+i*.1).toFixed(1)}</span></p></div><div className="episode-actions"><button className={`icon-button ${watched.includes(i)?"watched":""}`} onClick={()=>setWatched(v=>v.includes(i)?v.filter(x=>x!==i):[...v,i])} aria-label={`Mark ${title} watched`}><Check size={17}/></button><button className="button"><Star size={14}/>Rate</button></div></article>)}</div></section>}
-function GameSection({media}:{media:Game}){return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthrough #1</h2></div></div><div className="status-card"><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><h3>Playing · {media.platforms[0]}</h3><p>Started Aug 2026</p></div><span className="rating">27h 14m</span></div><div className="progress-track"><div className="progress-bar" style={{width:"45%"}}/></div><div className="progress-meta"><span>Main story progress</span><span>45%</span></div></div></section>}
-function BookSection({media}:{media:Book}){return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading now</span><h2>251 / {media.pageCount} pages</h2></div><strong className="rating">42%</strong></div><div className="status-card"><div className="progress-track" style={{height:7}}><div className="progress-bar" style={{width:"42%"}}/></div><p>168 pages read this month · about 7 hours remaining</p><button className="button accent">Update progress</button></div></section>}
-function MovieSection(){return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div><div className="status-card"><h3>Watched Sep 2, 2026</h3><p><span className="rating">★★★★½</span> · First watch</p></div></section>}
+type Fact = [label: string, value: string | number | undefined];
 
-export function DetailPage({media}:{media:Media}){const [status,setStatus]=useState(false);const related=allMedia.filter(m=>m.id!==media.id).slice(0,6);return <><section className="detail-hero"><div className="detail-backdrop"><Image src={media.backdropUrl??media.posterUrl} alt="" fill priority sizes="100vw"/></div><div className="detail-content"><div className="detail-poster"><Image src={media.posterUrl} alt={`${media.title} artwork`} fill sizes="190px"/></div><div className="detail-copy"><span className="type-badge">{media.mediaType==="tv"?"Series":media.mediaType}</span><h1>{media.title}</h1><div className="hero-meta"><span>{media.releaseYear}</span><span>·</span><span>{media.genres.join(" / ")}</span><span className="rating">★ {media.averageRating}</span><span className="muted">{media.ratingCount.toLocaleString()} ratings</span></div><p>{media.description}</p><div className="actions"><button onClick={()=>setStatus(!status)} className={`button ${status?"accent":"primary"}`}>{status?<Check size={16}/>:<Plus size={16}/>} {status?actionLabel(media.mediaType):"Log this"}</button><button className="button"><Star size={16}/>Rate</button><button className="button"><ListPlus size={16}/>Add to list</button><button className="icon-button glass" aria-label="Favourite"><Heart size={17}/></button></div></div></div></section><div className="detail-body"><div><div className="facts">{factsFor(media).map(([label,value])=><div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>{media.mediaType==="movie"&&<MovieSection/>} {media.mediaType==="tv"&&<SeriesSection media={media}/>} {media.mediaType==="game"&&<GameSection media={media}/>} {media.mediaType==="book"&&<BookSection media={media}/>}<section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section></div><aside><div className="status-card"><span className="eyebrow">Your activity</span><h3>{status?actionLabel(media.mediaType):"Not logged yet"}</h3><p>{status?"Your progress is kept here, alongside ratings, reviews, and future rewatches.":"Start a log to keep your history and share it with friends."}</p></div><section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0,2).map(r=><div className="activity-row" key={r.id} style={{gridTemplateColumns:"34px 1fr"}}><Image className="avatar" src={r.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{r.user.displayName}</strong><br/><span className="rating">★ {r.rating}</span></div></div>)}</div></section><section className="section"><div className="section-head"><h2>Popular reviews</h2></div>{reviews.slice(0,2).map(r=><blockquote key={r.id} className="status-card" style={{margin:"0 0 10px",fontSize:12,lineHeight:1.55,color:"var(--foreground-secondary)"}}>“{r.body}”<footer style={{marginTop:9,color:"var(--foreground-muted)"}}>— {r.user.displayName}</footer></blockquote>)}</section><section className="section"><div className="section-head"><h2>On 14 lists</h2></div><p className="muted" style={{fontSize:13}}>Favourite Fictional Worlds<br/>Best Things I Experienced in 2026<br/>All-Time Favourites</p></section></aside></div></>}
+function factsFor(media: CatalogMedia): Fact[] {
+  switch (media.mediaType) {
+    case "movie": return [["Director", media.director], ["Runtime", media.runtimeMinutes ? `${media.runtimeMinutes} min` : undefined], ["Released", media.releaseYear], ["Genres", media.genres.join(", ") || undefined]];
+    case "tv": return [["Network", media.network], ["Seasons", media.seasonCount], ["Episodes", media.episodeCount], ["Genres", media.genres.join(", ") || undefined]];
+    case "game": return [["Developer", media.developer], ["Publisher", media.publisher], ["Released", media.releaseYear], ["Platforms", media.platforms.join(", ") || undefined]];
+    case "book": return [["Author", media.authors.join(", ") || undefined], ["Pages", media.pageCount], ["Published", media.releaseYear], ["Publisher", media.publisher]];
+  }
+}
+
+function actionLabel(type: CatalogMedia["mediaType"]): string {
+  return type === "movie" ? "Watched" : type === "tv" ? "Watching" : type === "game" ? "Playing" : "Reading";
+}
+
+function SeriesSection({ media }: { media: CatalogSeries }) {
+  const seasonCount = media.seasonCount ?? 0;
+  const [season, setSeason] = useState(seasonCount || 1);
+  const [watched, setWatched] = useState<number[]>([]);
+  if (!seasonCount) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
+  const episodes = ["Episode 1", "Episode 2", "Episode 3", "Episode 4", "Episode 5"];
+  return <section className="section">
+    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>Season {season}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watched.length} marked watched</span></div>
+    <div className="season-tabs">{Array.from({ length: seasonCount }, (_, index) => index + 1).map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>Season {number}</button>)}</div>
+    <div className="episode-list">{episodes.map((title, index) => <article className="episode" key={title}>
+      <div className="episode-thumb"><Image src={media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div>
+      <div><h4>S{String(season).padStart(2, "0")}E{String(index + 1).padStart(2, "0")} · {title}</h4><p>Episode information is fetched when available.</p></div>
+      <div className="episode-actions"><button className={`icon-button ${watched.includes(index) ? "watched" : ""}`} onClick={() => setWatched((value) => value.includes(index) ? value.filter((item) => item !== index) : [...value, index])} aria-label={`Mark ${title} watched`}><Check size={17}/></button><button className="button"><Star size={14}/>Rate</button></div>
+    </article>)}</div>
+  </section>;
+}
+
+function GameSection({ media }: { media: CatalogGame }) {
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthroughs</h2></div></div><div className="status-card"><h3>Ready to begin</h3><p>{media.platforms.length ? `Available on ${media.platforms.join(", ")}.` : "Choose a platform when you start this game."}</p><button className="button accent">Start playthrough</button></div></section>;
+}
+
+function BookSection({ media }: { media: CatalogBook }) {
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading progress</span><h2>{media.pageCount ? `${media.pageCount} pages` : "Page count unavailable"}</h2></div></div><div className="status-card"><p>Start reading to keep page or percentage progress here.</p><button className="button accent">Start reading</button></div></section>;
+}
+
+function MovieSection() {
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div><div className="status-card"><h3>No watches yet</h3><p>Log a first watch or rewatch to build your diary.</p></div></section>;
+}
+
+export function DetailPage({ media }: { media: CatalogMedia }) {
+  const [status, setStatus] = useState(false);
+  const related = allMedia.filter((item) => item.id !== media.providerId).slice(0, 6);
+  const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
+  const poster = media.posterUrl ?? "/media-placeholder.svg";
+  const backdrop = media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg";
+
+  return <>
+    <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill priority sizes="100vw"/></div><div className="detail-content">
+      <div className="detail-poster"><Image src={poster} alt={`${media.title} artwork`} fill sizes="190px"/></div>
+      <div className="detail-copy"><span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span><h1>{media.title}</h1>
+        <div className="hero-meta">{media.releaseYear && <span>{media.releaseYear}</span>}{media.genres.length > 0 && <><span>·</span><span>{media.genres.join(" / ")}</span></>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        <p>{media.description || "A description is not available for this title yet."}</p>
+        <div className="actions"><button onClick={() => setStatus(!status)} className={`button ${status ? "accent" : "primary"}`}>{status ? <Check size={16}/> : <Plus size={16}/>} {status ? actionLabel(media.mediaType) : "Log this"}</button><button className="button"><Star size={16}/>Rate</button><button className="button"><ListPlus size={16}/>Add to list</button><button className="icon-button glass" aria-label="Favourite"><Heart size={17}/></button></div>
+      </div>
+    </div></section>
+    <div className="detail-body"><div>
+      {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
+      {media.mediaType === "movie" && <MovieSection/>}
+      {media.mediaType === "tv" && <SeriesSection media={media}/>}
+      {media.mediaType === "game" && <GameSection media={media}/>}
+      {media.mediaType === "book" && <BookSection media={media}/>}
+      <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>
+    </div><aside>
+      <div className="status-card"><span className="eyebrow">Your activity</span><h3>{status ? actionLabel(media.mediaType) : "Not logged yet"}</h3><p>{status ? "Your progress is kept here, alongside ratings, reviews, and future rewatches." : "Start a log to keep your history and share it with friends."}</p></div>
+      <section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0, 2).map((review) => <div className="activity-row" key={review.id} style={{ gridTemplateColumns: "34px 1fr" }}><Image className="avatar" src={review.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{review.user.displayName}</strong><br/><span className="rating">★ {review.rating}</span></div></div>)}</div></section>
+    </aside></div>
+  </>;
+}

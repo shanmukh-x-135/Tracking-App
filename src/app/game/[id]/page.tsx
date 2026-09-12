@@ -1,2 +1,9 @@
-import { notFound } from "next/navigation"; import { mediaById } from "@/data/media"; import { DetailPage } from "@/components/detail/detail-page";
-export default async function Page({params}:{params:Promise<{id:string}>}){const {id}=await params;const media=mediaById(id);if(!media||media.mediaType!=="game")notFound();return <DetailPage media={media}/>}
+import { notFound } from "next/navigation";
+import { DetailPage } from "@/components/detail/detail-page";
+import { resolveDetailMedia } from "@/lib/media/detail";
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const media = await resolveDetailMedia((await params).id, "game");
+  if (!media) notFound();
+  return <DetailPage media={media}/>;
+}

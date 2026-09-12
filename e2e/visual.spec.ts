@@ -36,7 +36,11 @@ test("search and media-specific log interactions work", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("textbox", { name: "Search all media" }).fill("Dune");
   await expect(page.getByRole("button", { name: /Dune: Part Two/ })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.screenshot({ path: "artifacts/mobile-search.png", fullPage: true });
+  await page.getByRole("button", { name: /Dune: Part Two/ }).click();
+  await expect(page).toHaveURL(/\/movie\/mock(?::|%3A)movie/);
+  await expect(page.getByRole("heading", { name: "Dune: Part Two", level: 1 })).toBeVisible();
+  await page.goto("/");
   await page.getByRole("button", { name: "Log", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: /Dune: Part Two/ }).click();

@@ -2,7 +2,7 @@ import { allMedia } from "@/data/media";
 import type { CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import type { Media } from "@/types/media";
 
-function normalizeMock(item: Media): CatalogMedia {
+export function normalizeMock(item: Media): CatalogMedia {
   const base = {
     providerId: item.id, provider: "mock" as const, mediaType: item.mediaType, title: item.title,
     originalTitle: item.originalTitle, description: item.description, posterUrl: item.posterUrl,
