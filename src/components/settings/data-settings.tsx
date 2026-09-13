@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, Check, Clock3, FileArchive, FileSpreadsheet, LoaderCircle, RotateCcw, Search, ShieldCheck, SkipForward, Upload } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, Clock3, Download, FileArchive, FileSpreadsheet, LoaderCircle, RotateCcw, Search, ShieldCheck, SkipForward, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
@@ -13,6 +13,7 @@ import { acceptHighConfidence, previewCounts, selectCandidate, skipReconciliatio
 import type { ImportConflictPolicy, ImportPreview, ImportSource, ReconciliationRow } from "@/lib/imports/types";
 import type { CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import type { AuthUser } from "@/lib/auth/types";
+import { createMosaicExportArchive, mosaicDataFromState, mosaicExportFilename } from "@/lib/exports/mosaic-export";
 
 const sources: { value: ImportSource; label: string; detail: string; native: boolean }[] = [
   { value: "letterboxd", label: "Letterboxd", detail: "Official account export (.zip)", native: true },
@@ -77,7 +78,7 @@ function restoredPreview(userId: string): ImportPreview | undefined {
 }
 
 function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
-  const { refresh } = useMosaicState();
+  const { state, refresh } = useMosaicState();
   const [source, setSource] = useState<ImportSource>("letterboxd");
   const [file, setFile] = useState<File>();
   const [preview, setPreview] = useState<ImportPreview>();
@@ -88,6 +89,7 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
   const [result, setResult] = useState<ImportApplyResult>();
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [undoingId, setUndoingId] = useState<string>();
+  const [isExporting, setIsExporting] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -148,6 +150,31 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
     finally { setUndoingId(undefined); }
   }
 
+  async function downloadExport() {
+    setIsExporting(true); setError(undefined);
+    try {
+      const isLive = process.env.NEXT_PUBLIC_DATA_MODE === "live";
+      const blob = isLive
+        ? await fetch("/api/me/export").then(async (response) => {
+            if (!response.ok) throw new Error("Your Mosaic export could not be prepared.");
+            return response.blob();
+          })
+        : (() => {
+            const archive = createMosaicExportArchive(mosaicDataFromState(user, state));
+            const bytes = new Uint8Array(archive.byteLength);
+            bytes.set(archive);
+            return new Blob([bytes.buffer], { type: "application/zip" });
+          })();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = mosaicExportFilename();
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Your Mosaic export could not be prepared."); }
+    finally { setIsExporting(false); }
+  }
+
   const counts = preview?.counts;
   const canImport = Boolean(preview && counts && counts.needsReview === 0 && preview.rows.some((row) => row.decision === "accepted"));
   const selectedSource = sources.find((item) => item.value === source)!;
@@ -161,6 +188,7 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
 
   return <div className="page data-page"><div className="page-narrow">
     <header className="page-hero data-hero"><span className="eyebrow">Your data, in your hands</span><h1>Bring your history with you.</h1><p>Preview every match before Mosaic changes your library. Your original upload is processed transiently and is not exposed to other members.</p></header>
+    <section className="export-panel glass"><span className="export-icon"><Download size={19}/></span><div><span className="eyebrow">Data portability</span><h2>Take your Mosaic data with you.</h2><p>Download a versioned ZIP with JSON and spreadsheet-safe CSV copies of your profile, library, history, ratings, reviews, and lists.</p></div><button className="button" type="button" disabled={isExporting} onClick={() => void downloadExport()}>{isExporting ? <LoaderCircle className="spin" size={15}/> : <Download size={15}/>}Download Mosaic data</button></section>
     <ol className="import-steps" aria-label="Import progress"><li className="active">1 <span>Choose</span></li><li className={preview ? "active" : ""}>2 <span>Reconcile</span></li><li>3 <span>Import</span></li></ol>
 
     {!preview ? <><div className="import-layout">
