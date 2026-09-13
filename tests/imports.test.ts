@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { zipSync, strToU8 } from "fflate";
 import { parseGenericCsv } from "@/lib/imports/generic-parser";
+import { parseLetterboxdExport } from "@/lib/imports/letterboxd-parser";
 import { matchImportRecord } from "@/lib/imports/matching";
 import { importParserFor } from "@/lib/imports/parsers";
+import type { MovieImportRecord } from "@/lib/imports/types";
 import { normalizeMock } from "@/lib/media/providers/mock";
 import { books, games, movies, series } from "@/data/media";
 
 const encode = (value: string) => new TextEncoder().encode(value);
+
+function letterboxdFixture(): Uint8Array {
+  const root = "fixtures/imports/letterboxd";
+  const files = ["watched.csv", "ratings.csv", "diary.csv", "reviews.csv", "watchlist.csv", "lists/favorites.csv"];
+  return zipSync(Object.fromEntries(files.map((file) => [`letterboxd-export/${file}`, readFileSync(`${root}/${file}`)])));
+}
 
 test("generic movie CSV preserves quotes, Unicode, newlines, and dates", () => {
   const csv = 'title,year,watched_date,rating,review,rewatch,status\n"Paris, Texas",1984,2024-02-29,4.5,"Beautiful, patient.\nStill vivid.",yes,watched\nAmélie,2001,,4,,,watchlist\n';
@@ -74,4 +84,43 @@ test("matching refuses wrong media types and flags competing title/year matches"
   const result = matchImportRecord(record, catalog);
   assert.equal(result.confidence, "ambiguous");
   assert.equal(result.candidates.length, 2);
+});
+
+test("Letterboxd ZIP combines library metadata without duplicating diary history", () => {
+  const result = parseLetterboxdExport(letterboxdFixture());
+  assert.deepEqual(result.errors, []);
+  const movies = result.records.filter((record): record is MovieImportRecord => record.mediaType === "movie");
+  const library = movies.filter((record) => record.recordKind === "library");
+  const history = movies.filter((record) => record.recordKind === "history");
+  const listItems = movies.filter((record) => record.recordKind === "list_item");
+  assert.equal(library.length, 3);
+  assert.equal(history.length, 2);
+  assert.equal(listItems.length, 2);
+  const paris = library.find((record) => record.title === "Paris, Texas");
+  assert.equal(paris?.rating, 5);
+  assert.equal(paris?.review, "Beautiful, patient.\nStill vivid.");
+  assert.deepEqual(paris?.providerIdentity, { provider: "tmdb", mediaType: "movie", providerId: "655" });
+  assert.deepEqual(history.map((record) => record.watchedDate), ["2023-01-01", "2024-02-29"]);
+  assert.deepEqual(history.map((record) => record.isRewatch), [false, true]);
+  assert.equal(listItems[0].list?.title, "Favorites");
+  assert.equal(listItems[0].list?.position, 0);
+});
+
+test("Letterboxd parser produces stable keys across identical reimports", () => {
+  const first = parseLetterboxdExport(letterboxdFixture());
+  const second = parseLetterboxdExport(letterboxdFixture());
+  assert.deepEqual(first.records.map((record) => record.sourceRecordKey), second.records.map((record) => record.sourceRecordKey));
+  assert.equal(new Set(first.records.map((record) => record.sourceRecordKey)).size, first.records.length);
+});
+
+test("Letterboxd parser rejects unsafe or unrecognized archives and validates upload type", () => {
+  const unsafe = parseLetterboxdExport(zipSync({ "../watched.csv": strToU8("Name,Year\nAlien,1979\n") }));
+  assert.match(unsafe.errors[0].message, /unsafe/);
+  const unrecognized = parseLetterboxdExport(zipSync({ "notes.txt": strToU8("nothing") }));
+  assert.match(unrecognized.errors[0].message, /No supported/);
+  const invalid = parseLetterboxdExport(strToU8("not a zip"));
+  assert.match(invalid.errors[0].message, /not a valid/);
+  const parser = importParserFor("letterboxd");
+  assert.equal(parser?.accepts("letterboxd.zip", "application/zip"), true);
+  assert.equal(parser?.accepts("letterboxd.csv", "text/csv"), false);
 });

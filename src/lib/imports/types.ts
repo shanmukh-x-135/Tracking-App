@@ -25,11 +25,22 @@ interface ImportRecordBase {
   sourceMetadata: Record<string, string>;
 }
 
+export interface ImportListContext {
+  sourceListKey: string;
+  title: string;
+  description?: string;
+  position: number;
+  note?: string;
+}
+
 export interface MovieImportRecord extends ImportRecordBase {
   mediaType: "movie";
+  recordKind?: "library" | "history" | "list_item";
   status?: "watchlist" | "watched";
   watchedDate?: string;
   isRewatch?: boolean;
+  tags?: string[];
+  list?: ImportListContext;
 }
 
 export interface SeriesImportRecord extends ImportRecordBase {
