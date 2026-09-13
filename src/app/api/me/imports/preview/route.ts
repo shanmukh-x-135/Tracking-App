@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
-const sourceSchema = z.enum(["letterboxd", "generic_movies", "generic_series", "generic_games", "generic_books"]);
+const sourceSchema = z.enum(["letterboxd", "backloggd", "serializd", "fable", "generic_movies", "generic_series", "generic_games", "generic_books"]);
 
 function jsonValue(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;

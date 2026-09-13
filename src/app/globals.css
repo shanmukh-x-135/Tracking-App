@@ -280,6 +280,7 @@ button { color: inherit; }
 .upload-panel { position:sticky; top:104px; padding:25px; border-radius:19px; }
 .upload-panel h2 { margin:8px 0; letter-spacing:-.035em; }
 .upload-panel > p { margin:0 0 18px; color:var(--foreground-muted); line-height:1.5; font-size:12px; }
+.template-link { display:inline-block; margin:-7px 0 17px; color:var(--accent); }
 .upload-drop { width:100%; min-height:184px; padding:22px; border:1px dashed rgba(255,255,255,.2); border-radius:15px; background:rgba(0,0,0,.2); display:grid; justify-items:center; align-content:center; gap:9px; cursor:pointer; transition:.18s; }
 .upload-drop:hover { border-color:var(--accent); background:rgba(120,174,252,.05); }
 .upload-drop svg { color:var(--accent); }

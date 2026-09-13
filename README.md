@@ -45,6 +45,8 @@ Email/password and Google OAuth are supported in live mode. Add `http://localhos
 
 Hosted Supabase, protected migration, Vercel, OAuth, and release procedures are documented in [Production bring-up](docs/production.md).
 
+The current native/fallback support matrix, CSV templates, reconciliation rules, and provenance model are documented in [Importing into Mosaic](docs/imports.md).
+
 ## Catalog providers
 
 Add any subset of these server-only values to `.env.local`:

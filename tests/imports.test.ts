@@ -65,6 +65,21 @@ test("generic parser registry validates file type and handles larger exports", (
   assert.equal(result.records.length, 500);
 });
 
+test("source-labelled fallback adapters retain provenance without guessing native schemas", () => {
+  const cases = [
+    ["serializd", "series_title,year,season,episode,status\nSeverance,2022,1,1,watching\n"],
+    ["backloggd", "title,year,status\nHades II,2025,playing\n"],
+    ["fable", "title,author,year,status\nDune,Frank Herbert,1965,reading\n"],
+  ] as const;
+  for (const [source, csv] of cases) {
+    const result = importParserFor(source)!.parse(encode(csv), `${source}.csv`);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.records[0].source, source);
+    assert.ok(result.records[0].sourceRecordKey.startsWith(`${source}:`));
+    assert.match(result.warnings[0], /does not publish a stable native export schema/);
+  }
+});
+
 test("matching uses provider identity before conservative contextual matching", () => {
   const candidates = [...movies, ...series, ...games, ...books].map(normalizeMock);
   const [record] = parseGenericCsv("generic_movies", encode("title,year\nDune: Part Two,2024\n")).records;
