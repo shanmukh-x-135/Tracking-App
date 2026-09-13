@@ -8,10 +8,7 @@ async function signUp(page: Page) {
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
-test("import upload produces a persistent dry-run reconciliation", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-  await signUp(page);
+async function previewMovieImport(page: Page) {
   await page.goto("/settings/data");
   await page.getByRole("button", { name: /Movies CSV/ }).click();
   await page.locator('input[type="file"]').setInputFiles({
@@ -21,6 +18,13 @@ test("import upload produces a persistent dry-run reconciliation", async ({ page
   });
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(page.getByRole("heading", { name: "Review the matches" })).toBeVisible();
+}
+
+test("import upload produces a persistent dry-run reconciliation", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+  await signUp(page);
+  await previewMovieImport(page);
   await expect(page.getByText("Dune: Part Two", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Ready to import")).toBeVisible();
   await page.screenshot({ path: "artifacts/import-reconciliation-1280.png", fullPage: true });
@@ -34,7 +38,27 @@ test("import upload produces a persistent dry-run reconciliation", async ({ page
   await expect(page.getByText(/First watch · ★ 4.5/)).toBeVisible();
   await page.reload();
   await expect(page.getByText(/First watch · ★ 4.5/)).toHaveCount(1);
+  await page.goto("/settings/data");
+  await expect(page.getByText("movies.csv", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText("undone", { exact: true })).toBeVisible();
+  await page.goto("/library");
+  await expect(page.getByRole("link", { name: "View Dune: Part Two" })).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("re-importing the same source does not duplicate history", async ({ page }) => {
+  await signUp(page);
+  await previewMovieImport(page);
+  await page.getByRole("button", { name: "Import selected records" }).click();
+  await expect(page.getByRole("heading", { name: "Your history is home." })).toBeVisible();
+  await page.getByRole("button", { name: "Manage imports" }).click();
+  await previewMovieImport(page);
+  await page.getByRole("button", { name: "Import selected records" }).click();
+  await expect(page.getByText(/did not duplicate them/)).toBeVisible();
+  await page.goto("/movie/dune-part-two");
+  await expect(page.getByText(/First watch · ★ 4.5/)).toHaveCount(1);
 });
 
 test("data settings layout remains usable on mobile", async ({ page }) => {

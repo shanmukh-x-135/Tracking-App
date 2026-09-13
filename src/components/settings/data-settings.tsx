@@ -2,12 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, Check, FileArchive, FileSpreadsheet, LoaderCircle, Search, ShieldCheck, SkipForward, Upload } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, ArrowRight, Check, Clock3, FileArchive, FileSpreadsheet, LoaderCircle, RotateCcw, Search, ShieldCheck, SkipForward, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
-import { applyImportPreview } from "@/lib/imports/client";
+import { applyImportPreview, loadImportHistory, undoImport } from "@/lib/imports/client";
 import type { ImportApplyResult } from "@/lib/imports/apply-mock";
+import type { ImportHistoryItem } from "@/lib/imports/history";
 import { acceptHighConfidence, previewCounts, selectCandidate, skipReconciliationRow } from "@/lib/imports/reconciliation";
 import type { ImportConflictPolicy, ImportPreview, ImportSource, ReconciliationRow } from "@/lib/imports/types";
 import type { CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
@@ -85,12 +86,23 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
   const [isImporting, setIsImporting] = useState(false);
   const [conflictPolicy, setConflictPolicy] = useState<ImportConflictPolicy>("review");
   const [result, setResult] = useState<ImportApplyResult>();
+  const [history, setHistory] = useState<ImportHistoryItem[]>([]);
+  const [undoingId, setUndoingId] = useState<string>();
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPreview(restoredPreview(user.id)), 0);
     return () => window.clearTimeout(timer);
   }, [user.id]);
+
+  const refreshHistory = useCallback(async () => {
+    try { setHistory(await loadImportHistory(user.id)); } catch { /* Import remains usable when history is temporarily unavailable. */ }
+  }, [user.id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void refreshHistory(), 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshHistory]);
 
   function savePreview(next: ImportPreview) {
     setPreview(next);
@@ -121,10 +133,19 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
     try {
       const applied = await applyImportPreview(user.id, preview, conflictPolicy);
       await refresh();
+      await refreshHistory();
       setResult(applied);
       window.localStorage.removeItem(storageKey(user.id));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Mosaic could not apply this import."); }
     finally { setIsImporting(false); }
+  }
+
+  async function undo(job: ImportHistoryItem) {
+    if (!window.confirm(`Undo the unchanged rows created by ${job.filename}? Later edits will be preserved.`)) return;
+    setUndoingId(job.id); setError(undefined);
+    try { await undoImport(user.id, job.id); await refresh(); await refreshHistory(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "This import could not be undone."); }
+    finally { setUndoingId(undefined); }
   }
 
   const counts = preview?.counts;
@@ -136,16 +157,16 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
     ["Ratings", counts.ratings], ["Reviews", counts.reviews], ["Lists", counts.lists], ["Invalid", counts.invalid],
   ] : [], [counts]);
 
-  if (result) return <div className="page data-page"><div className="page-narrow"><div className="import-result"><span className="result-check"><Check size={30}/></span><span className="eyebrow">Import complete</span><h1>Your history is home.</h1><p>{result.imported} record{result.imported === 1 ? "" : "s"} applied, {result.skipped} safely skipped{result.conflicts ? `, and ${result.conflicts} conflict${result.conflicts === 1 ? " was" : "s were"} handled by your policy` : ""}.</p>{result.wasReimport && <p className="import-idempotent"><ShieldCheck size={15}/>Mosaic recognized previously imported rows and did not duplicate them.</p>}<div className="actions"><Link className="button primary" href="/library">View your library</Link><Link className="button" href="/profile">See updated stats</Link><button className="button ghost" type="button" onClick={() => { setResult(undefined); setPreview(undefined); setFile(undefined); }}>Import another file</button></div></div></div></div>;
+  if (result) return <div className="page data-page"><div className="page-narrow"><div className="import-result"><span className="result-check"><Check size={30}/></span><span className="eyebrow">Import complete</span><h1>Your history is home.</h1><p>{result.imported} record{result.imported === 1 ? "" : "s"} applied, {result.skipped} safely skipped{result.conflicts ? `, and ${result.conflicts} conflict${result.conflicts === 1 ? " was" : "s were"} handled by your policy` : ""}.</p>{result.wasReimport && <p className="import-idempotent"><ShieldCheck size={15}/>Mosaic recognized previously imported rows and did not duplicate them.</p>}<div className="actions"><Link className="button primary" href="/library">View your library</Link><Link className="button" href="/profile">See updated stats</Link><button className="button ghost" type="button" onClick={() => { setResult(undefined); setPreview(undefined); setFile(undefined); }}>Manage imports</button></div></div></div></div>;
 
   return <div className="page data-page"><div className="page-narrow">
     <header className="page-hero data-hero"><span className="eyebrow">Your data, in your hands</span><h1>Bring your history with you.</h1><p>Preview every match before Mosaic changes your library. Your original upload is processed transiently and is not exposed to other members.</p></header>
     <ol className="import-steps" aria-label="Import progress"><li className="active">1 <span>Choose</span></li><li className={preview ? "active" : ""}>2 <span>Reconcile</span></li><li>3 <span>Import</span></li></ol>
 
-    {!preview ? <div className="import-layout">
+    {!preview ? <><div className="import-layout">
       <section><div className="section-head"><div><h2>Choose a source</h2><p>Native where a trustworthy export exists; templates everywhere else.</p></div></div><div className="source-grid">{sources.map((item) => <button type="button" key={item.value} className={`source-card ${source === item.value ? "selected" : ""}`} onClick={() => { setSource(item.value); setFile(undefined); }}><span className="source-icon">{item.native ? <FileArchive/> : <FileSpreadsheet/>}</span><span><strong>{item.label}</strong><small>{item.detail}</small></span>{source === item.value && <Check size={17}/>}</button>)}</div></section>
       <section className="upload-panel glass"><span className="eyebrow">{selectedSource.label}</span><h2>Drop in your {source === "letterboxd" ? "export" : "CSV"}</h2><p>{selectedSource.detail}. Mosaic accepts files up to 12 MB and shows a dry run first.</p>{source !== "letterboxd" && <a className="text-link template-link" href={`/templates/${template}.csv`} download>Download the {template} template ↓</a>}<button className="upload-drop" type="button" onClick={() => input.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); setFile(event.dataTransfer.files[0]); }}><Upload size={25}/><strong>{file?.name ?? "Choose a file or drop it here"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB` : source === "letterboxd" ? ".zip" : ".csv"}</small></button><input ref={input} className="sr-only" type="file" accept={source === "letterboxd" ? ".zip,application/zip" : ".csv,text/csv"} onChange={(event) => setFile(event.target.files?.[0])}/>{error && <p className="form-error"><AlertCircle size={14}/>{error}</p>}<button className="button accent import-continue" type="button" disabled={!file || isParsing} onClick={() => void parseFile()}>{isParsing ? <><LoaderCircle className="spin" size={16}/>Parsing securely…</> : <>Preview import<ArrowRight size={16}/></>}</button></section>
-    </div> : <>
+    </div><section className="import-history"><div className="section-head"><div><h2>Import history</h2><p>Undo removes only unchanged rows created by that job.</p></div></div>{history.length ? <div className="history-list">{history.map((job) => <article className="history-row" key={job.id}><span className="history-icon"><Clock3 size={17}/></span><div><strong>{job.filename}</strong><small>{job.source.replace("generic_", "")} · {new Date(job.createdAt).toLocaleDateString()} · {job.totalRecords} records</small>{job.errorSummary && <small className="history-error">{job.errorSummary}</small>}</div><span className={`history-status ${job.status}`}>{job.status.replaceAll("_", " ")}</span>{job.status === "completed" && <button className="button ghost" type="button" disabled={undoingId === job.id} onClick={() => void undo(job)}>{undoingId === job.id ? <LoaderCircle className="spin" size={14}/> : <RotateCcw size={14}/>}Undo</button>}</article>)}</div> : <div className="history-empty">No imports yet. Your completed jobs will appear here.</div>}</section></> : <>
       <section className="preview-head"><div><span className="eyebrow">Dry run · {preview.filename}</span><h2>Review the matches</h2><p>High-confidence matches are selected. Ambiguous and unmatched rows wait for you.</p></div><div className="actions"><button className="button ghost" type="button" onClick={() => { setPreview(undefined); window.localStorage.removeItem(storageKey(user.id)); }}>Start over</button><button className="button" type="button" onClick={() => { const rows = acceptHighConfidence(preview.rows); savePreview({ ...preview, rows, counts: previewCounts(rows, preview.counts.duplicates, preview.counts.invalid) }); }}><Check size={15}/>Accept safe matches</button></div></section>
       <div className="preview-stats">{summary.map(([label, value]) => <div className="preview-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
       {(preview.warnings.length > 0 || preview.errors.length > 0) && <div className="import-notices">{preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}{preview.errors.slice(0, 5).map((item) => <p className="error" key={`${item.row}:${item.field}:${item.message}`}>Row {item.row}: {item.message}</p>)}</div>}
