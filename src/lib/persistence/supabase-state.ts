@@ -8,7 +8,7 @@ import type { Database, MediaItemRow } from "@/types/database";
 
 type Client = SupabaseClient<Database>;
 
-function catalogFromRow(row: MediaItemRow): CatalogMedia | null {
+export function catalogFromRow(row: MediaItemRow): CatalogMedia | null {
   const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata) ? row.metadata : {};
   const snapshot = "catalog" in metadata ? metadata.catalog : undefined;
   const parsed = catalogMediaSchema.safeParse(snapshot);
@@ -111,7 +111,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     updatedAt: list.updated_at,
     items: (listItemsResult.data ?? []).filter((item) => item.list_id === list.id).flatMap((item) => {
       const media = mediaById.get(item.media_id);
-      return media ? [{ media, position: item.position, note: item.note ?? undefined }] : [];
+      return media ? [{ id: item.id, media, position: item.position, note: item.note ?? undefined }] : [];
     }),
   }));
   state.movieWatches = (movieResult.data ?? []).flatMap((row) => {
@@ -153,6 +153,26 @@ export async function applySharedSupabaseMutation(client: Client, userId: string
     assertResult(positionError);
     const position = (positions?.[0]?.position ?? -1) + 1;
     const { error } = await client.from("list_items").upsert({ list_id: mutation.listId, media_id: mediaId, position, note: mutation.note ?? null }, { onConflict: "list_id,media_id" });
+    assertResult(error); return;
+  }
+  if (mutation.type === "list.update") {
+    const { error } = await client.from("lists").update({ title: mutation.title, description: mutation.description, visibility: mutation.visibility }).eq("id", mutation.listId).eq("user_id", userId);
+    assertResult(error); return;
+  }
+  if (mutation.type === "list.item.update") {
+    const { error } = await client.from("list_items").update({ note: mutation.note || null }).eq("id", mutation.itemId).eq("list_id", mutation.listId);
+    assertResult(error); return;
+  }
+  if (mutation.type === "list.item.remove") {
+    const { error } = await client.from("list_items").delete().eq("id", mutation.itemId).eq("list_id", mutation.listId);
+    assertResult(error);
+    const { data: items, error: itemsError } = await client.from("list_items").select("id").eq("list_id", mutation.listId).order("position");
+    assertResult(itemsError);
+    if (items?.length) assertResult((await client.rpc("reorder_list_items", { p_list_id: mutation.listId, p_item_ids: items.map(({ id }) => id) })).error);
+    return;
+  }
+  if (mutation.type === "list.reorder") {
+    const { error } = await client.rpc("reorder_list_items", { p_list_id: mutation.listId, p_item_ids: mutation.itemIds });
     assertResult(error); return;
   }
   const mediaId = await upsertMedia(client, mutation.media);

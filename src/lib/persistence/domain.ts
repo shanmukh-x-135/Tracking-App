@@ -57,7 +57,37 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
     case "list.add": {
       const list = next.lists.find(({ id }) => id === mutation.listId);
       if (!list) throw new Error("List not found.");
-      if (!list.items.some((item) => mediaKey(item.media) === key)) list.items.push({ media: mutation.media, note: mutation.note, position: list.items.length });
+      if (!list.items.some((item) => mediaKey(item.media) === key)) list.items.push({ id: crypto.randomUUID(), media: mutation.media, note: mutation.note, position: list.items.length });
+      list.updatedAt = now;
+      break;
+    }
+    case "list.update": {
+      const list = next.lists.find(({ id }) => id === mutation.listId);
+      if (!list) throw new Error("List not found.");
+      Object.assign(list, { title: mutation.title, description: mutation.description, visibility: mutation.visibility, updatedAt: now });
+      break;
+    }
+    case "list.item.update": {
+      const list = next.lists.find(({ id }) => id === mutation.listId);
+      const item = list?.items.find(({ id }) => id === mutation.itemId);
+      if (!list || !item) throw new Error("List item not found.");
+      item.note = mutation.note || undefined; list.updatedAt = now;
+      break;
+    }
+    case "list.item.remove": {
+      const list = next.lists.find(({ id }) => id === mutation.listId);
+      if (!list) throw new Error("List not found.");
+      list.items = list.items.filter(({ id }) => id !== mutation.itemId);
+      list.items.forEach((item, index) => { item.position = index; });
+      list.updatedAt = now;
+      break;
+    }
+    case "list.reorder": {
+      const list = next.lists.find(({ id }) => id === mutation.listId);
+      if (!list || mutation.itemIds.length !== list.items.length || new Set(mutation.itemIds).size !== list.items.length) throw new Error("List order is invalid.");
+      const items = new Map(list.items.map((item) => [item.id, item]));
+      if (mutation.itemIds.some((id) => !items.has(id))) throw new Error("List order is invalid.");
+      list.items = mutation.itemIds.map((id, position) => ({ ...items.get(id)!, position }));
       list.updatedAt = now;
       break;
     }

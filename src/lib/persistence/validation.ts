@@ -27,6 +27,10 @@ export const sharedMutationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("review.delete"), id: z.uuid() }),
   z.object({ type: z.literal("list.create"), title: z.string().trim().min(1).max(120), description: z.string().trim().max(1000), visibility: z.enum(["public", "unlisted", "private"]) }),
   z.object({ type: z.literal("list.add"), listId: z.uuid(), media: catalogMediaSchema, note: z.string().trim().max(1000).optional() }),
+  z.object({ type: z.literal("list.update"), listId: z.uuid(), title: z.string().trim().min(1).max(120), description: z.string().max(2000), visibility: z.enum(["public", "unlisted", "private"]) }),
+  z.object({ type: z.literal("list.item.update"), listId: z.uuid(), itemId: z.uuid(), note: z.string().max(2000) }),
+  z.object({ type: z.literal("list.item.remove"), listId: z.uuid(), itemId: z.uuid() }),
+  z.object({ type: z.literal("list.reorder"), listId: z.uuid(), itemIds: z.array(z.uuid()).max(1000) }),
 ]);
 
 export const domainMutationSchema = z.discriminatedUnion("type", [

@@ -73,7 +73,7 @@ export function applyMockImport(state: MosaicState, rows: ReconciliationRow[], p
         next.lists.push(list); changed = true;
       }
       if (!list.items.some((item) => mediaKey(item.media) === key)) {
-        list.items.push({ media, position: record.list.position, note: record.list.note });
+        list.items.push({ id: importedId, media, position: record.list.position, note: record.list.note });
         list.items.sort((first, second) => first.position - second.position);
         list.items.forEach((item, index) => { item.position = index; });
         list.updatedAt = timestamp; changed = true;

@@ -55,3 +55,21 @@ test("cross-media lists retain deterministic insertion order", () => {
   assert.deepEqual(state.lists[0].items.map(({ position }) => position), [0, 1, 2, 3]);
   assert.deepEqual(state.lists[0].items.map(({ media }) => media.mediaType), ["movie", "tv", "game", "book"]);
 });
+
+test("list edits preserve item identity and reject incomplete reorder requests", () => {
+  let state = applyMutation(emptyMosaicState(), { type: "list.create", title: "Everything", description: "Mixed media", visibility: "private" }, now);
+  const listId = state.lists[0].id;
+  for (const media of [movie, series, game]) state = applyMutation(state, { type: "list.add", listId, media }, now);
+  const [movieItem, seriesItem, gameItem] = state.lists[0].items;
+
+  state = applyMutation(state, { type: "list.update", listId, title: "Story worlds", description: "Across formats", visibility: "public" }, now);
+  state = applyMutation(state, { type: "list.item.update", listId, itemId: gameItem.id, note: "The game anchor" }, now);
+  state = applyMutation(state, { type: "list.reorder", listId, itemIds: [gameItem.id, movieItem.id, seriesItem.id] }, now);
+  assert.deepEqual(state.lists[0].items.map(({ id, position }) => [id, position]), [[gameItem.id, 0], [movieItem.id, 1], [seriesItem.id, 2]]);
+  assert.equal(state.lists[0].items[0].note, "The game anchor");
+  assert.equal(state.lists[0].visibility, "public");
+
+  state = applyMutation(state, { type: "list.item.remove", listId, itemId: movieItem.id }, now);
+  assert.deepEqual(state.lists[0].items.map(({ id, position }) => [id, position]), [[gameItem.id, 0], [seriesItem.id, 1]]);
+  assert.throws(() => applyMutation(state, { type: "list.reorder", listId, itemIds: [gameItem.id] }, now), /invalid/);
+});

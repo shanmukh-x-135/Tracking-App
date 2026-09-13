@@ -25,6 +25,7 @@ export interface UserReview {
 }
 
 export interface ListItem {
+  id: string;
   media: CatalogMedia;
   position: number;
   note?: string;
@@ -101,7 +102,11 @@ export type SharedMutation =
   | { type: "review.save"; id?: string; media: CatalogMedia; body: string; containsSpoilers: boolean; rating?: number }
   | { type: "review.delete"; id: string }
   | { type: "list.create"; title: string; description: string; visibility: UserList["visibility"] }
-  | { type: "list.add"; listId: string; media: CatalogMedia; note?: string };
+  | { type: "list.add"; listId: string; media: CatalogMedia; note?: string }
+  | { type: "list.update"; listId: string; title: string; description: string; visibility: UserList["visibility"] }
+  | { type: "list.item.update"; listId: string; itemId: string; note: string }
+  | { type: "list.item.remove"; listId: string; itemId: string }
+  | { type: "list.reorder"; listId: string; itemIds: string[] };
 
 export type DomainMutation =
   | { type: "movie.log"; media: CatalogMedia; watchedAt: string; isRewatch: boolean; rating?: number; review?: string }
