@@ -124,5 +124,13 @@ assert.ifError(importedMediaError);
 const importedWatches = await owner.from("movie_watch_logs").select("id").eq("media_id", importedMedia.id);
 assert.ifError(importedWatches.error);
 assert.equal(importedWatches.data.length, 1, "re-applying the same source record must not duplicate watch history");
+await owner.from("import_jobs").update({ status: "completed" }).eq("id", importJob.id);
+const forbiddenUndo = await stranger.rpc("undo_import_job", { p_import_job_id: importJob.id });
+assert.ok(forbiddenUndo.error, "another user cannot undo an owner's import job");
+const undone = await owner.rpc("undo_import_job", { p_import_job_id: importJob.id });
+assert.ifError(undone.error);
+const watchesAfterUndo = await owner.from("movie_watch_logs").select("id").eq("media_id", importedMedia.id);
+assert.ifError(watchesAfterUndo.error);
+assert.equal(watchesAfterUndo.data.length, 0, "undo removes an unchanged row created by the import");
 
-console.log("Live Supabase auth, profile bootstrap, transactional import idempotency, and owner-scoped RLS checks passed.");
+console.log("Live Supabase auth, transactional import idempotency, safe undo, and owner-scoped RLS checks passed.");

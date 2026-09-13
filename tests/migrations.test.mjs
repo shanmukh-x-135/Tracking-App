@@ -6,7 +6,8 @@ const core = readFileSync("supabase/migrations/20260912160736_mosaic_core.sql", 
 const tracking = readFileSync("supabase/migrations/20260912160738_mosaic_domain_tracking.sql", "utf8");
 const imports = readFileSync("supabase/migrations/20260912232742_import_foundation.sql", "utf8");
 const importApplication = readFileSync("supabase/migrations/20260913051334_import_application.sql", "utf8");
-const sql = `${core}\n${tracking}\n${imports}\n${importApplication}`;
+const importUndo = readFileSync("supabase/migrations/20260913111212_import_undo.sql", "utf8");
+const sql = `${core}\n${tracking}\n${imports}\n${importApplication}\n${importUndo}`;
 
 const protectedTables = [
   "profiles", "media_items", "library_entries", "ratings", "reviews", "lists", "list_items",
@@ -44,4 +45,7 @@ test("import jobs enforce ownership, stable records, and provenance", () => {
   assert.match(importApplication, /create or replace function public\.apply_import_record/i);
   assert.match(importApplication, /security definer[\s\S]*?auth\.uid\(\)/i);
   assert.match(importApplication, /revoke execute on function public\.apply_import_record[\s\S]*?from public, anon/i);
+  assert.match(importUndo, /create or replace function public\.undo_import_job/i);
+  assert.match(importUndo, /imported_fingerprint[\s\S]*?preserved_modified/i);
+  assert.match(importUndo, /revoke execute on function public\.undo_import_job\(uuid\) from public, anon/i);
 });

@@ -27,6 +27,7 @@ export interface Database {
     Views: Record<string, never>;
     Functions: {
       apply_import_record: { Args: { p_import_record_id: string; p_selected_media: Json; p_conflict_policy: string }; Returns: Json };
+      undo_import_job: { Args: { p_import_job_id: string }; Returns: Json };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
