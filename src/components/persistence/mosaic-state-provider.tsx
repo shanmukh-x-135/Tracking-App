@@ -10,6 +10,7 @@ interface MosaicStateContextValue {
   isLoading: boolean;
   error?: string;
   mutate(mutation: PersistenceMutation): Promise<void>;
+  refresh(): Promise<void>;
 }
 
 const MosaicStateContext = createContext<MosaicStateContextValue | null>(null);
@@ -44,11 +45,18 @@ export function MosaicStateProvider({ children }: { children: React.ReactNode })
     }
   }, [gateway, user]);
 
+  const refresh = useCallback(async () => {
+    if (!user) return;
+    const state = await gateway.load(user.id);
+    setLoaded({ userId: user.id, state });
+    setError(undefined);
+  }, [gateway, user]);
+
   const state = loaded && user && loaded.userId === user.id ? loaded.state : emptyMosaicState();
   const value = useMemo<MosaicStateContextValue>(() => ({
-    state, error, mutate,
+    state, error, mutate, refresh,
     isLoading: isAuthLoading || Boolean(user && loaded?.userId !== user?.id && !error),
-  }), [error, isAuthLoading, loaded?.userId, mutate, state, user]);
+  }), [error, isAuthLoading, loaded?.userId, mutate, refresh, state, user]);
 
   return <MosaicStateContext.Provider value={value}>{children}</MosaicStateContext.Provider>;
 }

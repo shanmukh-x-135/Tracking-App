@@ -82,7 +82,7 @@ assert.equal(crossUserUpdate.data.length, 0, "cross-user list updates must affec
 
 const { data: importJob, error: importJobError } = await owner
   .from("import_jobs")
-  .insert({ user_id: ownerUser.id, source: "generic_movies", original_filename: "movies.csv", file_sha256: "a".repeat(64) })
+  .insert({ user_id: ownerUser.id, source: "generic_movies", status: "ready", original_filename: "movies.csv", file_sha256: "a".repeat(64) })
   .select("id")
   .single();
 assert.ifError(importJobError);
@@ -101,4 +101,28 @@ const foreignRecord = await stranger.from("import_records").insert({
 });
 assert.ok(foreignRecord.error, "RLS must reject records attached to another user's import job");
 
-console.log("Live Supabase auth, profile bootstrap, import isolation, and owner-scoped RLS checks passed.");
+const sourceKey = `generic_movies:${suffix}`;
+const { data: importRecord, error: importRecordError } = await owner.from("import_records").insert({
+  user_id: ownerUser.id,
+  import_job_id: importJob.id,
+  source_record_key: sourceKey,
+  media_type: "movie",
+  source_title: "Imported Film",
+  normalized_payload: { source: "generic_movies", sourceRecordKey: sourceKey, mediaType: "movie", title: "Imported Film", status: "watched", watchedDate: "2024-02-29", rating: 4.5, sourceMetadata: {} },
+}).select("id").single();
+assert.ifError(importRecordError);
+
+const selectedMedia = { provider: "mock", providerId: `import-${suffix}`, mediaType: "movie", title: "Imported Film", releaseYear: 2024, genres: [] };
+const forbiddenApply = await stranger.rpc("apply_import_record", { p_import_record_id: importRecord.id, p_selected_media: selectedMedia, p_conflict_policy: "review" });
+assert.ok(forbiddenApply.error, "another user cannot apply an owner's import record");
+for (let attempt = 0; attempt < 2; attempt += 1) {
+  const applied = await owner.rpc("apply_import_record", { p_import_record_id: importRecord.id, p_selected_media: selectedMedia, p_conflict_policy: "review" });
+  assert.ifError(applied.error);
+}
+const { data: importedMedia, error: importedMediaError } = await owner.from("media_items").select("id").eq("provider", "mock").eq("external_id", selectedMedia.providerId).single();
+assert.ifError(importedMediaError);
+const importedWatches = await owner.from("movie_watch_logs").select("id").eq("media_id", importedMedia.id);
+assert.ifError(importedWatches.error);
+assert.equal(importedWatches.data.length, 1, "re-applying the same source record must not duplicate watch history");
+
+console.log("Live Supabase auth, profile bootstrap, transactional import idempotency, and owner-scoped RLS checks passed.");

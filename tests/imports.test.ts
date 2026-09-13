@@ -6,6 +6,9 @@ import { parseGenericCsv } from "@/lib/imports/generic-parser";
 import { parseLetterboxdExport } from "@/lib/imports/letterboxd-parser";
 import { matchImportRecord } from "@/lib/imports/matching";
 import { importParserFor } from "@/lib/imports/parsers";
+import { acceptHighConfidence, previewCounts, reconcileRecord, selectCandidate, skipReconciliationRow } from "@/lib/imports/reconciliation";
+import { applyMockImport } from "@/lib/imports/apply-mock";
+import { emptyMosaicState } from "@/lib/persistence/types";
 import type { MovieImportRecord } from "@/lib/imports/types";
 import { normalizeMock } from "@/lib/media/providers/mock";
 import { books, games, movies, series } from "@/data/media";
@@ -123,4 +126,53 @@ test("Letterboxd parser rejects unsafe or unrecognized archives and validates up
   const parser = importParserFor("letterboxd");
   assert.equal(parser?.accepts("letterboxd.zip", "application/zip"), true);
   assert.equal(parser?.accepts("letterboxd.csv", "text/csv"), false);
+});
+
+test("reconciliation auto-accepts only safe matches and summarizes a dry run", () => {
+  const parsed = parseLetterboxdExport(letterboxdFixture());
+  const catalog = [...movies, ...series, ...games, ...books].map(normalizeMock);
+  const rows = parsed.records.map((record) => reconcileRecord(record, catalog));
+  assert.ok(rows.some((row) => row.decision === "review"));
+  const accepted = acceptHighConfidence(rows);
+  const counts = previewCounts(accepted, 2, 1);
+  assert.equal(counts.total, parsed.records.length);
+  assert.equal(counts.duplicates, 2);
+  assert.equal(counts.invalid, 1);
+  assert.equal(counts.needsReview, rows.filter((row) => row.decision === "review").length);
+});
+
+test("manual reconciliation enforces media types and supports explicit skip", () => {
+  const [record] = parseGenericCsv("generic_movies", encode("title,year\nDune: Part Two,2024\n")).records;
+  const candidate = normalizeMock(movies.find((movie) => movie.id === "dune-part-two")!);
+  const row = reconcileRecord(record, []);
+  assert.equal(selectCandidate(row, candidate).decision, "accepted");
+  assert.equal(skipReconciliationRow(row).decision, "skipped");
+  assert.throws(() => selectCandidate(row, normalizeMock(series[0])), /media type/);
+});
+
+test("applying the same import twice does not duplicate history or ratings", () => {
+  const [record] = parseGenericCsv("generic_movies", encode("title,year,watched_date,rating,review,rewatch,status\nDune: Part Two,2024,2024-03-01,4.5,Imported safely,false,watched\n")).records;
+  const media = normalizeMock(movies.find((movie) => movie.id === "dune-part-two")!);
+  const row = selectCandidate(reconcileRecord(record, []), media);
+  const first = applyMockImport(emptyMosaicState(), [row], "review", "2026-01-01T00:00:00.000Z");
+  const second = applyMockImport(first.state, [row], "review", "2026-02-01T00:00:00.000Z");
+  assert.equal(second.state.library.length, 1);
+  assert.equal(second.state.ratings.length, 1);
+  assert.equal(second.state.reviews.length, 1);
+  assert.equal(second.state.movieWatches.length, 1);
+  assert.equal(second.result.imported, 0);
+  assert.equal(second.result.wasReimport, true);
+});
+
+test("import conflict policies preserve or replace an existing Mosaic rating explicitly", () => {
+  const [record] = parseGenericCsv("generic_movies", encode("title,year,rating,status\nDune: Part Two,2024,4,watched\n")).records;
+  const media = normalizeMock(movies.find((movie) => movie.id === "dune-part-two")!);
+  const row = selectCandidate(reconcileRecord(record, []), media);
+  const existing = emptyMosaicState();
+  existing.ratings.push({ mediaKey: "mock:movie:dune-part-two", value: 5, updatedAt: "2025-01-01" });
+  const kept = applyMockImport(existing, [row], "review");
+  assert.equal(kept.state.ratings[0].value, 5);
+  assert.equal(kept.result.conflicts, 1);
+  const replaced = applyMockImport(existing, [row], "use_imported");
+  assert.equal(replaced.state.ratings[0].value, 4);
 });

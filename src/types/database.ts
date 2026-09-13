@@ -1,4 +1,4 @@
-type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 type Row<T> = T & Record<string, unknown>;
 type Insert<T> = Partial<T> & Record<string, unknown>;
@@ -25,7 +25,9 @@ export interface Database {
       import_provenance: { Row: Row<ImportProvenanceRow>; Insert: Insert<ImportProvenanceRow>; Update: Update<ImportProvenanceRow>; Relationships: [] };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      apply_import_record: { Args: { p_import_record_id: string; p_selected_media: Json; p_conflict_policy: string }; Returns: Json };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

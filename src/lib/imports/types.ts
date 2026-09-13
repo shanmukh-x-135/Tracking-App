@@ -98,3 +98,40 @@ export interface MatchResult {
   resolved?: CatalogMedia;
   candidates: MatchCandidate[];
 }
+
+export type ReconciliationDecision = "accepted" | "review" | "skipped";
+
+export interface ReconciliationRow {
+  record: NormalizedImportRecord;
+  match: MatchResult;
+  decision: ReconciliationDecision;
+  selected?: CatalogMedia;
+}
+
+export interface ImportPreviewCounts {
+  total: number;
+  automaticMatches: number;
+  needsReview: number;
+  unmatched: number;
+  libraryEntries: number;
+  ratings: number;
+  reviews: number;
+  movieWatches: number;
+  episodeWatches: number;
+  gamePlaythroughs: number;
+  bookReadings: number;
+  lists: number;
+  duplicates: number;
+  invalid: number;
+  skipped: number;
+}
+
+export interface ImportPreview {
+  jobId?: string;
+  source: ImportSource;
+  filename: string;
+  rows: ReconciliationRow[];
+  counts: ImportPreviewCounts;
+  errors: ImportRowError[];
+  warnings: string[];
+}
