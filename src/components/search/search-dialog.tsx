@@ -81,11 +81,13 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       {groups.map((type) => {
         const typeItems = items.filter((item) => item.mediaType === type);
         if (!typeItems.length) return null;
-        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type}s`}</div>{typeItems.slice(0, 4).map((item) => <button className="result-row" key={`${item.provider}:${item.mediaType}:${item.providerId}`} onClick={() => go(mediaHref(item))}>
+        const visibleItems = typeItems.slice(0, 4);
+        const hasGoogleBooks = visibleItems.some((item) => item.provider === "googlebooks");
+        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type}s`}</div>{visibleItems.map((item) => <div className="result-entry" key={`${item.provider}:${item.mediaType}:${item.providerId}`}><button className="result-row" onClick={() => go(mediaHref(item))}>
           <span className="result-image"><Image src={item.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="40px"/></span>
           <span><strong>{item.title}</strong><span>{[item.releaseYear, item.genres[0]].filter(Boolean).join(" · ") || "Details unavailable"}</span></span>
           {item.communityRating !== undefined && <span className="rating">★ {item.communityRating.toFixed(1)}</span>}
-        </button>)}</section>;
+        </button>{item.provider === "googlebooks" && <a className="google-books-link" href={`https://books.google.com/books?id=${encodeURIComponent(item.providerId)}`} target="_blank" rel="noreferrer">View on Google Books ↗</a>}</div>)}{hasGoogleBooks && <a className="google-books-powered" href="https://books.google.com" target="_blank" rel="noreferrer" aria-label="Google Books"><Image src="https://books.google.com/googlebooks/images/poweredby.png" alt="Powered by Google" width={62} height={30} unoptimized/></a>}</section>;
       })}
       {matchingUsers.length > 0 && <section className="result-group"><div className="result-label">People</div>{matchingUsers.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
       {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && items.length === 0 && matchingUsers.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}

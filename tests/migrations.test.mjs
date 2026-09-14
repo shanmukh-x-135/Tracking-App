@@ -7,7 +7,11 @@ const tracking = readFileSync("supabase/migrations/20260912160738_mosaic_domain_
 const imports = readFileSync("supabase/migrations/20260912232742_import_foundation.sql", "utf8");
 const importApplication = readFileSync("supabase/migrations/20260913051334_import_application.sql", "utf8");
 const importUndo = readFileSync("supabase/migrations/20260913111212_import_undo.sql", "utf8");
-const sql = `${core}\n${tracking}\n${imports}\n${importApplication}\n${importUndo}`;
+const listEditor = readFileSync("supabase/migrations/20260913184222_list_editor.sql", "utf8");
+const restrictedGrants = readFileSync("supabase/migrations/20260914120327_restrict_data_api_grants.sql", "utf8");
+const hostedHardening = readFileSync("supabase/migrations/20260914120455_harden_extensions_and_foreign_keys.sql", "utf8");
+const listWritePolicies = readFileSync("supabase/migrations/20260914122626_split_list_write_policies.sql", "utf8");
+const sql = `${core}\n${tracking}\n${imports}\n${importApplication}\n${importUndo}\n${listEditor}\n${restrictedGrants}\n${hostedHardening}\n${listWritePolicies}`;
 
 const protectedTables = [
   "profiles", "media_items", "library_entries", "ratings", "reviews", "lists", "list_items",
@@ -48,4 +52,31 @@ test("import jobs enforce ownership, stable records, and provenance", () => {
   assert.match(importUndo, /create or replace function public\.undo_import_job/i);
   assert.match(importUndo, /imported_fingerprint[\s\S]*?preserved_modified/i);
   assert.match(importUndo, /revoke execute on function public\.undo_import_job\(uuid\) from public, anon/i);
+});
+
+test("Data API roles receive only Mosaic's explicit table privileges", () => {
+  assert.match(restrictedGrants, /revoke all privileges on table[\s\S]*?from anon, authenticated/i);
+  assert.match(restrictedGrants, /grant select on table[\s\S]*?to anon, authenticated/i);
+  assert.match(restrictedGrants, /grant update on table public\.profiles to authenticated/i);
+  assert.match(restrictedGrants, /grant insert on table public\.media_items, public\.tv_episodes to authenticated/i);
+  assert.match(restrictedGrants, /grant select, insert, update, delete on table[\s\S]*?to authenticated/i);
+  assert.match(restrictedGrants, /revoke execute on function private\.set_updated_at\(\) from public, anon, authenticated/i);
+  assert.doesNotMatch(restrictedGrants, /grant\s+(all|truncate|references|trigger)\b/i);
+});
+
+test("hosted schema keeps extensions private and covers ownership foreign keys", () => {
+  assert.match(hostedHardening, /alter extension pg_trgm set schema extensions/i);
+  assert.match(hostedHardening, /import_records \(import_job_id, user_id\)/i);
+  assert.match(hostedHardening, /import_provenance \(import_job_id, user_id\)/i);
+  assert.match(hostedHardening, /import_provenance \(import_record_id, import_job_id, user_id\)/i);
+});
+
+test("list reads use one visibility policy while writes stay owner-scoped", () => {
+  assert.match(listWritePolicies, /drop policy lists_owner_all/i);
+  assert.match(listWritePolicies, /drop policy list_items_owner_all/i);
+  for (const table of ["lists", "list_items"]) {
+    for (const command of ["insert", "update", "delete"]) {
+      assert.match(listWritePolicies, new RegExp(`create policy ${table}_owner_${command}[\\s\\S]*?auth\\.uid\\(\\)`, "i"));
+    }
+  }
 });

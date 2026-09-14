@@ -32,7 +32,10 @@ button { color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 ::selection { background: rgba(120,174,252,.28); }
 
-.app-main { min-height: 100vh; padding-bottom: 42px; overflow: hidden; }
+.app-main { min-height: calc(100vh - 70px); padding-bottom: 42px; overflow: hidden; }
+.app-footer { min-height:70px; padding:18px var(--page-gutter) 28px; display:flex; align-items:center; justify-content:space-between; gap:18px; border-top:1px solid rgba(255,255,255,.06); color:var(--foreground-muted); font-size:11px; }
+.app-footer a { color:var(--foreground-secondary); font-weight:700; }
+.app-footer a:hover { color:var(--foreground); }
 .page { width: 100%; padding: 124px var(--page-gutter) 48px; }
 .page-narrow { max-width: 1240px; margin: 0 auto; }
 .eyebrow { color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
@@ -198,6 +201,22 @@ button { color: inherit; }
 .result-image img { object-fit:cover; }
 .result-row strong { display:block; font-size:13px; }
 .result-row span { color:var(--foreground-muted); font-size:11px; }
+.result-entry { position:relative; }
+.result-entry:has(.google-books-link) .result-row { padding-bottom:25px; }
+.google-books-link { position:absolute; left:59px; bottom:7px; color:var(--foreground-secondary); font-size:9px; font-weight:700; }
+.google-books-link:hover { color:var(--foreground); }
+.google-books-powered { min-height:30px; margin:5px 9px 0; display:flex; align-items:center; width:max-content; }
+.google-books-powered img { width:62px; height:30px; object-fit:contain; }
+.credits-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-top:30px; }
+.credit-card { min-height:230px; padding:22px; display:flex; flex-direction:column; align-items:flex-start; border:1px solid var(--glass-border); border-radius:17px; background:var(--background-elevated); }
+.credit-brand { height:48px; display:flex; align-items:center; margin-bottom:24px; }
+.credit-brand img { width:auto; height:auto; max-width:150px; max-height:42px; object-fit:contain; object-position:left center; }
+.credit-brand .tmdb-logo { width:58px; height:42px; }
+.credit-wordmark { font-size:24px; font-weight:850; letter-spacing:-.04em; }
+.credit-card h2 { margin:0 0 9px; font-size:18px; }
+.credit-card p { margin:0; color:var(--foreground-secondary); font-size:12px; line-height:1.6; }
+.credit-card .text-link { margin-top:auto; padding-top:20px; color:var(--accent); }
+.credits-note { max-width:720px; margin-top:26px; color:var(--foreground-muted); font-size:11px; line-height:1.6; }
 .dialog-body { padding:20px; }
 .dialog-title { margin:0; font-size:24px; letter-spacing:-.04em; }
 .stepper { display:flex; gap:6px; margin:15px 0 20px; }
@@ -410,6 +429,7 @@ button { color: inherit; }
   .mobile-link.active { color:var(--foreground); background:rgba(255,255,255,.075); }
   .mobile-link.log { color:#07101d; background:var(--accent); margin:-12px 4px 6px; border-radius:18px; box-shadow:0 8px 25px rgba(120,174,252,.24); }
   .app-main { padding-bottom:90px; }
+  .app-footer { padding-bottom:110px; }
   .page { padding-top:38px; }
   .hero { min-height:690px; padding-top:80px; }
   .hero-bg::after { background:linear-gradient(0deg,var(--background) 1%,rgba(7,9,12,.42) 70%,rgba(7,9,12,.22)); }
@@ -432,6 +452,7 @@ button { color: inherit; }
   .reconcile-row > .icon-button { grid-column:2; grid-row:1; }
   .list-editor-grid { grid-template-columns:1fr; }
   .list-editor-sidebar { position:static; }
+  .credits-grid { grid-template-columns:1fr; }
 }
 @media (max-width:560px) {
   :root { --page-gutter:16px; }

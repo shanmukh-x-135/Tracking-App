@@ -46,6 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </header>
     <main className="app-main">{children}</main>
+    <footer className="app-footer"><span>Track every story in one place.</span><Link href="/credits">Data sources & credits</Link></footer>
     <nav className="mobile-nav glass" aria-label="Mobile navigation">
       <Link className={`mobile-link ${pathname === "/" ? "active" : ""}`} href="/"><Home size={19}/>Home</Link>
       <Link className={`mobile-link ${pathname.startsWith("/discover") ? "active" : ""}`} href="/discover"><Compass size={19}/>Discover</Link>
