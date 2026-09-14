@@ -12,3 +12,8 @@ playwright-report
 .env*
 !.env.example
 supabase/.temp
+
+# Local coding-agent integrations are installed per workspace, not shipped.
+.github/agents/
+.github/hooks/
+.github/skills/

@@ -38,6 +38,8 @@ test("import upload produces a persistent dry-run reconciliation", async ({ page
   await expect(page.getByText(/First watch · ★ 4.5/)).toBeVisible();
   await page.reload();
   await expect(page.getByText(/First watch · ★ 4.5/)).toHaveCount(1);
+  await page.goto("/profile");
+  await expect(page.locator(".stat").filter({ hasText: "Movies watched" }).locator("strong")).toHaveText("1");
   await page.goto("/settings/data");
   await expect(page.getByText("movies.csv", { exact: true })).toBeVisible();
   page.once("dialog", (dialog) => void dialog.accept());
@@ -59,6 +61,8 @@ test("re-importing the same source does not duplicate history", async ({ page })
   await expect(page.getByText(/did not duplicate them/)).toBeVisible();
   await page.goto("/movie/dune-part-two");
   await expect(page.getByText(/First watch · ★ 4.5/)).toHaveCount(1);
+  await page.goto("/profile");
+  await expect(page.locator(".stat").filter({ hasText: "Movies watched" }).locator("strong")).toHaveText("1");
 });
 
 test("data settings layout remains usable on mobile", async ({ page }) => {

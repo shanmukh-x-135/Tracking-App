@@ -80,6 +80,28 @@ const crossUserUpdate = await stranger
 assert.ifError(crossUserUpdate.error);
 assert.equal(crossUserUpdate.data.length, 0, "cross-user list updates must affect no rows");
 
+const { data: secondMedia, error: secondMediaError } = await owner
+  .from("media_items")
+  .insert({ provider: "mock", media_type: "book", external_id: `list-${suffix}`, title: "RLS Test Book" })
+  .select("id")
+  .single();
+assert.ifError(secondMediaError);
+const { data: listItems, error: listItemsError } = await owner
+  .from("list_items")
+  .insert([{ list_id: list.id, media_id: media.id, position: 0 }, { list_id: list.id, media_id: secondMedia.id, position: 1 }])
+  .select("id,position")
+  .order("position");
+assert.ifError(listItemsError);
+const forbiddenReorder = await stranger.rpc("reorder_list_items", { p_list_id: list.id, p_item_ids: listItems.map(({ id }) => id).reverse() });
+assert.ok(forbiddenReorder.error, "another user cannot reorder an owner's list");
+const incompleteReorder = await owner.rpc("reorder_list_items", { p_list_id: list.id, p_item_ids: [listItems[0].id] });
+assert.ok(incompleteReorder.error, "list reorder must include every item exactly once");
+const reordered = await owner.rpc("reorder_list_items", { p_list_id: list.id, p_item_ids: [listItems[1].id, listItems[0].id] });
+assert.ifError(reordered.error);
+const reorderedItems = await owner.from("list_items").select("id,position").eq("list_id", list.id).order("position");
+assert.ifError(reorderedItems.error);
+assert.deepEqual(reorderedItems.data.map(({ id, position }) => [id, position]), [[listItems[1].id, 0], [listItems[0].id, 1]], "owner reorder should be persisted without position collisions");
+
 const { data: importJob, error: importJobError } = await owner
   .from("import_jobs")
   .insert({ user_id: ownerUser.id, source: "generic_movies", status: "ready", original_filename: "movies.csv", file_sha256: "a".repeat(64) })
@@ -133,4 +155,4 @@ const watchesAfterUndo = await owner.from("movie_watch_logs").select("id").eq("m
 assert.ifError(watchesAfterUndo.error);
 assert.equal(watchesAfterUndo.data.length, 0, "undo removes an unchanged row created by the import");
 
-console.log("Live Supabase auth, transactional import idempotency, safe undo, and owner-scoped RLS checks passed.");
+console.log("Live Supabase auth, list reorder, transactional import idempotency, safe undo, and owner-scoped RLS checks passed.");

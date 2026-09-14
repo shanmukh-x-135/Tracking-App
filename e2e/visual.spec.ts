@@ -13,6 +13,22 @@ for (const width of widths) {
     await page.screenshot({ path: `artifacts/home-${width}.png`, fullPage: true });
     expect(errors).toEqual([]);
   });
+
+  test(`Phase 3 data and list screens render cleanly at ${width}px`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.addInitScript(() => {
+      window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-visual", email: "visual@example.com", displayName: "Visual Reader" }));
+    });
+    await page.goto("/settings/data");
+    await expect(page.getByRole("button", { name: "Download Mosaic data" })).toBeVisible();
+    await page.screenshot({ path: `artifacts/data-settings-${width}.png`, fullPage: true });
+    await page.goto("/lists/worlds");
+    await expect(page.getByRole("heading", { name: "Favourite Fictional Worlds" })).toBeVisible();
+    await page.screenshot({ path: `artifacts/list-public-${width}.png`, fullPage: true });
+    expect(errors).toEqual([]);
+  });
 }
 
 test("all primary routes render without runtime errors", async ({ page }) => {
@@ -57,7 +73,9 @@ test("search and media-specific log interactions work", async ({ page }) => {
 
 test("universal search opens public people profiles", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Dune: Part Two" })).toBeVisible();
   await page.keyboard.press("Meta+k");
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("textbox", { name: "Search all media" }).fill("Sam Rivera");
   await page.getByRole("button", { name: /Sam Rivera/ }).click();
   await expect(page).toHaveURL(/\/profile\/samira$/);
