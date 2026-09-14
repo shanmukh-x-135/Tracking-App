@@ -1308,6 +1308,17 @@ Use this priority order:
 
 When uncertain, preserve existing working behavior and minimize destructive change.
 
+---
+
+# 43. Import and Portability Invariants
+
+- Treat every external export as untrusted input. Enforce authentication, size/type limits, safe archive paths, bounded parsing, and sanitized errors.
+- Import parsers must produce stable source record keys. Re-imports and retries must remain idempotent.
+- Resolve imported media through provider identity or conservative reconciliation; never blindly match on title alone or across media types.
+- Preserve import provenance. Undo may remove only unchanged rows created by that import and must preserve later user edits.
+- Keep Mosaic account data exportable through a documented, versioned machine-readable format. Any emitted CSV must neutralize spreadsheet formula prefixes.
+- Do not claim native import support for a platform without a trustworthy documented or user-provided export contract.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

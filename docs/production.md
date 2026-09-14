@@ -2,6 +2,8 @@
 
 Mosaic is prepared for Vercel and a dedicated hosted Supabase project. This repository is not currently linked to a Mosaic Supabase project, and the available Supabase MCP connection belongs to an unrelated procurement application. Never run Mosaic migrations against that project.
 
+As of 14 September 2026, this repository has no local Mosaic hosted credentials, no authenticated Vercel CLI session, and no available Docker daemon. The production path is therefore prepared and CI-validated, but no Mosaic preview/production deployment, hosted OAuth flow, live provider request, or hosted test import has been claimed.
+
 ## Required environments
 
 Create separate Supabase projects for staging and production when practical. In each project:
@@ -67,3 +69,5 @@ The smoke test performs search and detail lookup for TMDB movies, TMDB series, I
 7. Re-run read-only smoke tests and inspect Supabase security/performance advisors.
 
 Do not use personal production history for migration testing. Use sanitized fixtures and disposable test accounts.
+
+Provider-backed discovery shelves must remain in deterministic mock mode until TMDB, IGDB, and Google Books search/detail checks all pass in the intended hosted environment. One provider failure is isolated by the catalog aggregator and must not collapse results from the others.

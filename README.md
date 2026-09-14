@@ -47,6 +47,19 @@ Hosted Supabase, protected migration, Vercel, OAuth, and release procedures are 
 
 The current native/fallback support matrix, CSV templates, reconciliation rules, and provenance model are documented in [Importing into Mosaic](docs/imports.md).
 
+## Import and portability
+
+**Settings → Your data** is the account-data workspace. It provides:
+
+- a native Letterboxd account-export ZIP importer
+- source-labelled series, games, and books CSV fallbacks for platforms without a documented export contract
+- generic movie, series, game, and book templates in `public/templates/`
+- conservative provider matching, manual reconciliation, and a dry-run summary
+- explicit conflict policy, persistent job history, idempotent retry, provenance, and safe undo
+- a private Mosaic ZIP export with versioned JSON and spreadsheet-safe CSV
+
+Import uploads are authenticated, limited to 12 MB, validated by content, processed transiently, and never placed in public storage. See [Importing into Mosaic](docs/imports.md) and the [export schema](docs/export-schema.md).
+
 ## Catalog providers
 
 Add any subset of these server-only values to `.env.local`:
@@ -69,7 +82,9 @@ Provider identities remain qualified (`tmdb:movie:…`, `igdb:game:…`, and so 
 - `src/lib/media/`: normalized catalog types, identities, adapters, and aggregation.
 - `src/lib/auth/`: mock/live authentication gateways.
 - `src/lib/persistence/`: shared and domain mutation types, mock/live gateways, validation, and Supabase state mapping.
-- `src/app/api/`: server-only catalog and authenticated persistence endpoints.
+- `src/lib/imports/`: typed parsers, source adapters, matching, reconciliation, and mock/live application logic.
+- `src/lib/exports/`: versioned portable archive generation and CSV safety.
+- `src/app/api/`: server-only catalog, import, export, and authenticated persistence endpoints.
 - `supabase/migrations/`: schema, constraints, indexes, grants, triggers, and RLS policies.
 - `tests/`: domain, provider, persistence, and migration contract tests.
 - `e2e/`: responsive rendering, auth, search, and cross-media persistence journeys.
@@ -90,4 +105,4 @@ npm run build
 
 ## Current scope
 
-The Phase 2 implementation provides persistent auth, shared lists/library/ratings/reviews, domain logs, universal provider search, normalized detail pages, user search, activity, and responsive UI. It does not yet include production social follows/comments, recommendation pipelines, media imports, notifications, or moderation tooling.
+Phase 3 adds production bring-up tooling, a trustworthy migration pipeline, historical reconstruction, reversible provenance, complete cross-media list editing, and user-owned data export to the Phase 2 product. Native imports currently cover Letterboxd because it is the only target with a suitable documented self-service export; Serializd, Backloggd, and Fable use honest Mosaic CSV fallbacks. Hosted Supabase, OAuth, Vercel, and live provider traffic still require project credentials and must follow the guarded steps in [Production bring-up](docs/production.md). Social follows/comments, notifications, moderation, and recommendation pipelines remain intentionally deferred.

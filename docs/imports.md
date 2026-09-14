@@ -38,3 +38,16 @@ Files must be UTF-8 CSV and no larger than 12 MB. Dates use `YYYY-MM-DD`; rating
 The job-level policy is explicit: keep Mosaic, use imported, or keep Mosaic and report conflicts. Distinct historical events merge. Database application runs one source record per transaction, so a record cannot leave half its related changes behind. Provenance stores the applied snapshot and fingerprint for later safe undo; Mosaic must preserve a row if it was manually edited after import.
 
 The uploaded source archive itself is not stored. Normalized private records and reconciliation choices are retained with the owner-scoped job so work can resume safely.
+
+## Local verification
+
+Use mock mode for the full browser journey without third-party traffic:
+
+```bash
+npm test
+npx playwright test e2e/import.spec.ts e2e/export.spec.ts
+```
+
+Sanitized parser fixtures live in `fixtures/imports/`; the downloadable templates live in `public/templates/`. In live mode, start/reset local Supabase first and use a disposable account. Import application is record-transactional, so retrying a partially successful job is safe.
+
+Mosaic’s own portable ZIP is documented in [the version 1 export schema](export-schema.md).
