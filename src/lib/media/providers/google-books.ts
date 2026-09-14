@@ -16,12 +16,30 @@ function secureImage(url: string | undefined): string | undefined {
   return url?.replace(/^http:/, "https:");
 }
 
+function plainTextDescription(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const withoutMarkup = value
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(?:p|div|li|ul|ol)>/gi, " ")
+    .replace(/<[^>]+>/g, " ");
+  const decoded = withoutMarkup.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (entity, code: string) => {
+    const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+    const normalized = code.toLowerCase();
+    if (normalized in named) return named[normalized];
+    const point = normalized.startsWith("#x")
+      ? Number.parseInt(normalized.slice(2), 16)
+      : Number.parseInt(normalized.slice(1), 10);
+    return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : entity;
+  });
+  return decoded.replace(/\s+/g, " ").trim() || undefined;
+}
+
 export function normalizeGoogleBook(item: GoogleBookVolume): CatalogBook {
   const info = item.volumeInfo ?? {};
   const releaseYear = info.publishedDate?.match(/^\d{4}/)?.[0];
   return {
     providerId: item.id, provider: "googlebooks", mediaType: "book", title: info.title || "Untitled book",
-    subtitle: info.subtitle, authors: info.authors ?? [], description: info.description,
+    subtitle: info.subtitle, authors: info.authors ?? [], description: plainTextDescription(info.description),
     posterUrl: secureImage(info.imageLinks?.thumbnail ?? info.imageLinks?.smallThumbnail),
     releaseDate: info.publishedDate, releaseYear: releaseYear ? Number(releaseYear) : undefined,
     genres: info.categories ?? [], communityRating: info.averageRating, publisher: info.publisher,

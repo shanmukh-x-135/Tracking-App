@@ -9,14 +9,26 @@ const options = { auth: { persistSession: false, autoRefreshToken: false } };
 const owner = createClient(url, key, options);
 const stranger = createClient(url, key, options);
 const suffix = process.env.MOSAIC_TEST_SUFFIX || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const password = process.env.MOSAIC_TEST_PASSWORD || "Mosaic-test-2026";
+const usesPrecreatedUsers = process.env.MOSAIC_TEST_PRECREATED === "true";
 const isLocal = ["127.0.0.1", "localhost"].includes(new URL(url).hostname);
 const emailDomain = process.env.MOSAIC_TEST_EMAIL_DOMAIN || (isLocal ? "mosaic.local" : undefined);
 assert.ok(emailDomain, "MOSAIC_TEST_EMAIL_DOMAIN is required for hosted Auth tests; use a controlled inbox domain");
 
 async function signUp(client, label) {
+  if (usesPrecreatedUsers) {
+    const signedIn = await client.auth.signInWithPassword({
+      email: `mosaic-${label}-${suffix}@${emailDomain}`,
+      password,
+    });
+    assert.ifError(signedIn.error);
+    assert.ok(signedIn.data.user && signedIn.data.session, `${label} requires a confirmed disposable account`);
+    return signedIn.data.user;
+  }
+
   const { data, error } = await client.auth.signUp({
     email: `mosaic-${label}-${suffix}@${emailDomain}`,
-    password: "Mosaic-test-2026",
+    password,
     options: { data: { display_name: `${label} account` } },
   });
   assert.ifError(error);
@@ -24,7 +36,7 @@ async function signUp(client, label) {
 
   const signedIn = await client.auth.signInWithPassword({
     email: `mosaic-${label}-${suffix}@${emailDomain}`,
-    password: "Mosaic-test-2026",
+    password,
   });
   assert.ifError(signedIn.error);
   assert.ok(signedIn.data.user && signedIn.data.session, `${label} requires a confirmed disposable account`);

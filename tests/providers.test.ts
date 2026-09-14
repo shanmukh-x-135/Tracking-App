@@ -57,6 +57,18 @@ test("Google Books treats incomplete metadata as optional", () => {
   assert.deepEqual(book.authors, []);
 });
 
+test("Google Books descriptions are normalized to readable plain text", () => {
+  const book = normalizeGoogleBook({
+    id: "formatted-volume",
+    volumeInfo: {
+      title: "Formatted Book",
+      description: "<b>A &amp; B</b><br><i>Dune</i>&nbsp;&#8212; readable<script>ignored()</script>",
+    },
+  });
+
+  assert.equal(book.description, "A & B Dune — readable");
+});
+
 test("catalog search returns partial success when one provider fails", async () => {
   const successful: CatalogProvider = {
     name: "mock",

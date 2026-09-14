@@ -8,14 +8,14 @@ As of 15 September 2026:
 
 - All nine migrations in `supabase/migrations/` are applied to the hosted project, and its migration history is aligned to the checked-in timestamps.
 - All 16 expected public tables have RLS enabled. Anonymous Data API access is read-only for intentionally public rows; authenticated writes are explicitly granted and owner-scoped.
-- Hosted rollback-only smoke tests passed for cross-user isolation, private lists, catalog write protection, all four domain tracking models, mixed-list notes/reordering, import idempotency, and safe undo. The tests left no fixture rows behind.
+- Hosted rollback-only smoke tests passed for confirmed email/password sign-in, profile bootstrap, cross-user isolation, private lists, catalog write protection, all four domain tracking models, mixed-list notes/reordering, import idempotency, safe undo, and portable export formula neutralization. The tests left no Auth users or fixture rows behind.
 - Supabase's security advisor reports only the three intentional authenticated `SECURITY DEFINER` RPCs. Each RPC derives ownership from `auth.uid()` and was exercised against a foreign user. Performance notices are unused-index informational findings on the empty database.
-- Email/password Auth is enabled and email confirmation remains required. An automated hosted sign-up was rate-limited before a controlled inbox could confirm it, so session persistence and profile bootstrap still require a disposable confirmed account.
-- Google OAuth is disabled in Supabase. TMDB, IGDB, and Google Books credentials are not present locally, so provider requests and real-artwork QA have not been claimed.
-- The app was run locally in live mode using the verified project URL and a publishable key supplied only to the process. Public routes, auth gating, isolated provider failures, and responsive layouts were checked without persisting credentials.
+- Email/password Auth is enabled and email confirmation remains required. Two disposable confirmed users created through the server-side Auth admin API completed browser validation of session reload/reauthentication, movie watches, TV episode watch/rating/undo, game playthrough hydration, book progress/completion hydration, mixed-list privacy/public sharing, export isolation, and import replay/undo. Both users and every fixture row were then deleted, and the temporary admin secret was removed from the local environment.
+- Google OAuth is disabled in Supabase. TMDB, IGDB, and Google Books credentials are present only in the ignored local environment; expanded live search/detail checks and real-artwork QA pass for all three providers.
+- The app was run locally in live mode using the verified hosted project. Universal search and real movie, series, game, book, sparse-artwork, and alternate-edition detail routes passed browser checks at 1440, 1280, 1024, 768, and 390 pixels without console errors or broken images.
 - The Vercel connector has no authenticated team and this checkout has no `.vercel/project.json`; no preview or production deployment was created.
 
-Deterministic validation passed: ESLint, strict TypeScript, 37 unit/contract tests, the Next.js production build, and all 26 Playwright tests. Live-mode visual checks covered 1440, 1280, 1024, 768, and 390 pixels.
+Deterministic validation passed: ESLint, strict TypeScript, 38 unit/contract tests, the Next.js production build, and all 26 Playwright tests. Live-mode visual checks covered 1440, 1280, 1024, 768, and 390 pixels.
 
 ## Required environments
 
@@ -71,7 +71,7 @@ With all provider credentials present, run:
 npm run providers:smoke
 ```
 
-The smoke test performs search and detail lookup for TMDB movies, TMDB series, IGDB games, and Google Books. It prints titles only and never prints credentials. Deterministic provider contract tests remain the CI default.
+The smoke test covers modern and older TMDB movies and series, modern/older/multi-platform IGDB games, and modern/classic Google Books titles. It also verifies shared-title identities, sparse artwork, incomplete book metadata, multiple editions, and IGDB token reuse. It prints titles only and never prints credentials. Deterministic provider contract tests remain the CI default.
 
 The public Credits page contains the required TMDB notice and provider attribution. Google Books search results link to the corresponding Google Books record and display the official Powered by Google mark.
 

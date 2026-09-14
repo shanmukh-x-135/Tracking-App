@@ -52,7 +52,7 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
 function GameSection({ media }: { media: CatalogGame }) {
   const { state, mutate } = useMosaicState();
   const playthrough = state.gamePlaythroughs.find((item) => mediaKey(item.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthroughs</h2></div></div><form className="status-card form-grid" action={(form) => void mutate({ type: "game.upsert", media, playthroughId: playthrough?.id, status: String(form.get("status")) as "backlog" | "playing" | "paused" | "completed" | "dropped", platform: String(form.get("platform") || "") || undefined, playtimeMinutes: Math.round(Number(form.get("playtime") || 0) * 60), progressPercent: Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthroughs</h2></div></div><form key={playthrough ? `${playthrough.id}:${playthrough.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "game.upsert", media, playthroughId: playthrough?.id, status: String(form.get("status")) as "backlog" | "playing" | "paused" | "completed" | "dropped", platform: String(form.get("platform") || "") || undefined, playtimeMinutes: Math.round(Number(form.get("playtime") || 0) * 60), progressPercent: Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
     <label className="field">Status<select name="status" defaultValue={playthrough?.status ?? "playing"}><option value="backlog">Backlog</option><option value="playing">Playing</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></label>
     <label className="field">Platform<select name="platform" defaultValue={playthrough?.platform}>{(media.platforms.length ? media.platforms : ["Other"]).map((platform) => <option key={platform}>{platform}</option>)}</select></label>
     <label className="field">Playtime (hours)<input name="playtime" type="number" min="0" step="0.25" defaultValue={playthrough ? playthrough.playtimeMinutes / 60 : 0}/></label>
@@ -65,7 +65,7 @@ function GameSection({ media }: { media: CatalogGame }) {
 function BookSection({ media }: { media: CatalogBook }) {
   const { state, mutate } = useMosaicState();
   const reading = state.bookReadings.find((item) => mediaKey(item.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading progress</span><h2>{reading?.progressPercent !== undefined ? `${reading.progressPercent}% complete` : media.pageCount ? `${media.pageCount} pages` : "Page count unavailable"}</h2></div></div><form className="status-card form-grid" action={(form) => void mutate({ type: "book.upsert", media, readingId: reading?.id, status: String(form.get("status")) as "want_to_read" | "reading" | "paused" | "finished" | "dnf", currentPage: Number(form.get("page") || 0), totalPages: media.pageCount, progressPercent: media.pageCount ? undefined : Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading progress</span><h2>{reading?.progressPercent !== undefined ? `${reading.progressPercent}% complete` : media.pageCount ? `${media.pageCount} pages` : "Page count unavailable"}</h2></div></div><form key={reading ? `${reading.id}:${reading.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "book.upsert", media, readingId: reading?.id, status: String(form.get("status")) as "want_to_read" | "reading" | "paused" | "finished" | "dnf", currentPage: Number(form.get("page") || 0), totalPages: media.pageCount, progressPercent: media.pageCount ? undefined : Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
     <label className="field">Status<select name="status" defaultValue={reading?.status ?? "reading"}><option value="want_to_read">Want to Read</option><option value="reading">Reading</option><option value="paused">Paused</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label>
     {media.pageCount ? <label className="field">Current page<input name="page" type="number" min="0" max={media.pageCount} defaultValue={reading?.currentPage ?? 0}/></label> : <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={reading?.progressPercent ?? 0}/></label>}
     <label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5" defaultValue={reading?.rating}/></label>
@@ -82,14 +82,16 @@ function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "mo
 export function DetailPage({ media }: { media: CatalogMedia }) {
   const related = allMedia.filter((item) => item.id !== media.providerId).slice(0, 6);
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
+  const heroMetadata = [media.releaseYear ? String(media.releaseYear) : undefined, media.genres.join(" / ") || undefined]
+    .filter((value): value is string => value !== undefined);
   const poster = media.posterUrl ?? "/media-placeholder.svg";
   const backdrop = media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg";
 
   return <>
-    <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill priority sizes="100vw"/></div><div className="detail-content">
-      <div className="detail-poster"><Image src={poster} alt={`${media.title} artwork`} fill sizes="190px"/></div>
+    <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill loading="eager" sizes="100vw"/></div><div className="detail-content">
+      <div className="detail-poster"><Image src={poster} alt={`${media.title} artwork`} fill loading="eager" sizes="190px"/></div>
       <div className="detail-copy"><span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span><h1>{media.title}</h1>
-        <div className="hero-meta">{media.releaseYear && <span>{media.releaseYear}</span>}{media.genres.length > 0 && <><span>·</span><span>{media.genres.join(" / ")}</span></>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
         <p>{media.description || "A description is not available for this title yet."}</p>
         <PersistentMediaActions media={media}/>
       </div>
