@@ -18,6 +18,15 @@ test("movie watches retain repeatable rewatch history", () => {
   assert.equal(state.library[0].status, "watched");
 });
 
+test("a single movie diary entry can be removed without collapsing other rewatches", () => {
+  let state = applyMutation(emptyMosaicState(), { type: "movie.log", media: movie, watchedAt: now, isRewatch: false }, now);
+  state = applyMutation(state, { type: "movie.log", media: movie, watchedAt: "2026-09-13", isRewatch: true }, now);
+  const rewatch = state.movieWatches[0];
+  state = applyMutation(state, { type: "movie.delete", watchId: rewatch.id }, now);
+  assert.equal(state.movieWatches.length, 1);
+  assert.equal(state.movieWatches[0].isRewatch, false);
+});
+
 test("ratings update in place and can be cleared", () => {
   let state = applyMutation(emptyMosaicState(), { type: "rating.set", media: movie, value: 3.5 }, now);
   state = applyMutation(state, { type: "rating.set", media: movie, value: 4.5 }, now);

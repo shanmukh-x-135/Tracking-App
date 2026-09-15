@@ -3,7 +3,8 @@ import test from "node:test";
 import { createProviderKey, isProviderKey, parseProviderKey } from "../src/lib/media/identity";
 import { normalizeGoogleBook } from "../src/lib/media/providers/google-books";
 import { normalizeIgdb } from "../src/lib/media/providers/igdb";
-import { normalizeTmdb } from "../src/lib/media/providers/tmdb";
+import { normalizeTmdb, TmdbProvider } from "../src/lib/media/providers/tmdb";
+import { mockCatalogProvider } from "../src/lib/media/providers/mock";
 import { aggregateProviderSearch } from "../src/lib/media/search";
 import type { CatalogProvider } from "../src/lib/media/types";
 
@@ -31,6 +32,21 @@ test("TMDB normalizes movies and series without inventing missing metadata", () 
   assert.equal(series?.mediaType, "tv");
   assert.equal(series?.title, "House");
   assert.equal(series?.description, undefined);
+});
+
+test("TMDB season adapter returns every supplied episode in episode order", async () => {
+  const provider = new TmdbProvider("token", async () => new Response(JSON.stringify({ episodes: [
+    { id: 30, episode_number: 3, name: "Third" }, { id: 10, episode_number: 1, name: "First" }, { id: 20, episode_number: 2, name: "Second" },
+  ] }), { status: 200 }));
+  const episodes = await provider.getSeasonEpisodes("123", 2);
+  assert.deepEqual(episodes.map(({ episodeNumber, title }) => [episodeNumber, title]), [[1, "First"], [2, "Second"], [3, "Third"]]);
+});
+
+test("mock discovery and seasons remain deterministic for local UX checks", async () => {
+  const movies = await mockCatalogProvider.discover?.("movie");
+  const episodes = await mockCatalogProvider.getSeasonEpisodes?.("house", 1);
+  assert.ok((movies?.length ?? 0) > 0);
+  assert.equal(episodes?.length, 23);
 });
 
 test("IGDB normalizes game-specific metadata and rating scale", () => {
