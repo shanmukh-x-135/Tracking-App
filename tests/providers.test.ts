@@ -42,6 +42,17 @@ test("TMDB season adapter returns every supplied episode in episode order", asyn
   assert.deepEqual(episodes.map(({ episodeNumber, title }) => [episodeNumber, title]), [[1, "First"], [2, "Second"], [3, "Third"]]);
 });
 
+test("TMDB search considers a second page and ranks punctuation variants first", async () => {
+  const provider = new TmdbProvider("token", async (input) => {
+    const page = new URL(String(input)).searchParams.get("page");
+    return new Response(JSON.stringify({ results: page === "1"
+      ? [{ id: 1, media_type: "movie", title: "Dune Messiah" }]
+      : [{ id: 2, media_type: "movie", title: "Dune: Part Two" }, { id: 1, media_type: "movie", title: "Dune Messiah" }] }), { status: 200 });
+  });
+  const results = await provider.search("Dune Part Two");
+  assert.deepEqual(results.map(({ title }) => title), ["Dune: Part Two", "Dune Messiah"]);
+});
+
 test("mock discovery and seasons remain deterministic for local UX checks", async () => {
   const movies = await mockCatalogProvider.discover?.("movie");
   const episodes = await mockCatalogProvider.getSeasonEpisodes?.("house", 1);

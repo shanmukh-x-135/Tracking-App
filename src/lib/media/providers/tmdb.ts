@@ -93,8 +93,18 @@ export class TmdbProvider implements CatalogProvider {
   }
 
   async search(query: string): Promise<CatalogMedia[]> {
-    const data = await this.request<{ results?: TmdbMedia[] }>(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`);
-    return (data.results ?? []).map((item) => normalizeTmdb(item)).filter((item): item is CatalogMedia => item !== null).slice(0, 10);
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+    // Page one can be dominated by people and localized aliases. Looking one page
+    // further keeps normal searches useful without an unbounded provider crawl.
+    const pages = await Promise.all([1, 2].map((page) => this.request<{ results?: TmdbMedia[] }>(`/search/multi?query=${encodeURIComponent(normalizedQuery)}&include_adult=false&language=en-US&page=${page}`)));
+    const comparableQuery = normalizedQuery.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, " ").trim();
+    const items = pages.flatMap((page) => page.results ?? []).map((item) => normalizeTmdb(item)).filter((item): item is CatalogMedia => item !== null);
+    return [...new Map(items.map((item) => [`${item.mediaType}:${item.providerId}`, item])).values()]
+      .sort((first, second) => {
+        const score = (item: CatalogMedia) => [item.title, item.originalTitle].filter(Boolean).some((title) => title!.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, " ").trim() === comparableQuery) ? 1 : 0;
+        return score(second) - score(first);
+      }).slice(0, 20);
   }
 
   async getById(providerId: string, mediaType?: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia | null> {

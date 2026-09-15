@@ -1,7 +1,7 @@
 import type { MatchCandidate, MatchResult, NormalizedImportRecord } from "@/lib/imports/types";
 import type { CatalogMedia } from "@/lib/media/types";
 
-function normalizedTitle(value: string): string {
+export function normalizedTitle(value: string): string {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
@@ -15,6 +15,7 @@ function contextualScore(record: NormalizedImportRecord, media: CatalogMedia): M
   const sourceTitles = [record.title, record.originalTitle].filter((value): value is string => Boolean(value)).map(normalizedTitle);
   const candidateTitles = [media.title, media.originalTitle].filter((value): value is string => Boolean(value)).map(normalizedTitle);
   if (sourceTitles.some((title) => candidateTitles.includes(title))) { score += 60; reasons.push("Title matches"); }
+  else if (sourceTitles.some((source) => source.length >= 4 && candidateTitles.some((candidate) => candidate.includes(source) || source.includes(candidate)))) { score += 35; reasons.push("Title partially matches"); }
   else return null;
   if (record.year !== undefined && media.releaseYear !== undefined) {
     if (record.year === media.releaseYear) { score += 25; reasons.push("Release year matches"); }
