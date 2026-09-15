@@ -17,7 +17,7 @@ function factsFor(media: CatalogMedia): Fact[] {
   switch (media.mediaType) {
     case "movie": return [["Director", media.director], ["Runtime", media.runtimeMinutes ? `${media.runtimeMinutes} min` : undefined], ["Released", media.releaseYear], ["Genres", media.genres.join(", ") || undefined]];
     case "tv": return [["Network", media.network], ["Seasons", media.seasonCount], ["Episodes", media.episodeCount], ["Genres", media.genres.join(", ") || undefined]];
-    case "game": return [["Developer", media.developer], ["Publisher", media.publisher], ["Released", media.releaseYear], ["Platforms", media.platforms.join(", ") || undefined]];
+    case "game": return [["Released", media.releaseYear]];
     case "book": return [["Author", media.authors.join(", ") || undefined], ["Pages", media.pageCount], ["Published", media.releaseYear], ["Publisher", media.publisher]];
   }
 }
@@ -121,6 +121,15 @@ function GameSection({ media }: { media: CatalogGame }) {
   </form></section>;
 }
 
+function GameMetadata({ media }: { media: CatalogGame }) {
+  const platforms = [...new Map(media.platforms.map((platform) => [platform.toLocaleLowerCase(), platform.trim()])).values()].filter(Boolean);
+  if (!platforms.length && !media.developer && !media.publisher) return null;
+  return <section className="section game-metadata"><div className="section-head"><div><span className="eyebrow">Game details</span><h2>Platforms & credits</h2></div></div>
+    {platforms.length > 0 && <div><h3>Platforms</h3><div className="platform-chips">{platforms.map((platform) => <span key={platform}>{platform}</span>)}</div></div>}
+    {(media.developer || media.publisher) && <div className="game-credits">{media.developer && <div><span>Developed by</span><strong>{media.developer}</strong></div>}{media.publisher && <div><span>Published by</span><strong>{media.publisher}</strong></div>}</div>}
+  </section>;
+}
+
 function BookSection({ media }: { media: CatalogBook }) {
   const { state, mutate } = useMosaicState();
   const reading = state.bookReadings.find((item) => mediaKey(item.media) === mediaKey(media));
@@ -180,7 +189,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "tv" && <SeriesSection media={media}/>}
-      {media.mediaType === "game" && <GameSection media={media}/>}
+      {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
       {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>Related stories</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
     </div><aside>
       <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
