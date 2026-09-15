@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { MediaCard } from "@/components/media/media-card";
+import { MediaCard, MediaShelf } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
-import type { CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import type { LibraryStatus } from "@/lib/persistence/types";
 import type { MediaType } from "@/types/media";
 
@@ -22,7 +22,7 @@ type Sort = "updated" | "title" | "rating" | "release";
 export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
   const [sort, setSort] = useState<Sort>("updated");
   const [status, setStatus] = useState<LibraryStatus>();
-  const [discovery, setDiscovery] = useState<CatalogMedia[]>([]);
+  const [discovery, setDiscovery] = useState<CatalogDiscoverySection[]>([]);
   const [discoveryMessage, setDiscoveryMessage] = useState<string>();
   const searchParams = useSearchParams();
   const requestedType = searchParams.get("type");
@@ -39,7 +39,7 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
         return response.json() as Promise<CatalogSearchResult>;
       })
       .then((result) => {
-        setDiscovery(result.items);
+        setDiscovery(result.sections ?? []);
         setDiscoveryMessage(result.failures.length ? "Some sources are temporarily unavailable. Showing the stories we found." : undefined);
       })
       .catch(() => { if (!controller.signal.aborted) setDiscoveryMessage("Discovery is temporarily unavailable. Please try again shortly."); });
@@ -57,7 +57,7 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
       }
       return second.updatedAt.localeCompare(first.updatedAt);
     }).map(({ media }) => media), [sort, state.library, state.ratings, status, type]);
-  const items = mode === "discover" ? discovery.filter((media) => !type || media.mediaType === type) : libraryItems;
+  const discoverySections = discovery.filter((section) => !type || section.mediaType === type);
   const typeLabel = type === "tv" ? "series" : type ?? "stories";
 
   function selectType(value: MediaType | null) {
@@ -72,8 +72,9 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
     {mode === "library" && type && <div className="filter-bar" style={{ marginTop: 14 }} aria-label={`${typeLabel} status`}><button className={`filter-button ${status === undefined ? "active" : ""}`} onClick={() => setStatus(undefined)}>All</button>{statuses[type].map(([label, value]) => <button key={value} className={`filter-button ${status === value ? "active" : ""}`} onClick={() => setStatus(value)}>{label}</button>)}</div>}
     {mode === "discover" && discoveryMessage && <p className="search-notice" role="status">{discoveryMessage}</p>}
     {mode === "library" && !user && !isLoading ? <div className="empty-state"><h2>Your library travels with you</h2><p>Sign in to save movies, series, games, and books across sessions.</p><Link className="button primary" href="/login">Sign in</Link></div>
-      : mode === "library" && !isLoading && !items.length ? <div className="empty-state"><h2>No {typeLabel} here yet</h2><p>Add something you want to watch, play, or read.</p><Link className="button primary" href="/discover">Discover stories</Link></div>
-      : mode === "discover" && !items.length && !discoveryMessage ? <div className="empty-state"><h2>Loading discovery</h2><p>Finding current stories from available catalog sources.</p></div>
-      : <div className="media-grid">{items.map((media, index) => <MediaCard key={`${media.provider}:${media.mediaType}:${media.providerId}`} media={media} showType={!type} priority={index < 6}/>)}</div>}
+      : mode === "library" && !isLoading && !libraryItems.length ? <div className="empty-state"><h2>No {typeLabel} here yet</h2><p>Add something you want to watch, play, or read.</p><Link className="button primary" href="/discover">Discover stories</Link></div>
+      : mode === "discover" && !discoverySections.length ? <div className="empty-state"><h2>{discoveryMessage ? "Discovery is unavailable" : "Loading discovery"}</h2><p>{discoveryMessage ?? "Finding current stories from available catalog sources."}</p></div>
+      : mode === "discover" ? <div className="discover-sections">{discoverySections.map((section) => <section className="discover-section" key={section.id}><div className="section-head"><div><span className="eyebrow">{section.mediaType === "tv" ? "Series" : section.mediaType}</span><h2>{section.label}</h2></div></div>{section.items.length ? <MediaShelf items={section.items} showType={!type}/> : <p className="muted">{section.error ?? "No stories are available in this section right now."}</p>}</section>)}</div>
+      : <div className="media-grid">{libraryItems.map((media, index) => <MediaCard key={`${media.provider}:${media.mediaType}:${media.providerId}`} media={media} showType={!type} priority={index < 6}/>)}</div>}
   </div></div>;
 }

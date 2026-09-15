@@ -1,4 +1,4 @@
-import type { CatalogBook, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogBook, CatalogDiscoverySection, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson } from "@/lib/media/providers/errors";
 
 interface GoogleBookVolume {
@@ -77,6 +77,14 @@ export class GoogleBooksProvider implements CatalogProvider {
 
   async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
     return mediaType === "book" ? this.search("subject:fiction") : [];
+  }
+
+  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+    const definitions = [["fiction", "Fiction books", "subject:fiction"], ["fantasy", "Fantasy books", "subject:fantasy"], ["mystery", "Mystery books", "subject:mystery"]] as const;
+    const settled = await Promise.allSettled(definitions.map(async ([id, label, query]) => ({ id: `googlebooks-${id}`, label, mediaType: "book" as const, items: await this.search(query) } satisfies CatalogDiscoverySection)));
+    return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
+      id: `googlebooks-${definitions[index][0]}`, label: definitions[index][1], mediaType: "book", items: [], error: "This provider section is temporarily unavailable.",
+    });
   }
 
   async related(media: CatalogMedia): Promise<CatalogMedia[]> {

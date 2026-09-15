@@ -117,6 +117,7 @@ test("search tabs and typed discovery links keep media context", async ({ page }
   await page.keyboard.press("Escape");
   await page.goto("/discover?type=game");
   await expect(page.getByRole("button", { name: "Games" })).toHaveClass(/active/);
+  await expect(page.getByRole("heading", { name: "Games" })).toBeVisible();
   await expect(page.getByText("No games here yet")).toHaveCount(0);
 });
 

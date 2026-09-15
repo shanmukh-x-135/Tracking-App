@@ -1,5 +1,5 @@
 import { allMedia } from "@/data/media";
-import type { CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import type { Media, TvSeries } from "@/types/media";
 
 export function normalizeMock(item: Media): CatalogMedia {
@@ -43,6 +43,12 @@ export const mockCatalogProvider: CatalogProvider = {
   },
   async discover(mediaType) {
     return allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock);
+  },
+  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+    return (["movie", "tv", "game", "book"] as const).map((mediaType) => ({
+      id: `mock-${mediaType}`, mediaType, label: mediaType === "tv" ? "Series" : `${mediaType[0].toUpperCase()}${mediaType.slice(1)}s`,
+      items: allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock),
+    }));
   },
   async related(media) {
     return allMedia.filter((item) => item.id !== media.providerId && item.mediaType === media.mediaType).slice(0, 12).map(normalizeMock);

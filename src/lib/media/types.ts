@@ -73,6 +73,7 @@ export interface CatalogProvider {
   getById(providerId: string, mediaType?: MediaType): Promise<CatalogMedia | null>;
   getSeasonEpisodes?(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
   discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
+  discoverSections?(): Promise<CatalogDiscoverySection[]>;
   related?(media: CatalogMedia): Promise<CatalogMedia[]>;
 }
 
@@ -81,10 +82,20 @@ export interface CatalogFailure {
   message: string;
 }
 
+/** A provider-backed shelf with an honest source label. */
+export interface CatalogDiscoverySection {
+  id: string;
+  label: string;
+  mediaType: MediaType;
+  items: CatalogMedia[];
+  error?: string;
+}
+
 export interface CatalogSearchResult {
   items: CatalogMedia[];
   failures: CatalogFailure[];
   profiles?: CatalogProfile[];
+  sections?: CatalogDiscoverySection[];
 }
 
 export interface CatalogProfile {

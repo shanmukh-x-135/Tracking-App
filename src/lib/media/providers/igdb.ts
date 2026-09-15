@@ -1,4 +1,4 @@
-import type { CatalogGame, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogGame, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 interface IgdbNamed { name: string; logo?: { image_id?: string } }
@@ -82,5 +82,20 @@ export class IgdbProvider implements CatalogProvider {
     if (mediaType !== "game") return [];
     const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.company.logo.image_id,involved_companies.developer,involved_companies.publisher";
     return (await this.request(`fields ${fields}; where version_parent = null & rating != null; sort rating_count desc; limit 12;`)).map(normalizeIgdb);
+  }
+
+  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.company.logo.image_id,involved_companies.developer,involved_companies.publisher";
+    const now = Math.floor(Date.now() / 1000);
+    const definitions = [
+      ["popular", "Popular on IGDB", `where version_parent = null & rating != null; sort rating_count desc; limit 12;`],
+      ["recent", "Recently released", `where version_parent = null & first_release_date != null & first_release_date < ${now} & first_release_date > ${now - 31_536_000}; sort first_release_date desc; limit 12;`],
+      ["upcoming", "Upcoming games", `where version_parent = null & first_release_date != null & first_release_date >= ${now}; sort first_release_date asc; limit 12;`],
+      ["top-rated", "Highly rated", `where version_parent = null & rating != null; sort rating desc; limit 12;`],
+    ] as const;
+    const settled = await Promise.allSettled(definitions.map(async ([id, label, query]) => ({ id: `igdb-${id}`, label, mediaType: "game" as const, items: (await this.request(`fields ${fields}; ${query}`)).map(normalizeIgdb) } satisfies CatalogDiscoverySection)));
+    return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
+      id: `igdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: "game", items: [], error: "This provider section is temporarily unavailable.",
+    });
   }
 }

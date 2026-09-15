@@ -55,8 +55,11 @@ test("TMDB search considers a second page and ranks punctuation variants first",
 
 test("mock discovery and seasons remain deterministic for local UX checks", async () => {
   const movies = await mockCatalogProvider.discover?.("movie");
+  const sections = await mockCatalogProvider.discoverSections?.();
   const episodes = await mockCatalogProvider.getSeasonEpisodes?.("house", 1);
   assert.ok((movies?.length ?? 0) > 0);
+  assert.deepEqual(sections?.map(({ mediaType }) => mediaType), ["movie", "tv", "game", "book"]);
+  assert.ok(sections?.every(({ items }) => items.length > 0));
   assert.equal(episodes?.length, 23);
   const related = await mockCatalogProvider.related?.({ provider: "mock", providerId: "dune", mediaType: "book", title: "Dune", genres: [], authors: [] });
   assert.ok((related?.length ?? 0) > 0);

@@ -1,4 +1,4 @@
-import type { CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 const apiBase = "https://api.themoviedb.org/3";
@@ -132,6 +132,27 @@ export class TmdbProvider implements CatalogProvider {
     if (mediaType !== "movie" && mediaType !== "tv") return [];
     const data = await this.request<{ results?: TmdbMedia[] }>(`/trending/${mediaType}/week?language=en-US`);
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
+  }
+
+  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+    const definitions = [
+      ["movie-trending", "Trending now", "movie", "/trending/movie/week?language=en-US"],
+      ["movie-popular", "Popular movies", "movie", "/movie/popular?language=en-US&page=1"],
+      ["movie-now-playing", "Now playing", "movie", "/movie/now_playing?language=en-US&page=1"],
+      ["movie-upcoming", "Upcoming movies", "movie", "/movie/upcoming?language=en-US&page=1"],
+      ["movie-top-rated", "Top rated movies", "movie", "/movie/top_rated?language=en-US&page=1"],
+      ["tv-trending", "Trending series", "tv", "/trending/tv/week?language=en-US"],
+      ["tv-popular", "Popular series", "tv", "/tv/popular?language=en-US&page=1"],
+      ["tv-on-the-air", "Currently airing", "tv", "/tv/on_the_air?language=en-US&page=1"],
+      ["tv-top-rated", "Top rated series", "tv", "/tv/top_rated?language=en-US&page=1"],
+    ] as const;
+    const settled = await Promise.allSettled(definitions.map(async ([id, label, mediaType, path]) => {
+      const data = await this.request<{ results?: TmdbMedia[] }>(path);
+      return { id: `tmdb-${id}`, label, mediaType, items: (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12) } satisfies CatalogDiscoverySection;
+    }));
+    return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
+      id: `tmdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: definitions[index][2], items: [], error: "This provider section is temporarily unavailable.",
+    });
   }
 
   async related(media: CatalogMedia): Promise<CatalogMedia[]> {
