@@ -9,6 +9,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { createProviderKey } from "@/lib/media/identity";
 import { normalizeMock } from "@/lib/media/providers/mock";
 import { isLiveMode } from "@/lib/config/env";
+import { franchiseForMedia } from "@/lib/media/franchises";
 import type { CatalogFailure, CatalogMedia, CatalogProfile, CatalogSearchResult } from "@/lib/media/types";
 
 interface RemoteResult {
@@ -89,11 +90,11 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         if (!typeItems.length) return null;
         const groupedItems = typeItems.slice(0, 4);
         const hasGoogleBooks = groupedItems.some((item) => item.provider === "googlebooks");
-        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type[0].toUpperCase()}${type.slice(1)}s`}</div>{groupedItems.map((item) => <div className="result-entry" key={`${item.provider}:${item.mediaType}:${item.providerId}`}><button className="result-row" onClick={() => go(mediaHref(item))}>
+        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type[0].toUpperCase()}${type.slice(1)}s`}</div>{groupedItems.map((item) => { const franchise = franchiseForMedia(item); return <div className="result-entry" key={`${item.provider}:${item.mediaType}:${item.providerId}`}><button className="result-row" onClick={() => go(mediaHref(item))}>
           <span className="result-image"><Image src={item.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="40px"/></span>
           <span><strong>{item.title}</strong><span>{[item.releaseYear, item.genres[0]].filter(Boolean).join(" · ") || "Details unavailable"}</span></span>
           {item.communityRating !== undefined && <span className="rating">★ {item.communityRating.toFixed(1)}</span>}
-        </button>{item.provider === "googlebooks" && <a className="google-books-link" href={`https://books.google.com/books?id=${encodeURIComponent(item.providerId)}`} target="_blank" rel="noreferrer">View on Google Books ↗</a>}</div>)}{hasGoogleBooks && <a className="google-books-powered" href="https://books.google.com" target="_blank" rel="noreferrer" aria-label="Google Books"><Image src="https://books.google.com/googlebooks/images/poweredby.png" alt="Powered by Google" width={62} height={30} unoptimized/></a>}</section>;
+        </button>{franchise && <button type="button" className="result-franchise-link" onClick={() => go(`/franchise/${franchise.slug}`)}>Part of {franchise.title} →</button>}{item.provider === "googlebooks" && <a className="google-books-link" href={`https://books.google.com/books?id=${encodeURIComponent(item.providerId)}`} target="_blank" rel="noreferrer">View on Google Books ↗</a>}</div>; })}{hasGoogleBooks && <a className="google-books-powered" href="https://books.google.com" target="_blank" rel="noreferrer" aria-label="Google Books"><Image src="https://books.google.com/googlebooks/images/poweredby.png" alt="Powered by Google" width={62} height={30} unoptimized/></a>}</section>;
       })}
       {visibleProfiles.length > 0 && <section className="result-group"><div className="result-label">People</div>{visibleProfiles.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
       {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && visibleItems.length === 0 && visibleProfiles.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}

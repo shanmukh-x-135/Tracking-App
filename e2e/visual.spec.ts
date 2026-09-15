@@ -111,6 +111,7 @@ test("search tabs and typed discovery links keep media context", async ({ page }
   await page.keyboard.press("Meta+k");
   await page.getByRole("textbox", { name: "Search all media" }).fill("Dune");
   await expect(page.getByRole("button", { name: "Books" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Part of Dune →" }).first()).toBeVisible();
   await page.getByRole("button", { name: "Books" }).click();
   await expect(page.getByRole("button", { name: "Books" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".result-group .result-label")).toHaveText(["Books"]);

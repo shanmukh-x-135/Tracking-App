@@ -230,6 +230,8 @@ button { color: inherit; }
 .result-row strong { display:block; font-size:13px; }
 .result-row span { color:var(--foreground-muted); font-size:11px; }
 .result-entry { position:relative; }
+.result-franchise-link { margin:-3px 0 5px 59px; padding:0; border:0; background:transparent; color:var(--accent); font-size:10px; font-weight:750; cursor:pointer; }
+.result-franchise-link:hover { color:var(--foreground); }
 .result-entry:has(.google-books-link) .result-row { padding-bottom:25px; }
 .google-books-link { position:absolute; left:59px; bottom:7px; color:var(--foreground-secondary); font-size:9px; font-weight:700; }
 .google-books-link:hover { color:var(--foreground); }
