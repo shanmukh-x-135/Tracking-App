@@ -9,6 +9,7 @@ import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSer
 import { PersistentMediaActions } from "@/components/detail/persistent-media-actions";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
+import { isLiveMode } from "@/lib/config/env";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -30,6 +31,38 @@ function BrandMark({ media }: { media: CatalogMedia }) {
   const logoUrl = media.mediaType === "movie" ? media.studioLogoUrl : media.mediaType === "tv" ? media.networkLogoUrl : undefined;
   if (!name) return null;
   return <span className="brand-mark-detail" aria-label={media.mediaType === "movie" ? `Studio: ${name}` : `Network: ${name}`}>{logoUrl ? <Image src={logoUrl} alt={name} width={72} height={28}/> : name}</span>;
+}
+
+function bookCategories(categories: string[]): string[] {
+  const seen = new Set<string>();
+  return categories.flatMap((category) => category.split(/[/,]/)).map((category) => category.replace(/\s+/g, " ").trim())
+    .filter((category) => {
+      const key = category.toLocaleLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function BookHero({ media }: { media: CatalogBook }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const categories = bookCategories(media.genres);
+  const visibleCategories = isExpanded ? categories : categories.slice(0, 3);
+  const synopsis = media.description || "A synopsis is not available for this edition yet.";
+  const hasLongSynopsis = synopsis.length > 320;
+  return <section className="book-hero">
+    <div className="book-ambient" aria-hidden="true">{media.posterUrl && <Image src={media.posterUrl} alt="" fill sizes="100vw"/>}</div>
+    <div className="book-hero-content">
+      <div className="book-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt={`${media.title} cover`} fill loading="eager" sizes="(max-width: 560px) 150px, 240px"/></div>
+      <div className="book-copy"><span className="type-badge">Book</span><h1>{media.title}</h1>{media.subtitle && <p className="book-subtitle">{media.subtitle}</p>}
+        {media.authors.length > 0 && <p className="book-author-detail">{media.authors.join(", ")}</p>}
+        <div className="book-meta">{media.releaseYear && <span>Published {media.releaseYear}</span>}{media.pageCount && <span>{media.pageCount} pages</span>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        {categories.length > 0 && <div className="book-categories">{visibleCategories.map((category) => <span key={category}>{category}</span>)}{!isExpanded && categories.length > visibleCategories.length && <button type="button" onClick={() => setIsExpanded(true)}>+{categories.length - visibleCategories.length} more</button>}</div>}
+        <div className={`book-synopsis ${isExpanded ? "expanded" : ""}`}><p>{synopsis}</p>{hasLongSynopsis && <button type="button" className="text-link" onClick={() => setIsExpanded((value) => !value)}>{isExpanded ? "Show less" : "Read more"}</button>}</div>
+        <PersistentMediaActions media={media}/>
+      </div>
+    </div>
+  </section>;
 }
 
 function SeriesSection({ media }: { media: CatalogSeries }) {
@@ -106,12 +139,22 @@ function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "mo
 }
 
 export function DetailPage({ media }: { media: CatalogMedia }) {
-  const related = allMedia.filter((item) => item.id !== media.providerId).slice(0, 6);
+  const showFixtures = !isLiveMode();
+  const related = showFixtures ? allMedia.filter((item) => item.id !== media.providerId).slice(0, 6) : [];
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
   const heroMetadata = [media.releaseYear ? String(media.releaseYear) : undefined, media.genres.join(" / ") || undefined]
     .filter((value): value is string => value !== undefined);
   const poster = media.posterUrl ?? "/media-placeholder.svg";
   const backdrop = media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg";
+
+  if (media.mediaType === "book") return <>
+    <BookHero media={media}/>
+    <div className="detail-body book-detail-body"><div>
+      {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
+      <BookSection media={media}/>
+      {showFixtures && <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>}
+    </div><aside><div className="status-card"><span className="eyebrow">Your activity</span><h3>Reading history</h3><p>Your saved progress, ratings, and reviews appear here.</p></div></aside></div>
+  </>;
 
   return <>
     <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill loading="eager" sizes="100vw"/></div><div className="detail-content">
@@ -128,11 +171,10 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "tv" && <SeriesSection media={media}/>}
       {media.mediaType === "game" && <GameSection media={media}/>}
-      {media.mediaType === "book" && <BookSection media={media}/>}
-      <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>
+      {showFixtures && <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>}
     </div><aside>
       <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
-      <section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0, 2).map((review) => <div className="activity-row" key={review.id} style={{ gridTemplateColumns: "34px 1fr" }}><Image className="avatar" src={review.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{review.user.displayName}</strong><br/><span className="rating">★ {review.rating}</span></div></div>)}</div></section>
+      {showFixtures && <section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0, 2).map((review) => <div className="activity-row" key={review.id} style={{ gridTemplateColumns: "34px 1fr" }}><Image className="avatar" src={review.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{review.user.displayName}</strong><br/><span className="rating">★ {review.rating}</span></div></div>)}</div></section>}
     </aside></div>
   </>;
 }

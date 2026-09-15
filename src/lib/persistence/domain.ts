@@ -95,7 +95,7 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       break;
     }
     case "movie.log":
-      next.movieWatches.unshift({ id: crypto.randomUUID(), media: mutation.media, watchedAt: mutation.watchedAt, isRewatch: mutation.isRewatch, rating: mutation.rating, review: mutation.review });
+      next.movieWatches.unshift({ id: crypto.randomUUID(), media: mutation.media, watchedAt: mutation.watchedAt, isRewatch: mutation.isRewatch, rating: mutation.rating, review: mutation.review, viewingContext: mutation.viewingContext, streamingService: mutation.streamingService });
       ensureLibrary(mutation.media, "watched");
       ensureRating(mutation.media, mutation.rating);
       break;

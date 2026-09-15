@@ -41,7 +41,7 @@ export interface MediaItemRow extends Timestamped { media_type: "movie"|"tv"|"ga
 export interface LibraryEntryRow extends Timestamped { user_id: string; media_id: string; status: string; is_favorite: boolean }
 export interface RatingRow extends Timestamped { user_id: string; media_id: string; rating: number }
 export interface ReviewRow extends Timestamped { user_id: string; media_id: string; rating_id: string|null; body: string; contains_spoilers: boolean }
-export interface MovieWatchRow extends Timestamped { user_id: string; media_id: string; watched_at: string; is_rewatch: boolean; rating: number|null; review: string|null }
+export interface MovieWatchRow extends Timestamped { user_id: string; media_id: string; watched_at: string; is_rewatch: boolean; rating: number|null; review: string|null; viewing_context: "theater"|"streaming"|"television"|"physical"|"digital"|"other"|null; streaming_service: string|null }
 export interface TvEpisodeRow extends Timestamped { series_media_id: string; provider: string; external_id: string; season_number: number; episode_number: number; title: string; air_date: string|null; runtime_minutes: number|null; still_url: string|null; metadata: Json }
 export interface EpisodeWatchRow extends Timestamped { user_id: string; episode_id: string; watched_at: string; is_rewatch: boolean }
 export interface EpisodeRatingRow extends Timestamped { user_id: string; episode_id: string; rating: number }

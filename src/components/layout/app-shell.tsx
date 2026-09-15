@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Bell, Compass, Home, LogIn, Plus, Search, UserRound } from "lucide-react";
+import { Bell, Compass, Home, Library, LogIn, Plus, Search, UserRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -10,10 +10,13 @@ import { QuickLogDialog } from "@/components/log/quick-log-dialog";
 import { SearchDialog } from "@/components/search/search-dialog";
 import type { CatalogMedia } from "@/lib/media/types";
 
+declare global {
+  interface Window { __mosaicQuickLogContext?: CatalogMedia }
+}
+
 const links = [
-  { href: "/", label: "Home" }, { href: "/discover?type=movie", label: "Movies" },
-  { href: "/discover?type=tv", label: "Series" }, { href: "/discover?type=game", label: "Games" },
-  { href: "/discover?type=book", label: "Books" }, { href: "/lists", label: "Lists" },
+  { href: "/", label: "Home" }, { href: "/discover", label: "Discover" },
+  { href: "/library", label: "Library" }, { href: "/lists", label: "Lists" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -22,6 +25,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logMedia, setLogMedia] = useState<CatalogMedia>();
+  const openLog = () => {
+    setLogMedia(window.__mosaicQuickLogContext);
+    setLogOpen(true);
+  };
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -31,6 +38,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
+  }, []);
+
+  useEffect(() => {
+    const setContext = (event: Event) => setLogMedia((event as CustomEvent<CatalogMedia | undefined>).detail);
+    window.addEventListener("mosaic:log-context", setContext);
+    return () => window.removeEventListener("mosaic:log-context", setContext);
   }, []);
 
   useEffect(() => {
@@ -52,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="desktop-links" aria-label="Main navigation">{links.map((link) => <Link key={link.label} href={link.href} className={`nav-link ${active(link.href) ? "active" : ""}`}>{link.label}</Link>)}</nav>
       <div className="nav-actions">
         <button className="search-trigger" onClick={() => setSearchOpen(true)}><Search size={16}/><span>Search everything</span><kbd>⌘ K</kbd></button>
-        <button className="button" onClick={() => { setLogMedia(undefined); setLogOpen(true); }}><Plus size={15}/>Log</button>
+        <button className="button" onClick={openLog}><Plus size={15}/>Log</button>
         <Link className="icon-button" href="/activity" aria-label="Activity"><Bell size={18}/></Link>
         {!isLoading && (user ? <Link href="/profile" aria-label="Your profile">{user.avatarUrl ? <Image className="avatar" src={user.avatarUrl} width={38} height={38} alt={user.displayName}/> : <span className="avatar avatar-fallback">{user.displayName.slice(0, 1).toUpperCase()}</span>}</Link> : <Link className="button" href="/login"><LogIn size={15}/>Sign in</Link>)}
       </div>
@@ -62,8 +75,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <nav className="mobile-nav glass" aria-label="Mobile navigation">
       <Link className={`mobile-link ${pathname === "/" ? "active" : ""}`} href="/"><Home size={19}/>Home</Link>
       <Link className={`mobile-link ${pathname.startsWith("/discover") ? "active" : ""}`} href="/discover"><Compass size={19}/>Discover</Link>
-      <button className="mobile-link log" onClick={() => { setLogMedia(undefined); setLogOpen(true); }}><Plus size={22}/>Log</button>
-      <Link className={`mobile-link ${pathname.startsWith("/activity") ? "active" : ""}`} href="/activity"><Bell size={19}/>Activity</Link>
+      <button className="mobile-link log" onClick={openLog}><Plus size={22}/>Log</button>
+      <Link className={`mobile-link ${pathname.startsWith("/library") ? "active" : ""}`} href="/library"><Library size={19}/>Library</Link>
       <Link className={`mobile-link ${pathname.startsWith("/profile") ? "active" : ""}`} href={user ? "/profile" : "/login"}><UserRound size={19}/>Profile</Link>
     </nav>
     <SearchDialog open={searchOpen} onOpenChange={setSearchOpen}/>

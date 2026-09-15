@@ -11,10 +11,12 @@ const book: CatalogBook = { providerId: "book", provider: "mock", mediaType: "bo
 const now = "2026-09-12T10:00:00.000Z";
 
 test("movie watches retain repeatable rewatch history", () => {
-  let state = applyMutation(emptyMosaicState(), { type: "movie.log", media: movie, watchedAt: now, isRewatch: false }, now);
+  let state = applyMutation(emptyMosaicState(), { type: "movie.log", media: movie, watchedAt: now, isRewatch: false, viewingContext: "streaming", streamingService: "Mosaic+" }, now);
   state = applyMutation(state, { type: "movie.log", media: movie, watchedAt: now, isRewatch: true }, now);
   assert.equal(state.movieWatches.length, 2);
   assert.equal(state.movieWatches[0].isRewatch, true);
+  assert.equal(state.movieWatches[1].viewingContext, "streaming");
+  assert.equal(state.movieWatches[1].streamingService, "Mosaic+");
   assert.equal(state.library[0].status, "watched");
 });
 

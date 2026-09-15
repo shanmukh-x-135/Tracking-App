@@ -116,7 +116,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   }));
   state.movieWatches = (movieResult.data ?? []).flatMap((row) => {
     const media = mediaById.get(row.media_id);
-    return media ? [{ id: row.id, media, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? undefined, review: row.review ?? undefined }] : [];
+    return media ? [{ id: row.id, media, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? undefined, review: row.review ?? undefined, viewingContext: row.viewing_context ?? undefined, streamingService: row.streaming_service ?? undefined }] : [];
   });
   const episodesById = new Map((episodesResult.data ?? []).map((episode) => [episode.id, episode]));
   state.episodeWatches = (episodeWatchResult.data ?? []).flatMap((row) => {
@@ -223,7 +223,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
   const mediaId = await upsertMedia(client, media);
   if (mutation.type === "movie.log") {
     if (media.mediaType !== "movie") throw new Error("Movie log requires a movie.");
-    const { error } = await client.from("movie_watch_logs").insert({ user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null });
+    const { error } = await client.from("movie_watch_logs").insert({ user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null, viewing_context: mutation.viewingContext ?? null, streaming_service: mutation.streamingService ?? null });
     assertResult(error);
   } else if (mutation.type === "episode.log") {
     if (media.mediaType !== "tv" || (media.provider !== "tmdb" && media.provider !== "mock")) throw new Error("Episode log requires a supported TV series.");

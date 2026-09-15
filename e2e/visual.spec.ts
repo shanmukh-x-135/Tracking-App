@@ -73,6 +73,28 @@ test("search and media-specific log interactions work", async ({ page }) => {
   }
 });
 
+test("contextual Quick Log resets cleanly between media domains", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const globalLog = page.getByRole("banner").getByRole("button", { name: "Log", exact: true });
+  const cases = [
+    ["/book/dune", "Dune", "Log progress"],
+    ["/movie/dune-part-two", "Dune: Part Two", "Log watch"],
+    ["/series/severance", "Severance", "Log episode"],
+    ["/game/red-dead-redemption-2", "Red Dead Redemption 2", "Start playthrough"],
+  ] as const;
+
+  for (const [route, title, action] of cases) {
+    await page.goto(route);
+    await globalLog.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText(title, { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: action })).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "Your rating" }).getByRole("button")).toHaveCount(5);
+    if (route === "/book/dune") await expect(dialog.getByText("Watched date")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
+});
+
 test("universal search opens public people profiles", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Dune: Part Two" })).toBeVisible();
