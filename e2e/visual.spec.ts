@@ -59,14 +59,16 @@ test("search and media-specific log interactions work", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Log", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel("Search media to log").fill("Dune: Part Two");
   await page.getByRole("button", { name: /Dune: Part Two/ }).click();
   await expect(page.getByText("Watched date")).toBeVisible();
   await page.screenshot({ path: "artifacts/mobile-log.png", fullPage: true });
   await page.keyboard.press("Escape");
-  for (const [title, control] of [["Severance", "Episode"], ["Red Dead Redemption 2", "Platform"], ["Dune", "Page progress"]] as const) {
+  for (const [query, resultName, role, control] of [["Severance", /Severance.*series/i, "combobox", "Season"], ["Red Dead Redemption 2", /Red Dead Redemption 2.*game/i, "combobox", "Platform"], ["Dune", /^Dune.*book/i, "spinbutton", "Current page"]] as const) {
     await page.getByRole("button", { name: "Log", exact: true }).click();
-    await page.getByRole("button", { name: title, exact: true }).click();
-    await expect(page.getByText(control, { exact: false })).toBeVisible();
+    await page.getByLabel("Search media to log").fill(query);
+    await page.getByRole("button", { name: resultName }).click();
+    await expect(page.getByRole(role, { name: control, exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
   }
 });

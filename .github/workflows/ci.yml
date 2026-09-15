@@ -14,6 +14,10 @@ jobs:
   application:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Browser journeys are deterministic contract tests. Provider and hosted
+    # Supabase integration are validated separately, never through local env.
+    env:
+      NEXT_PUBLIC_DATA_MODE: mock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

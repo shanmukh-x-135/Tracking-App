@@ -11,15 +11,15 @@ async function signUp(page: Page, email = "reader@example.com") {
 
 test("protected persistence actions require authentication", async ({ page }) => {
   await page.goto("/movie/dune-part-two");
-  await page.getByRole("button", { name: "Add to library" }).click();
+  await page.getByRole("button", { name: "Watchlist" }).click();
   await expect(page).toHaveURL(/\/login$/);
 });
 
 test("library, rating, review, and cross-media list survive refresh", async ({ page }) => {
   await signUp(page);
   await page.goto("/movie/dune-part-two");
-  await page.getByRole("button", { name: "Add to library" }).click();
-  await expect(page.getByRole("button", { name: "In library" })).toBeVisible();
+  await page.getByRole("button", { name: "Watchlist" }).click();
+  await expect(page.getByRole("button", { name: "Watchlisted" })).toBeVisible();
   await page.getByRole("button", { name: "Rate 4 stars" }).click();
   await page.getByRole("button", { name: "Review" }).click();
   await page.getByLabel("Your review").fill("A patient epic with a thunderous final movement.");
@@ -27,7 +27,7 @@ test("library, rating, review, and cross-media list survive refresh", async ({ p
   await page.getByRole("button", { name: "Save review" }).click();
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "In library" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Watchlisted" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Rate 4 stars" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "Edit review" })).toBeVisible();
 
@@ -96,10 +96,11 @@ test("Quick Log writes persistent domain state", async ({ page }) => {
   await signUp(page, "quicklog@example.com");
   await page.goto("/");
   await page.getByRole("button", { name: "Log", exact: true }).click();
-  await page.getByRole("button", { name: "Dune: Part Two", exact: true }).click();
+  await page.getByLabel("Search media to log").fill("Dune: Part Two");
+  await page.getByRole("button", { name: /Dune: Part Two/ }).click();
   await page.getByRole("button", { name: "5 stars" }).click();
   await page.getByLabel("Review (optional)").fill("Logged from the unified flow.");
-  await page.getByRole("button", { name: "Save update" }).click();
+  await page.getByRole("button", { name: "Log watch" }).click();
   await expect(page.getByRole("heading", { name: "Added to your story" })).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
   await page.goto("/movie/dune-part-two");
@@ -125,14 +126,14 @@ test("episode watches and ratings survive refresh and can be undone", async ({ p
   await signUp(page, "series@example.com");
   await page.goto("/series/severance");
   await page.getByRole("button", { name: "Season 1" }).click();
-  await page.getByRole("button", { name: "Mark watched Episode 1" }).click();
+  await page.getByRole("button", { name: "Mark watched S01E01: Episode 1" }).click();
   await page.getByRole("button", { name: "Rate 5" }).first().click();
   await page.reload();
   await page.getByRole("button", { name: "Season 1" }).click();
-  await expect(page.getByText("1 marked watched")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Undo watched Episode 1" })).toBeVisible();
-  await page.getByRole("button", { name: "Undo watched Episode 1" }).click();
-  await expect(page.getByText("0 marked watched")).toBeVisible();
+  await expect(page.getByText("1 / 10 watched")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo watched S01E01: Episode 1" })).toBeVisible();
+  await page.getByRole("button", { name: "Undo watched S01E01: Episode 1" }).click();
+  await expect(page.getByText("0 / 10 watched")).toBeVisible();
 });
 
 test("game playthrough details survive refresh", async ({ page }) => {

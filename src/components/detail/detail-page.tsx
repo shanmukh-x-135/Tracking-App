@@ -70,7 +70,7 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
           ? { type: "episode.unwatch" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber }
           : { type: "episode.log" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString() };
         void mutate(mutation).catch(() => undefined);
-      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} ${episode.title}`}><Check size={17}/></button><button className="button" onClick={() => void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: 5 }).catch(() => undefined)}><Star size={14}/>Rate 5</button></div>
+      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} S${String(season).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}: ${episode.title}`}><Check size={17}/></button><button className="button" onClick={() => void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: 5 }).catch(() => undefined)}><Star size={14}/>Rate 5</button></div>
     </article>)}</div>
   </section>;
 }

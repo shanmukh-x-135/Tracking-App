@@ -12,7 +12,7 @@ test("data export requires authentication and downloads a versioned archive", as
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/library$/);
   await page.goto("/movie/dune-part-two");
-  await page.getByRole("button", { name: "Add to library" }).click();
+  await page.getByRole("button", { name: "Watchlist" }).click();
 
   await page.goto("/settings/data");
   const [download] = await Promise.all([
