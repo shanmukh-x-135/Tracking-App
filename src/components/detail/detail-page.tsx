@@ -10,6 +10,7 @@ import { PersistentMediaActions } from "@/components/detail/persistent-media-act
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
 import { franchiseForMedia, type FranchiseDefinition } from "@/lib/media/franchises";
+import { bookSynopsis, normalizeBookCategories, shouldCollapseBookSynopsis } from "@/lib/media/book-presentation";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -33,23 +34,12 @@ function BrandMark({ media }: { media: CatalogMedia }) {
   return <span className="brand-mark-detail" aria-label={media.mediaType === "movie" ? `Studio: ${name}` : `Network: ${name}`}>{logoUrl ? <Image src={logoUrl} alt={name} width={72} height={28}/> : name}</span>;
 }
 
-function bookCategories(categories: string[]): string[] {
-  const seen = new Set<string>();
-  return categories.flatMap((category) => category.split(/[/,]/)).map((category) => category.replace(/\s+/g, " ").trim())
-    .filter((category) => {
-      const key = category.toLocaleLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
 function BookHero({ media, franchise }: { media: CatalogBook; franchise?: FranchiseDefinition }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const categories = bookCategories(media.genres);
+  const categories = normalizeBookCategories(media.genres);
   const visibleCategories = isExpanded ? categories : categories.slice(0, 3);
-  const synopsis = media.description || "A synopsis is not available for this edition yet.";
-  const hasLongSynopsis = synopsis.length > 320;
+  const synopsis = bookSynopsis(media.description);
+  const hasLongSynopsis = shouldCollapseBookSynopsis(synopsis);
   return <section className="book-hero">
     <div className="book-ambient" aria-hidden="true">{media.posterUrl && <Image src={media.posterUrl} alt="" fill sizes="100vw"/>}</div>
     <div className="book-hero-content">
