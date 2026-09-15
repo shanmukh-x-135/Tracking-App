@@ -10,11 +10,12 @@ import { Dialog } from "@/components/ui/dialog";
 import type { CatalogEpisode, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
 
-export function QuickLogDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
+export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boolean; onOpenChange(open: boolean): void; initialMedia?: CatalogMedia }) {
   const [selected, setSelected] = useState<CatalogMedia>();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogMedia[]>([]);
   const [episodes, setEpisodes] = useState<CatalogEpisode[]>([]);
+  const [seasonNumber, setSeasonNumber] = useState(1);
   const [rating, setRating] = useState(0);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string>();
@@ -38,19 +39,26 @@ export function QuickLogDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   }, [open, query]);
 
   useEffect(() => {
+    if (open && initialMedia) queueMicrotask(() => choose(initialMedia));
+  // `choose` deliberately also restores the media's saved rating when invoked by a detail page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMedia, open]);
+
+  useEffect(() => {
     if (selected?.mediaType !== "tv") { queueMicrotask(() => setEpisodes([])); return; }
-    const season = selected.seasonNumbers?.find((number) => number > 0) ?? 1;
+    const available = selected.seasonNumbers?.filter((number) => number > 0) ?? [];
+    const season = available.includes(seasonNumber) ? seasonNumber : available[0] ?? 1;
     const controller = new AbortController();
     void fetch(`/api/catalog/${selected.provider}/tv/${encodeURIComponent(selected.providerId)}/season/${season}`, { signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<{ episodes?: CatalogEpisode[] }> : { episodes: [] })
       .then((payload) => setEpisodes((payload.episodes ?? []).sort((first, second) => first.episodeNumber - second.episodeNumber)))
       .catch(() => { if (!controller.signal.aborted) setEpisodes([]); });
     return () => controller.abort();
-  }, [selected]);
+  }, [seasonNumber, selected]);
 
-  function reset() { setSelected(undefined); setQuery(""); setResults([]); setRating(0); setSaved(false); setError(undefined); }
+  function reset() { setSelected(undefined); setQuery(""); setResults([]); setRating(0); setSeasonNumber(1); setSaved(false); setError(undefined); }
   function close(value: boolean) { onOpenChange(value); if (!value) window.setTimeout(reset, 200); }
-  function choose(media: CatalogMedia) { setSelected(media); setRating(state.ratings.find((item) => item.mediaKey === mediaKey(media))?.value ?? 0); setError(undefined); }
+  function choose(media: CatalogMedia) { setSelected(media); setSeasonNumber(media.mediaType === "tv" ? media.seasonNumbers?.find((number) => number > 0) ?? 1 : 1); setRating(state.ratings.find((item) => item.mediaKey === mediaKey(media))?.value ?? 0); setError(undefined); }
 
   async function submit(formData: FormData) {
     if (!selected) return;
@@ -82,7 +90,7 @@ export function QuickLogDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         {query.trim().length >= 2 ? <div className="quick-log-results">{results.map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>{media.mediaType === "tv" ? "Series" : media.mediaType} {media.releaseYear ? `· ${media.releaseYear}` : ""}</small></span></button>)}{!results.length && <p className="muted">Keep typing to search every provider.</p>}</div> : <>{choices.length > 0 && <div className="quick-log-results">{choices.map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>From your library</small></span></button>)}</div>}<p className="muted">Search any title for a domain-aware update.</p></>}</>
       : <form action={submit}><div className="form-grid">
         {selected.mediaType === "movie" && <><label className="field">Watched date<input name="watchedAt" type="date" defaultValue={today}/></label><label className="check-field"><input name="rewatch" type="checkbox" defaultChecked={state.movieWatches.some((watch) => mediaKey(watch.media) === selectedKey)}/> Rewatch</label><label className="check-field"><input name="favourite" type="checkbox" defaultChecked={state.library.find((item) => mediaKey(item.media) === selectedKey)?.isFavorite}/> Favourite</label><label className="field full">Review (optional)<textarea name="review" placeholder="Write a few thoughts…"/></label></>}
-        {selected.mediaType === "tv" && <label className="field full">Episode<select name="episode" defaultValue={firstUnwatched?.episodeNumber}>{episodes.map((episode) => <option key={episode.id} value={episode.episodeNumber}>S{String(episode.seasonNumber).padStart(2, "0")}E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</option>)}</select>{!episodes.length && <small>Loading available episodes…</small>}</label>}
+        {selected.mediaType === "tv" && <><label className="field">Season<select value={seasonNumber} onChange={(event) => setSeasonNumber(Number(event.target.value))}>{(selected.seasonNumbers?.filter((number) => number > 0) ?? [1]).map((number) => <option key={number} value={number}>Season {number}</option>)}</select></label><label className="field">Episode<select name="episode" defaultValue={firstUnwatched?.episodeNumber}>{episodes.map((episode) => <option key={episode.id} value={episode.episodeNumber}>E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</option>)}</select>{!episodes.length && <small>Loading available episodes…</small>}</label></>}
         {selected.mediaType === "game" && <><label className="field">Status<select name="status" defaultValue={activePlaythrough?.status ?? "playing"}><option value="playing">Playing</option><option value="backlog">Backlog</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></label><label className="field">Platform<select name="platform" defaultValue={activePlaythrough?.platform}>{(selected.platforms.length ? selected.platforms : ["Other"]).map((platform) => <option key={platform}>{platform}</option>)}</select></label><label className="field">Playtime (hours)<input name="playtime" type="number" min="0" step="0.25" defaultValue={activePlaythrough ? activePlaythrough.playtimeMinutes / 60 : 0}/></label><label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={activePlaythrough?.progressPercent ?? 0}/></label></>}
         {selected.mediaType === "book" && <><label className="field">Status<select name="status" defaultValue={activeReading?.status ?? "reading"}><option value="reading">Reading</option><option value="want_to_read">Want to Read</option><option value="paused">Paused</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label>{selected.pageCount ? <label className="field">Current page<input name="page" type="number" min="0" max={selected.pageCount} defaultValue={activeReading?.currentPage ?? 0}/></label> : <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={activeReading?.progressPercent ?? 0}/></label>}</>}
         <fieldset className="field full inline-rating"><legend>Your rating</legend>{[1, 2, 3, 4, 5].map((value) => <button type="button" className={`star-button ${value <= rating ? "active" : ""}`} key={value} onClick={() => setRating(value)} aria-label={`${value} stars`}><Star fill="currentColor" size={22}/></button>)}</fieldset>

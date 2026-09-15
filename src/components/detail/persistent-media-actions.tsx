@@ -30,12 +30,17 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
     setMessage(success);
   }
 
+  function openQuickLog() {
+    window.dispatchEvent(new CustomEvent<CatalogMedia>("mosaic:quick-log", { detail: media }));
+  }
+
   return <div className="persistent-actions">
     <div className="actions">
       {isMovie ? <>
         <button className={`button ${isWatchlisted ? "accent" : "primary"}`} onClick={() => void authenticatedMutation(() => mutate(isWatchlisted ? { type: "library.remove", media } : { type: "library.upsert", media, status: "watchlist" }), isWatchlisted ? "Removed from your watchlist." : "Added to your watchlist.")}>{isWatchlisted ? <Check size={16}/> : <Plus size={16}/>} {isWatchlisted ? "Watchlisted" : "Watchlist"}</button>
         <button className={`button ${hasWatched ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate({ type: "movie.log", media, watchedAt: new Date().toISOString().slice(0, 10), isRewatch: hasWatched }), hasWatched ? "Rewatch logged." : "Watch logged.")}><Eye size={16}/>{hasWatched ? "Log rewatch" : "Watched"}</button>
       </> : <button className={`button ${entry ? "accent" : "primary"}`} onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media) }), "Library updated.")}>{entry ? <Check size={16}/> : <Plus size={16}/>} {entry ? "In library" : "Add to library"}</button>}
+      <button className="button" onClick={openQuickLog}><Plus size={16}/>Log</button>
       <button className="button" onClick={() => setShowReview((value) => !value)}><Star size={16}/>{review ? "Edit review" : "Review"}</button>
       <button className="button" onClick={() => setShowLists((value) => !value)}><ListPlus size={16}/>Add to list</button>
       <button className={`icon-button glass ${entry?.isFavorite ? "active" : ""}`} aria-label="Favourite" onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media), isFavorite: !entry?.isFavorite }), "Favourite updated.")}><Heart size={17} fill={entry?.isFavorite ? "currentColor" : "none"}/></button>
