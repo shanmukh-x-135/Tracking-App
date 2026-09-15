@@ -8,6 +8,7 @@ import { allMedia } from "@/data/media";
 import { Dialog } from "@/components/ui/dialog";
 import { createProviderKey } from "@/lib/media/identity";
 import { normalizeMock } from "@/lib/media/providers/mock";
+import { isLiveMode } from "@/lib/config/env";
 import type { CatalogFailure, CatalogMedia, CatalogProfile, CatalogSearchResult } from "@/lib/media/types";
 
 interface RemoteResult {
@@ -50,7 +51,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [normalizedQuery, open]);
 
-  const suggestions = useMemo(() => allMedia.slice(0, 8).map(normalizeMock), []);
+  const suggestions = useMemo(() => isLiveMode() ? [] : allMedia.slice(0, 8).map(normalizeMock), []);
   const activeRemote = remote?.query === normalizedQuery ? remote : undefined;
   const items = normalizedQuery.length < 2 ? suggestions : activeRemote?.items ?? [];
   const isLoading = normalizedQuery.length >= 2 && !activeRemote;
@@ -92,6 +93,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       {matchingUsers.length > 0 && <section className="result-group"><div className="result-label">People</div>{matchingUsers.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
       {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && items.length === 0 && matchingUsers.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}
       {isLoading && <div className="search-state"><span className="skeleton-line"/><span className="skeleton-line short"/><span className="sr-only">Searching every medium…</span></div>}
+      {!isLoading && normalizedQuery.length < 2 && !items.length && <div className="search-state"><strong>Search every story</strong><p>Start typing a title, creator, author, or username.</p></div>}
     </div>
   </div></Dialog>;
 }
