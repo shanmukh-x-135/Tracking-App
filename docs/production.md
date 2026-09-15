@@ -16,7 +16,8 @@ As of 15 September 2026:
 - Vercel project `mosaic` (`prj_xHWHkQuDW0O01jnA2SgoAWSX7bU4`) is linked to `shanmukh-x-135/Tracking-App`, with `main` as its production branch. All seven required variables are configured for Preview and Production; provider credentials use Vercel's sensitive controls and no Supabase admin or Management API credential was uploaded.
 - The branch Preview alias `https://mosaic-git-chore-live-bringup-shanmukh-s-projects3.vercel.app` is READY. Protected API and browser smoke tests passed for live grouped search, representative movie/series/game/book details, real artwork, Credits, login, and Discover at 1440, 1280, 1024, 768, and 390 pixels, with no page/console errors or recent Vercel runtime errors.
 - Preview deployment `dpl_7fBCuWhxBwLv1gjgckEkbcfJAGgv` at commit `406584d0dabac1952a34bb7a809384bc8f4c310e` was promoted to READY Production deployment `dpl_8fZqmr5wEoHxH6nHF8BYzMJfJnWn`. The canonical origin `https://mosaic-eight-theta.vercel.app` serves the app, Credits, login, Discover, live grouped search, and real movie, TV, game, and book artwork. Production browser checks passed on 25 routes/width combinations at 1440, 1280, 1024, 768, and 390 pixels with no console errors, broken images, or body overflow; Vercel runtime error logs are empty.
-- Supabase Auth URL configuration is not yet verified. Before merging the release into `main`, set the Site URL and allow the exact callbacks below via Auth → URL Configuration or a temporary Supabase Management API token, then re-check the configuration. Google OAuth remains disabled pending separate provider credentials.
+- Supabase Auth Site URL is verified as `https://mosaic-eight-theta.vercel.app`. Its redirect allow-list contains the local callback, the two validated immutable Preview callbacks, the stable live-bringup branch Preview callback, and the canonical Production callback. Email confirmation remains required and Google OAuth remains disabled pending separate provider credentials.
+- Two new disposable confirmed Admin Auth users completed deployed browser QA on Preview and Production: sign-in, movie library/review/watch persistence after refresh and reauthentication, authenticated import/apply/export/undo, logout protection, cross-user state/export isolation, and continuity of the same account across hosts. Both users were deleted. Independent hosted SQL confirmed Auth users and all 16 public tables returned to their zero-row pre-test baseline; the temporary Preview protection bypass was revoked.
 
 Deterministic validation passed: ESLint, strict TypeScript, 38 unit/contract tests, the Next.js production build, and all 26 Playwright tests. Live-mode visual checks covered 1440, 1280, 1024, 768, and 390 pixels.
 
@@ -30,6 +31,8 @@ Create separate Supabase projects for staging and production when practical. In 
 4. Allow the following application redirects in Supabase Auth:
    - `http://localhost:3000/auth/callback`
    - `https://mosaic-cb5sa7dlr-shanmukh-s-projects3.vercel.app/auth/callback`
+   - `https://mosaic-4hks2e5je-shanmukh-s-projects3.vercel.app/auth/callback`
+   - `https://mosaic-git-chore-live-bringup-shanmukh-s-projects3.vercel.app/auth/callback`
    - `https://mosaic-eight-theta.vercel.app/auth/callback`
 5. Configure Google OAuth in Supabase and add `https://wyvhemuzxrqvgflqwfjd.supabase.co/auth/v1/callback` as an authorized redirect URI in the Google OAuth client. Supabase redirects back to the Mosaic `/auth/callback` route after provider authentication.
 6. Review password strength, leaked-password protection, rate limits, CAPTCHA, custom SMTP, backups, and point-in-time recovery before inviting real users.
