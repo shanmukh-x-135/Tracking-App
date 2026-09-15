@@ -218,6 +218,7 @@ button { color: inherit; }
 .dialog-head input { flex:1; border:0; outline:0; background:transparent; color:var(--foreground); font-size:18px; min-width:0; }
 .dialog-close { width:30px; height:30px; border:0; border-radius:50%; background:rgba(255,255,255,.08); display:grid; place-items:center; cursor:pointer; }
 .search-results { padding:9px; }
+.search-filter-bar { margin:4px 0 8px; }
 .result-group { padding:8px 0; }
 .result-label { padding:5px 9px; color:var(--foreground-muted); font-size:10px; text-transform:uppercase; letter-spacing:.12em; font-weight:800; }
 .result-row { width:100%; border:0; border-radius:11px; background:transparent; padding:8px; display:grid; grid-template-columns:40px 1fr auto; gap:11px; align-items:center; text-align:left; cursor:pointer; }

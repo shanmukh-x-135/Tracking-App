@@ -106,6 +106,20 @@ test("universal search opens public people profiles", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sam Rivera" })).toBeVisible();
 });
 
+test("search tabs and typed discovery links keep media context", async ({ page }) => {
+  await page.goto("/");
+  await page.keyboard.press("Meta+k");
+  await page.getByRole("textbox", { name: "Search all media" }).fill("Dune");
+  await expect(page.getByRole("button", { name: "Books" })).toBeVisible();
+  await page.getByRole("button", { name: "Books" }).click();
+  await expect(page.getByRole("button", { name: "Books" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".result-group .result-label")).toHaveText(["Books"]);
+  await page.keyboard.press("Escape");
+  await page.goto("/discover?type=game");
+  await expect(page.getByRole("button", { name: "Games" })).toHaveClass(/active/);
+  await expect(page.getByText("No games here yet")).toHaveCount(0);
+});
+
 test("mock authentication supports sign up, refresh, and sign out", async ({ page }) => {
   await page.goto("/signup");
   await page.getByLabel("Display name").fill("Sam Rivera");

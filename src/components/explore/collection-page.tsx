@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MediaCard } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
@@ -19,11 +20,13 @@ const statuses: Record<MediaType, [string, LibraryStatus][]> = {
 type Sort = "updated" | "title" | "rating" | "release";
 
 export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
-  const [type, setType] = useState<MediaType | null>(null);
   const [sort, setSort] = useState<Sort>("updated");
   const [status, setStatus] = useState<LibraryStatus>();
   const [discovery, setDiscovery] = useState<CatalogMedia[]>([]);
   const [discoveryMessage, setDiscoveryMessage] = useState<string>();
+  const searchParams = useSearchParams();
+  const requestedType = searchParams.get("type");
+  const type = filters.find(([, value]) => value === requestedType)?.[1] ?? null;
   const { user } = useAuth();
   const { state, isLoading } = useMosaicState();
 
@@ -57,7 +60,11 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
   const items = mode === "discover" ? discovery.filter((media) => !type || media.mediaType === type) : libraryItems;
   const typeLabel = type === "tv" ? "series" : type ?? "stories";
 
-  function selectType(value: MediaType | null) { setType(value); setStatus(undefined); }
+  function selectType(value: MediaType | null) {
+    const nextUrl = value ? `${window.location.pathname}?type=${value}` : window.location.pathname;
+    window.history.pushState(null, "", nextUrl);
+    setStatus(undefined);
+  }
 
   return <div className="page"><div className="page-narrow">
     <header className="page-hero"><span className="eyebrow">{mode === "discover" ? "Provider discovery" : "Your collection"}</span><h1>{mode === "discover" ? "Discover" : "Library"}</h1><p>{mode === "discover" ? "Browse current provider-backed stories across every medium." : "Your saved stories, ordered by the changes you made most recently."}</p></header>

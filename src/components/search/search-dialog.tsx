@@ -20,6 +20,7 @@ interface RemoteResult {
 }
 
 const groups = ["movie", "tv", "game", "book"] as const;
+type SearchFilter = "all" | (typeof groups)[number];
 
 function mediaHref(media: CatalogMedia): string {
   const routeType = media.mediaType === "tv" ? "series" : media.mediaType;
@@ -30,6 +31,7 @@ function mediaHref(media: CatalogMedia): string {
 export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<RemoteResult>();
+  const [filter, setFilter] = useState<SearchFilter>("all");
   const router = useRouter();
   const normalizedQuery = query.trim();
 
@@ -54,8 +56,10 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const suggestions = useMemo(() => isLiveMode() ? [] : allMedia.slice(0, 8).map(normalizeMock), []);
   const activeRemote = remote?.query === normalizedQuery ? remote : undefined;
   const items = normalizedQuery.length < 2 ? suggestions : activeRemote?.items ?? [];
+  const visibleItems = filter === "all" ? items : items.filter((item) => item.mediaType === filter);
   const isLoading = normalizedQuery.length >= 2 && !activeRemote;
   const matchingUsers = activeRemote?.profiles ?? [];
+  const visibleProfiles = filter === "all" ? matchingUsers : [];
 
   function go(href: string) {
     onOpenChange(false);
@@ -77,21 +81,22 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   return <Dialog open={open} onOpenChange={onOpenChange} title="Search Mosaic"><div onKeyDown={moveFocus}>
     <div className="dialog-head"><Search size={20} className="muted"/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search movies, series, games, books, people…" aria-label="Search all media"/>{isLoading && <LoaderCircle className="spin muted" size={18}/>}</div>
     <div className="search-results" aria-live="polite">
+      {normalizedQuery.length >= 2 && <div className="filter-bar glass search-filter-bar" aria-label="Filter search results">{(["all", ...groups] as SearchFilter[]).map((value) => <button type="button" className={`filter-button ${filter === value ? "active" : ""}`} aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{value === "all" ? "All" : value === "tv" ? "Series" : `${value[0].toUpperCase()}${value.slice(1)}s`}</button>)}</div>}
       {activeRemote?.failures.length ? <p className="search-notice"><AlertCircle size={14}/>Some sources are unavailable. Showing the results we found.</p> : null}
       {activeRemote?.error ? <div className="search-state"><AlertCircle size={20}/><strong>Search couldn’t be completed</strong><p>{activeRemote.error}</p></div> : null}
       {groups.map((type) => {
-        const typeItems = items.filter((item) => item.mediaType === type);
+        const typeItems = visibleItems.filter((item) => item.mediaType === type);
         if (!typeItems.length) return null;
-        const visibleItems = typeItems.slice(0, 4);
-        const hasGoogleBooks = visibleItems.some((item) => item.provider === "googlebooks");
-        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type}s`}</div>{visibleItems.map((item) => <div className="result-entry" key={`${item.provider}:${item.mediaType}:${item.providerId}`}><button className="result-row" onClick={() => go(mediaHref(item))}>
+        const groupedItems = typeItems.slice(0, 4);
+        const hasGoogleBooks = groupedItems.some((item) => item.provider === "googlebooks");
+        return <section className="result-group" key={type}><div className="result-label">{type === "tv" ? "Series" : `${type[0].toUpperCase()}${type.slice(1)}s`}</div>{groupedItems.map((item) => <div className="result-entry" key={`${item.provider}:${item.mediaType}:${item.providerId}`}><button className="result-row" onClick={() => go(mediaHref(item))}>
           <span className="result-image"><Image src={item.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="40px"/></span>
           <span><strong>{item.title}</strong><span>{[item.releaseYear, item.genres[0]].filter(Boolean).join(" · ") || "Details unavailable"}</span></span>
           {item.communityRating !== undefined && <span className="rating">★ {item.communityRating.toFixed(1)}</span>}
         </button>{item.provider === "googlebooks" && <a className="google-books-link" href={`https://books.google.com/books?id=${encodeURIComponent(item.providerId)}`} target="_blank" rel="noreferrer">View on Google Books ↗</a>}</div>)}{hasGoogleBooks && <a className="google-books-powered" href="https://books.google.com" target="_blank" rel="noreferrer" aria-label="Google Books"><Image src="https://books.google.com/googlebooks/images/poweredby.png" alt="Powered by Google" width={62} height={30} unoptimized/></a>}</section>;
       })}
-      {matchingUsers.length > 0 && <section className="result-group"><div className="result-label">People</div>{matchingUsers.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
-      {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && items.length === 0 && matchingUsers.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}
+      {visibleProfiles.length > 0 && <section className="result-group"><div className="result-label">People</div>{visibleProfiles.map((user) => <button className="result-row" key={user.id} onClick={() => go(`/profile/${encodeURIComponent(user.username)}`)}><Image className="avatar" src={user.avatarUrl ?? "/media-placeholder.svg"} alt="" width={40} height={40}/><span><strong>{user.displayName}</strong><span>@{user.username}</span></span></button>)}</section>}
+      {!isLoading && normalizedQuery.length >= 2 && !activeRemote?.error && visibleItems.length === 0 && visibleProfiles.length === 0 && <div className="search-state"><strong>No matches yet</strong><p>Try another title, creator, author, or username.</p></div>}
       {isLoading && <div className="search-state"><span className="skeleton-line"/><span className="skeleton-line short"/><span className="sr-only">Searching every medium…</span></div>}
       {!isLoading && normalizedQuery.length < 2 && !items.length && <div className="search-state"><strong>Search every story</strong><p>Start typing a title, creator, author, or username.</p></div>}
     </div>
