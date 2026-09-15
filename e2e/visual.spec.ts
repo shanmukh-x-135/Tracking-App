@@ -121,6 +121,17 @@ test("search tabs and typed discovery links keep media context", async ({ page }
   await expect(page.getByText("No games here yet")).toHaveCount(0);
 });
 
+test("profile exposes an empty-state-safe movie diary", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-diary", email: "diary@example.com", displayName: "Diary Keeper" }));
+  });
+  await page.goto("/profile");
+  await page.getByRole("link", { name: "Movie diary" }).click();
+  await expect(page).toHaveURL(/\/activity\?view=diary$/);
+  await expect(page.getByRole("heading", { name: "Movie diary" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No movie watches yet" })).toBeVisible();
+});
+
 test("mock authentication supports sign up, refresh, and sign out", async ({ page }) => {
   await page.goto("/signup");
   await page.getByLabel("Display name").fill("Sam Rivera");
