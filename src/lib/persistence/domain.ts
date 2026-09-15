@@ -43,6 +43,9 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       else next.library.unshift({ media: mutation.media, status: mutation.status, isFavorite: mutation.isFavorite ?? false, updatedAt: now });
       break;
     }
+    case "library.remove":
+      next.library = next.library.filter((entry) => mediaKey(entry.media) !== key);
+      break;
     case "rating.set":
       next.ratings = next.ratings.filter((rating) => rating.mediaKey !== key);
       if (mutation.value !== null) next.ratings.unshift({ mediaKey: key!, value: mutation.value, updatedAt: now });
@@ -95,6 +98,9 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       next.movieWatches.unshift({ id: crypto.randomUUID(), media: mutation.media, watchedAt: mutation.watchedAt, isRewatch: mutation.isRewatch, rating: mutation.rating, review: mutation.review });
       ensureLibrary(mutation.media, "watched");
       ensureRating(mutation.media, mutation.rating);
+      break;
+    case "movie.delete":
+      next.movieWatches = next.movieWatches.filter((watch) => watch.id !== mutation.watchId);
       break;
     case "episode.log":
       next.episodeWatches = next.episodeWatches.filter((watch) => !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));

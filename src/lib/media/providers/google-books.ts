@@ -74,4 +74,8 @@ export class GoogleBooksProvider implements CatalogProvider {
     if (response.status === 404) return null;
     return normalizeGoogleBook(await providerJson<GoogleBookVolume>(this.name, response));
   }
+
+  async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
+    return mediaType === "book" ? this.search("subject:fiction") : [];
+  }
 }

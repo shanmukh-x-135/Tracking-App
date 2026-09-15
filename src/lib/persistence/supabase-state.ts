@@ -176,7 +176,10 @@ export async function applySharedSupabaseMutation(client: Client, userId: string
     assertResult(error); return;
   }
   const mediaId = await upsertMedia(client, mutation.media);
-  if (mutation.type === "library.upsert") {
+  if (mutation.type === "library.remove") {
+    const { error } = await client.from("library_entries").delete().eq("user_id", userId).eq("media_id", mediaId);
+    assertResult(error);
+  } else if (mutation.type === "library.upsert") {
     if (!statusMatchesMedia(mutation.media.mediaType, mutation.status)) throw new Error("That status does not apply to this media type.");
     const { error } = await client.from("library_entries").upsert({ user_id: userId, media_id: mediaId, status: mutation.status, is_favorite: mutation.isFavorite ?? false }, { onConflict: "user_id,media_id" });
     assertResult(error);
@@ -200,7 +203,7 @@ export async function applySharedSupabaseMutation(client: Client, userId: string
 }
 
 async function saveDerivedSharedState(client: Client, userId: string, mutation: DomainMutation): Promise<void> {
-  if (mutation.type === "episode.unwatch") return;
+  if (mutation.type === "episode.unwatch" || mutation.type === "movie.delete") return;
   if (mutation.type === "episode.log") {
     await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.series, status: "watching" });
     return;
@@ -211,6 +214,11 @@ async function saveDerivedSharedState(client: Client, userId: string, mutation: 
 }
 
 async function applyDomainSupabaseMutation(client: Client, userId: string, mutation: DomainMutation): Promise<void> {
+  if (mutation.type === "movie.delete") {
+    const { error } = await client.from("movie_watch_logs").delete().eq("id", mutation.watchId).eq("user_id", userId);
+    assertResult(error);
+    return;
+  }
   const media = mutation.type === "episode.log" || mutation.type === "episode.unwatch" ? mutation.series : mutation.media;
   const mediaId = await upsertMedia(client, media);
   if (mutation.type === "movie.log") {
@@ -275,7 +283,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
 }
 
 export async function applySupabaseMutation(client: Client, userId: string, mutation: PersistenceMutation): Promise<void> {
-  if (mutation.type === "movie.log" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
+  if (mutation.type === "movie.log" || mutation.type === "movie.delete" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
     return applyDomainSupabaseMutation(client, userId, mutation);
   }
   return applySharedSupabaseMutation(client, userId, mutation);

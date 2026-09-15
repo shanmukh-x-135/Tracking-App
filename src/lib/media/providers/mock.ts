@@ -1,6 +1,6 @@
 import { allMedia } from "@/data/media";
-import type { CatalogMedia, CatalogProvider } from "@/lib/media/types";
-import type { Media } from "@/types/media";
+import type { CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { Media, TvSeries } from "@/types/media";
 
 export function normalizeMock(item: Media): CatalogMedia {
   const base = {
@@ -11,7 +11,7 @@ export function normalizeMock(item: Media): CatalogMedia {
   };
   switch (item.mediaType) {
     case "movie": return { ...base, mediaType: "movie", releaseDate: item.releaseDate, runtimeMinutes: item.runtime, director: item.director };
-    case "tv": return { ...base, mediaType: "tv", seasonCount: item.seasons, episodeCount: item.episodeCount, network: item.network };
+    case "tv": return { ...base, mediaType: "tv", seasonCount: item.seasons, episodeCount: item.episodeCount, seasonNumbers: Array.from({ length: item.seasons }, (_, index) => index + 1), network: item.network };
     case "game": return { ...base, mediaType: "game", releaseDate: item.releaseDate, platforms: item.platforms, developer: item.developer, publisher: item.publisher };
     case "book": return { ...base, mediaType: "book", releaseDate: item.publicationDate, authors: item.authors, pageCount: item.pageCount, isbn: item.isbn };
   }
@@ -29,5 +29,19 @@ export const mockCatalogProvider: CatalogProvider = {
   async getById(providerId, mediaType) {
     const item = allMedia.find((candidate) => candidate.id === providerId && (!mediaType || candidate.mediaType === mediaType));
     return item ? normalizeMock(item) : null;
+  },
+  async getSeasonEpisodes(providerId, seasonNumber) {
+    const item = allMedia.find((candidate): candidate is TvSeries => candidate.id === providerId && candidate.mediaType === "tv");
+    if (!item || seasonNumber < 1 || seasonNumber > item.seasons) return [];
+    const baseCount = Math.floor(item.episodeCount / item.seasons);
+    const extra = item.episodeCount % item.seasons;
+    const count = baseCount + (seasonNumber <= extra ? 1 : 0);
+    return Array.from({ length: count }, (_, index): CatalogEpisode => ({
+      id: `${item.id}-${seasonNumber}-${index + 1}`, seasonNumber, episodeNumber: index + 1,
+      title: `Episode ${index + 1}`, overview: undefined, stillUrl: item.backdropUrl,
+    }));
+  },
+  async discover(mediaType) {
+    return allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock);
   },
 };

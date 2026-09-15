@@ -21,13 +21,30 @@ export interface CatalogMovie extends CatalogMediaBase {
   mediaType: "movie";
   runtimeMinutes?: number;
   director?: string;
+  studio?: string;
+  studioLogoUrl?: string;
 }
 
 export interface CatalogSeries extends CatalogMediaBase {
   mediaType: "tv";
   seasonCount?: number;
   episodeCount?: number;
+  /** Provider season numbers can include season 0 (specials). */
+  seasonNumbers?: number[];
   network?: string;
+  networkLogoUrl?: string;
+}
+
+/** A normalized TV episode. Provider payloads never reach presentation components. */
+export interface CatalogEpisode {
+  id: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string;
+  overview?: string;
+  stillUrl?: string;
+  airDate?: string;
+  runtimeMinutes?: number;
 }
 
 export interface CatalogGame extends CatalogMediaBase {
@@ -52,6 +69,8 @@ export interface CatalogProvider {
   readonly name: MediaProvider;
   search(query: string): Promise<CatalogMedia[]>;
   getById(providerId: string, mediaType?: MediaType): Promise<CatalogMedia | null>;
+  getSeasonEpisodes?(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
+  discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
 }
 
 export interface CatalogFailure {

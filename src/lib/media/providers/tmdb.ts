@@ -1,4 +1,4 @@
-import type { CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 const apiBase = "https://api.themoviedb.org/3";
@@ -23,9 +23,23 @@ export interface TmdbMedia {
   runtime?: number;
   number_of_seasons?: number;
   number_of_episodes?: number;
-  networks?: Array<{ name: string }>;
+  networks?: Array<{ name: string; logo_path?: string | null }>;
+  production_companies?: Array<{ name: string; logo_path?: string | null }>;
+  seasons?: Array<{ season_number?: number }>;
   credits?: { crew?: Array<{ job: string; name: string }> };
 }
+
+interface TmdbSeasonEpisode {
+  id: number;
+  episode_number?: number;
+  name?: string;
+  overview?: string;
+  still_path?: string | null;
+  air_date?: string;
+  runtime?: number | null;
+}
+
+interface TmdbSeason { episodes?: TmdbSeasonEpisode[] }
 
 const genreNames: Record<number, string> = {
   12: "Adventure", 14: "Fantasy", 16: "Animation", 18: "Drama", 27: "Horror",
@@ -56,10 +70,13 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
   if (mediaType === "movie") return {
     ...base, mediaType, runtimeMinutes: item.runtime,
     director: item.credits?.crew?.find((person) => person.job === "Director")?.name,
+    studio: item.production_companies?.[0]?.name,
+    studioLogoUrl: image(item.production_companies?.[0]?.logo_path, "w500"),
   };
   return {
     ...base, mediaType, seasonCount: item.number_of_seasons, episodeCount: item.number_of_episodes,
-    network: item.networks?.[0]?.name,
+    seasonNumbers: item.seasons?.map((season) => season.season_number).filter((number): number is number => Number.isInteger(number)),
+    network: item.networks?.[0]?.name, networkLogoUrl: image(item.networks?.[0]?.logo_path, "w500"),
   };
 }
 
@@ -84,5 +101,26 @@ export class TmdbProvider implements CatalogProvider {
     if (mediaType !== "movie" && mediaType !== "tv") return null;
     const item = await this.request<TmdbMedia>(`/${mediaType}/${encodeURIComponent(providerId)}?append_to_response=credits&language=en-US`);
     return normalizeTmdb(item, mediaType);
+  }
+
+  async getSeasonEpisodes(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]> {
+    if (!Number.isInteger(seasonNumber) || seasonNumber < 0) return [];
+    const season = await this.request<TmdbSeason>(`/tv/${encodeURIComponent(providerId)}/season/${seasonNumber}?language=en-US`);
+    return (season.episodes ?? [])
+      .filter((episode) => Number.isInteger(episode.episode_number) && (episode.episode_number ?? 0) >= 0)
+      .sort((first, second) => (first.episode_number ?? 0) - (second.episode_number ?? 0))
+      .map((episode) => ({
+        id: String(episode.id), seasonNumber, episodeNumber: episode.episode_number ?? 0,
+        title: episode.name?.trim() || `Episode ${episode.episode_number}`,
+        overview: episode.overview?.trim() || undefined,
+        stillUrl: image(episode.still_path, "w500"), airDate: episode.air_date || undefined,
+        runtimeMinutes: episode.runtime ?? undefined,
+      }));
+  }
+
+  async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
+    if (mediaType !== "movie" && mediaType !== "tv") return [];
+    const data = await this.request<{ results?: TmdbMedia[] }>(`/trending/${mediaType}/week?language=en-US`);
+    return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
   }
 }

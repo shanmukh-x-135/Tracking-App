@@ -98,6 +98,7 @@ export const emptyMosaicState = (): MosaicState => ({
 
 export type SharedMutation =
   | { type: "library.upsert"; media: CatalogMedia; status: LibraryStatus; isFavorite?: boolean }
+  | { type: "library.remove"; media: CatalogMedia }
   | { type: "rating.set"; media: CatalogMedia; value: number | null }
   | { type: "review.save"; id?: string; media: CatalogMedia; body: string; containsSpoilers: boolean; rating?: number }
   | { type: "review.delete"; id: string }
@@ -110,6 +111,7 @@ export type SharedMutation =
 
 export type DomainMutation =
   | { type: "movie.log"; media: CatalogMedia; watchedAt: string; isRewatch: boolean; rating?: number; review?: string }
+  | { type: "movie.delete"; watchId: string }
   | { type: "episode.log"; series: CatalogMedia; seasonNumber: number; episodeNumber: number; episodeTitle?: string; watchedAt: string; rating?: number }
   | { type: "episode.unwatch"; series: CatalogMedia; seasonNumber: number; episodeNumber: number }
   | { type: "game.upsert"; media: CatalogMedia; playthroughId?: string; status: GamePlaythrough["status"]; platform?: string; playtimeMinutes: number; progressPercent?: number; rating?: number }

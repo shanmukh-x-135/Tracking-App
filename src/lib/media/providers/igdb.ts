@@ -75,4 +75,10 @@ export class IgdbProvider implements CatalogProvider {
     const [item] = await this.request(`fields ${fields}; where id = ${providerId}; limit 1;`);
     return item ? normalizeIgdb(item) : null;
   }
+
+  async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
+    if (mediaType !== "game") return [];
+    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher";
+    return (await this.request(`fields ${fields}; where version_parent = null & rating != null; sort rating_count desc; limit 12;`)).map(normalizeIgdb);
+  }
 }

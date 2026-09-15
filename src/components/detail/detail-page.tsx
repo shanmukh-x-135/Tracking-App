@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import { Check, Star } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { allMedia, reviews } from "@/data/media";
 import { MediaShelf } from "@/components/media/media-card";
-import type { CatalogBook, CatalogGame, CatalogMedia, CatalogSeries } from "@/lib/media/types";
+import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSeries } from "@/lib/media/types";
 import { PersistentMediaActions } from "@/components/detail/persistent-media-actions";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
@@ -25,26 +25,52 @@ function actionLabel(type: CatalogMedia["mediaType"]): string {
   return type === "movie" ? "Watched" : type === "tv" ? "Watching" : type === "game" ? "Playing" : "Reading";
 }
 
+function BrandMark({ media }: { media: CatalogMedia }) {
+  const name = media.mediaType === "movie" ? media.studio : media.mediaType === "tv" ? media.network : undefined;
+  const logoUrl = media.mediaType === "movie" ? media.studioLogoUrl : media.mediaType === "tv" ? media.networkLogoUrl : undefined;
+  if (!name) return null;
+  return <span className="brand-mark-detail" aria-label={media.mediaType === "movie" ? `Studio: ${name}` : `Network: ${name}`}>{logoUrl ? <Image src={logoUrl} alt={name} width={72} height={28}/> : name}</span>;
+}
+
 function SeriesSection({ media }: { media: CatalogSeries }) {
-  const seasonCount = media.seasonCount ?? 0;
-  const [season, setSeason] = useState(seasonCount || 1);
+  const seasonNumbers = media.seasonNumbers?.length
+    ? [...new Set(media.seasonNumbers)].sort((first, second) => first - second)
+    : Array.from({ length: media.seasonCount ?? 0 }, (_, index) => index + 1);
+  const [season, setSeason] = useState(seasonNumbers.includes(1) ? 1 : seasonNumbers[0] ?? 1);
+  const [episodes, setEpisodes] = useState<CatalogEpisode[]>([]);
+  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
+  const [episodeError, setEpisodeError] = useState<string>();
   const { state, mutate } = useMosaicState();
   const watched = state.episodeWatches.filter((watch) => mediaKey(watch.series) === mediaKey(media) && watch.seasonNumber === season);
-  if (!seasonCount) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
-  const episodes = ["Episode 1", "Episode 2", "Episode 3", "Episode 4", "Episode 5"];
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => { setIsLoadingEpisodes(true); setEpisodeError(undefined); setEpisodes([]); });
+    void fetch(`/api/catalog/${media.provider}/tv/${encodeURIComponent(media.providerId)}/season/${season}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Episode details are unavailable right now.");
+        const payload: { episodes?: CatalogEpisode[] } = await response.json();
+        return payload.episodes ?? [];
+      })
+      .then((loaded) => setEpisodes(loaded.filter((episode, index, all) => all.findIndex((candidate) => candidate.id === episode.id || candidate.episodeNumber === episode.episodeNumber) === index).sort((first, second) => first.episodeNumber - second.episodeNumber)))
+      .catch((cause: unknown) => { if (!controller.signal.aborted) setEpisodeError(cause instanceof Error ? cause.message : "Episode details are unavailable right now."); })
+      .finally(() => { if (!controller.signal.aborted) setIsLoadingEpisodes(false); });
+    return () => controller.abort();
+  }, [media.provider, media.providerId, season]);
+
+  if (!seasonNumbers.length) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
   return <section className="section">
-    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>Season {season}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watched.length} marked watched</span></div>
-    <div className="season-tabs">{Array.from({ length: seasonCount }, (_, index) => index + 1).map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>Season {number}</button>)}</div>
-    <div className="episode-list">{episodes.map((title, index) => <article className="episode" key={title}>
-      <div className="episode-thumb"><Image src={media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div>
-      <div><h4>S{String(season).padStart(2, "0")}E{String(index + 1).padStart(2, "0")} · {title}</h4><p>Episode information is fetched when available.</p></div>
-      <div className="episode-actions"><button className={`icon-button ${watched.some((watch) => watch.episodeNumber === index + 1) ? "watched" : ""}`} onClick={() => {
-        const existing = watched.find((watch) => watch.episodeNumber === index + 1);
+    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watched.length} / {episodes.length || "—"} watched</span></div>
+    <div className="season-tabs">{seasonNumbers.map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>{number === 0 ? "Specials" : `Season ${number}`}</button>)}</div>
+    <div className="episode-list">{isLoadingEpisodes && <p className="episode-state">Loading every episode…</p>}{episodeError && <p className="episode-state form-error" role="alert">{episodeError}</p>}{!isLoadingEpisodes && !episodeError && !episodes.length && <p className="episode-state">No episodes are listed for this season.</p>}{episodes.map((episode) => <article className="episode" key={episode.id}>
+      <div className="episode-thumb"><Image src={episode.stillUrl ?? media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div>
+      <div><h4>S{String(season).padStart(2, "0")}E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</h4><p>{episode.airDate ?? episode.runtimeMinutes ? [episode.airDate, episode.runtimeMinutes ? `${episode.runtimeMinutes} min` : undefined].filter(Boolean).join(" · ") : episode.overview || "Episode details are unavailable."}</p></div>
+      <div className="episode-actions"><button className={`icon-button ${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "watched" : ""}`} onClick={() => {
+        const existing = watched.find((watch) => watch.episodeNumber === episode.episodeNumber);
         const mutation = existing
-          ? { type: "episode.unwatch" as const, series: media, seasonNumber: season, episodeNumber: index + 1 }
-          : { type: "episode.log" as const, series: media, seasonNumber: season, episodeNumber: index + 1, episodeTitle: title, watchedAt: new Date().toISOString() };
+          ? { type: "episode.unwatch" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber }
+          : { type: "episode.log" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString() };
         void mutate(mutation).catch(() => undefined);
-      }} aria-label={`${watched.some((watch) => watch.episodeNumber === index + 1) ? "Undo watched" : "Mark watched"} ${title}`}><Check size={17}/></button><button className="button" onClick={() => void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: index + 1, episodeTitle: title, watchedAt: new Date().toISOString(), rating: 5 }).catch(() => undefined)}><Star size={14}/>Rate 5</button></div>
+      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} ${episode.title}`}><Check size={17}/></button><button className="button" onClick={() => void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: 5 }).catch(() => undefined)}><Star size={14}/>Rate 5</button></div>
     </article>)}</div>
   </section>;
 }
@@ -92,6 +118,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       <div className="detail-poster"><Image src={poster} alt={`${media.title} artwork`} fill loading="eager" sizes="190px"/></div>
       <div className="detail-copy"><span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span><h1>{media.title}</h1>
         <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        <BrandMark media={media}/>
         <p>{media.description || "A description is not available for this title yet."}</p>
         <PersistentMediaActions media={media}/>
       </div>
