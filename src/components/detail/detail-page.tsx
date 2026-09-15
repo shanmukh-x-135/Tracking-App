@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Check, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaShelf } from "@/components/media/media-card";
@@ -8,6 +9,7 @@ import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSea
 import { PersistentMediaActions } from "@/components/detail/persistent-media-actions";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
+import { franchiseForMedia, type FranchiseDefinition } from "@/lib/media/franchises";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -42,7 +44,7 @@ function bookCategories(categories: string[]): string[] {
     });
 }
 
-function BookHero({ media }: { media: CatalogBook }) {
+function BookHero({ media, franchise }: { media: CatalogBook; franchise?: FranchiseDefinition }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const categories = bookCategories(media.genres);
   const visibleCategories = isExpanded ? categories : categories.slice(0, 3);
@@ -57,7 +59,7 @@ function BookHero({ media }: { media: CatalogBook }) {
         <div className="book-meta">{media.releaseYear && <span>Published {media.releaseYear}</span>}{media.pageCount && <span>{media.pageCount} pages</span>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
         {categories.length > 0 && <div className="book-categories">{visibleCategories.map((category) => <span key={category}>{category}</span>)}{!isExpanded && categories.length > visibleCategories.length && <button type="button" onClick={() => setIsExpanded(true)}>+{categories.length - visibleCategories.length} more</button>}</div>}
         <div className={`book-synopsis ${isExpanded ? "expanded" : ""}`}><p>{synopsis}</p>{hasLongSynopsis && <button type="button" className="text-link" onClick={() => setIsExpanded((value) => !value)}>{isExpanded ? "Show less" : "Read more"}</button>}</div>
-        <PersistentMediaActions media={media}/>
+        {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>
       </div>
     </div>
   </section>;
@@ -149,13 +151,14 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
     return () => controller.abort();
   }, [media]);
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
+  const franchise = franchiseForMedia(media);
   const heroMetadata = [media.releaseYear ? String(media.releaseYear) : undefined, media.genres.join(" / ") || undefined]
     .filter((value): value is string => value !== undefined);
   const poster = media.posterUrl ?? "/media-placeholder.svg";
   const backdrop = media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg";
 
   if (media.mediaType === "book") return <>
-    <BookHero media={media}/>
+    <BookHero media={media} franchise={franchise}/>
     <div className="detail-body book-detail-body"><div>
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       <BookSection media={media}/>
@@ -170,7 +173,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
         <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
         <BrandMark media={media}/>
         <p>{media.description || "A description is not available for this title yet."}</p>
-        <PersistentMediaActions media={media}/>
+        {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>
       </div>
     </div></section>
     <div className="detail-body"><div>
