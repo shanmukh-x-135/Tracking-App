@@ -38,12 +38,17 @@ export async function getCatalogSeasonEpisodes(identity: ProviderIdentity, seaso
 
 export async function discoverCatalog(providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
   const mediaTypes = ["movie", "tv", "game", "book"] as const;
-  const settled = await Promise.allSettled(providers.flatMap((provider) => mediaTypes.map(async (mediaType) => ({ provider: provider.name, items: await provider.discover?.(mediaType) ?? [] }))));
+  const outcomes = await Promise.all(providers.flatMap((provider) => mediaTypes.map(async (mediaType) => {
+    try { return { provider: provider.name, items: await provider.discover?.(mediaType) ?? [], failed: false }; }
+    catch { return { provider: provider.name, items: [] as CatalogMedia[], failed: true }; }
+  })));
   const items: CatalogMedia[] = [];
   const failures: CatalogSearchResult["failures"] = [];
-  for (const result of settled) {
-    if (result.status === "fulfilled") items.push(...result.value.items);
-    else failures.push({ provider: "tmdb", message: "A discovery source is temporarily unavailable." });
+  for (const outcome of outcomes) {
+    items.push(...outcome.items);
+    if (outcome.failed && !failures.some((failure) => failure.provider === outcome.provider)) {
+      failures.push({ provider: outcome.provider, message: "Discovery is temporarily unavailable." });
+    }
   }
   return { items, failures };
 }
