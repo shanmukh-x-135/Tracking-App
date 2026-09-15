@@ -19,13 +19,13 @@ test("data export requires authentication and downloads a versioned archive", as
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Download Mosaic data" }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^mosaic-export-v1-\d{4}-\d{2}-\d{2}\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^mosaic-export-v2-\d{4}-\d{2}-\d{2}\.zip$/);
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const archive = unzipSync(new Uint8Array(Buffer.concat(chunks)));
   const manifest = JSON.parse(strFromU8(archive["manifest.json"])) as { mosaicExportVersion: number; format: string };
-  expect(manifest).toMatchObject({ mosaicExportVersion: 1, format: "mosaic-portable-data" });
+  expect(manifest).toMatchObject({ mosaicExportVersion: 2, format: "mosaic-portable-data" });
   expect(strFromU8(archive["json/media.json"])).toContain("Dune: Part Two");
   expect(strFromU8(archive["json/library.json"])).toContain("mock:movie:dune-part-two");
   expect(archive["csv/list-items.csv"]).toBeTruthy();
