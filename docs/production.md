@@ -13,7 +13,9 @@ As of 15 September 2026:
 - Email/password Auth is enabled and email confirmation remains required. Two disposable confirmed users created through the server-side Auth admin API completed browser validation of session reload/reauthentication, movie watches, TV episode watch/rating/undo, game playthrough hydration, book progress/completion hydration, mixed-list privacy/public sharing, export isolation, and import replay/undo. Both users and every fixture row were then deleted, and the temporary admin secret was removed from the local environment.
 - Google OAuth is disabled in Supabase. TMDB, IGDB, and Google Books credentials are present only in the ignored local environment; expanded live search/detail checks and real-artwork QA pass for all three providers.
 - The app was run locally in live mode using the verified hosted project. Universal search and real movie, series, game, book, sparse-artwork, and alternate-edition detail routes passed browser checks at 1440, 1280, 1024, 768, and 390 pixels without console errors or broken images.
-- The Vercel connector has no authenticated team and this checkout has no `.vercel/project.json`; no preview or production deployment was created.
+- Vercel project `mosaic` (`prj_xHWHkQuDW0O01jnA2SgoAWSX7bU4`) is linked to `shanmukh-x-135/Tracking-App`, with `main` as its production branch. All seven required variables are configured for Preview and Production; provider credentials use Vercel's sensitive controls and no Supabase admin or Management API credential was uploaded.
+- Preview deployment `mosaic-44w0mc03h-shanmukh-s-projects3.vercel.app` is READY at commit `a29bd1c6b381076924f97916f738b5a45d13e13e`. Protected API and browser smoke tests passed for live grouped search, representative movie/series/game/book details, real artwork, Credits, login, and Discover at 1440, 1280, 1024, 768, and 390 pixels, with no page/console errors or recent Vercel runtime errors.
+- The canonical production origin is `https://mosaic-eight-theta.vercel.app`. Promotion remains intentionally pending until the Supabase Auth Site URL and redirect allow-list are configured for the Preview and production callbacks.
 
 Deterministic validation passed: ESLint, strict TypeScript, 38 unit/contract tests, the Next.js production build, and all 26 Playwright tests. Live-mode visual checks covered 1440, 1280, 1024, 768, and 390 pixels.
 
@@ -23,11 +25,11 @@ Create separate Supabase projects for staging and production when practical. In 
 
 1. Keep the migrations in `supabase/migrations/` as the schema source of truth.
 2. Expose the `public` schema through the Data API. Every Mosaic table has explicit grants and RLS.
-3. Set the Auth Site URL to the canonical application origin.
+3. Set the Auth Site URL to `https://mosaic-eight-theta.vercel.app`.
 4. Allow the following application redirects in Supabase Auth:
    - `http://localhost:3000/auth/callback`
-   - the exact Vercel preview callback origin(s) approved for the team
-   - `https://<production-domain>/auth/callback`
+   - `https://mosaic-44w0mc03h-shanmukh-s-projects3.vercel.app/auth/callback`
+   - `https://mosaic-eight-theta.vercel.app/auth/callback`
 5. Configure Google OAuth in Supabase and add `https://wyvhemuzxrqvgflqwfjd.supabase.co/auth/v1/callback` as an authorized redirect URI in the Google OAuth client. Supabase redirects back to the Mosaic `/auth/callback` route after provider authentication.
 6. Review password strength, leaked-password protection, rate limits, CAPTCHA, custom SMTP, backups, and point-in-time recovery before inviting real users.
 
@@ -35,7 +37,7 @@ The browser receives only the Supabase URL and publishable key. Provider credent
 
 ## Vercel
 
-Import `shanmukh-x-135/Tracking-App` into Vercel, link this checkout with `vercel link`, and configure the following separately for Preview and Production:
+Project `mosaic` is imported from `shanmukh-x-135/Tracking-App` and linked locally through ignored Vercel metadata. Configure the following separately for Preview and Production:
 
 ```text
 NEXT_PUBLIC_DATA_MODE
