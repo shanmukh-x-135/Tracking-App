@@ -104,6 +104,14 @@ test("matching refuses wrong media types and flags competing title/year matches"
   assert.equal(result.candidates.length, 2);
 });
 
+test("matching keeps punctuation and subtitle variants reviewable", () => {
+  const [record] = parseGenericCsv("generic_movies", encode("title,year\nDune Part Two Extended,2024\n")).records;
+  const candidate = { ...normalizeMock(movies[0]), title: "Dune: Part Two", releaseYear: 2024 };
+  const match = matchImportRecord(record, [candidate]);
+  assert.equal(match.confidence, "medium");
+  assert.match(match.candidates[0].reasons.join(" "), /partially/);
+});
+
 test("Letterboxd ZIP combines library metadata without duplicating diary history", () => {
   const result = parseLetterboxdExport(letterboxdFixture());
   assert.deepEqual(result.errors, []);

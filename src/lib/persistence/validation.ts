@@ -13,11 +13,12 @@ const base = {
 export const catalogMediaSchema = z.discriminatedUnion("mediaType", [
   z.object({ ...base, mediaType: z.literal("movie"), runtimeMinutes: z.number().int().positive().optional(), director: optionalText, studio: optionalText, studioLogoUrl: z.url().optional() }),
   z.object({ ...base, mediaType: z.literal("tv"), seasonCount: z.number().int().nonnegative().optional(), episodeCount: z.number().int().nonnegative().optional(), seasonNumbers: z.array(z.number().int().nonnegative()).max(100).optional(), network: optionalText, networkLogoUrl: z.url().optional() }),
-  z.object({ ...base, mediaType: z.literal("game"), platforms: z.array(z.string().max(100)).max(50), developer: optionalText, publisher: optionalText }),
+  z.object({ ...base, mediaType: z.literal("game"), platforms: z.array(z.string().max(100)).max(50), developer: optionalText, publisher: optionalText, developerLogoUrl: z.url().optional(), publisherLogoUrl: z.url().optional() }),
   z.object({ ...base, mediaType: z.literal("book"), subtitle: optionalText, authors: z.array(z.string().max(200)).max(30), publisher: optionalText, pageCount: z.number().int().positive().optional(), isbn: z.string().max(32).optional() }),
 ]);
 
 const rating = z.number().min(0.5).max(5).refine((value) => Number.isInteger(value * 2), "Ratings use half-star increments.");
+const viewingContext = z.enum(["theater", "streaming", "television", "physical", "digital", "other"]);
 const libraryStatus = z.enum(["watchlist", "watched", "watching", "completed", "paused", "dropped", "backlog", "playing", "want_to_read", "reading", "finished", "dnf"]);
 
 export const sharedMutationSchema = z.discriminatedUnion("type", [
@@ -35,7 +36,7 @@ export const sharedMutationSchema = z.discriminatedUnion("type", [
 ]);
 
 export const domainMutationSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("movie.log"), media: catalogMediaSchema, watchedAt: z.iso.date(), isRewatch: z.boolean(), rating: rating.optional(), review: z.string().trim().max(10_000).optional() }),
+  z.object({ type: z.literal("movie.log"), media: catalogMediaSchema, watchedAt: z.iso.date(), isRewatch: z.boolean(), rating: rating.optional(), review: z.string().trim().max(10_000).optional(), viewingContext: viewingContext.optional(), streamingService: z.string().trim().max(120).optional() }),
   z.object({ type: z.literal("movie.delete"), watchId: z.uuid() }),
   z.object({ type: z.literal("episode.log"), series: catalogMediaSchema.refine((media) => media.mediaType === "tv"), seasonNumber: z.number().int().nonnegative(), episodeNumber: z.number().int().positive(), episodeTitle: z.string().trim().max(500).optional(), watchedAt: z.iso.datetime(), rating: rating.optional() }),
   z.object({ type: z.literal("episode.unwatch"), series: catalogMediaSchema.refine((media) => media.mediaType === "tv"), seasonNumber: z.number().int().nonnegative(), episodeNumber: z.number().int().positive() }),

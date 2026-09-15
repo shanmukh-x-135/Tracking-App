@@ -2,25 +2,46 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaHref } from "@/components/media/media-card";
-import { activities, reviews } from "@/data/media";
-import { isLiveMode } from "@/lib/config/env";
+import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
+import type { CatalogMedia } from "@/lib/media/types";
+import type { MediaType } from "@/types/media";
 
-function diaryDate(value: string): { year: string; month: string; day: string } {
-  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
-  if (Number.isNaN(date.valueOf())) return { year: "Unknown date", month: "", day: value };
-  return { year: String(date.getFullYear()), month: new Intl.DateTimeFormat("en", { month: "long" }).format(date), day: new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date) };
+type ActivityItem = { media: CatalogMedia; date: string; action: string; detail?: string };
+const filters: [string, MediaType | null][] = [["All", null], ["Movies", "movie"], ["Series", "tv"], ["Games", "game"], ["Books", "book"]];
+
+function displayDate(value: string): string {
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
 export function ActivityPage() {
   const { user } = useAuth();
-  const { state, mutate } = useMosaicState();
-  const showFixtureActivity = !isLiveMode();
-  return <div className="page"><div className="page-narrow"><header className="page-hero"><span className="eyebrow">Your circle</span><h1>Activity</h1><p>New ratings, reviews, completions, and progress from you and the people you follow.</p></header>
-    {user && <section className="section"><div className="section-head"><div><span className="eyebrow">Movie history</span><h2>Watches</h2></div></div>{state.movieWatches.length ? <div className="diary-list">{state.movieWatches.slice().sort((first, second) => second.watchedAt.localeCompare(first.watchedAt)).map((watch, index, all) => { const date = diaryDate(watch.watchedAt); const previous = all[index - 1] ? diaryDate(all[index - 1].watchedAt) : undefined; const showYear = !previous || previous.year !== date.year; const showMonth = !previous || previous.year !== date.year || previous.month !== date.month; return <div key={watch.id}>{showYear && <h3 className="diary-year">{date.year}</h3>}{showMonth && <h4 className="diary-month">{date.month}</h4>}<article className="diary-entry"><time>{date.day}</time><Link className="diary-poster" href={mediaHref(watch.media)}><Image src={watch.media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="64px"/></Link><div className="diary-copy"><Link href={mediaHref(watch.media)}><strong>{watch.media.title}</strong></Link><span>{watch.media.releaseYear ?? ""}{watch.isRewatch ? " · Rewatch" : ""}{watch.rating ? ` · ★ ${watch.rating}` : ""}</span>{watch.review && <p>“{watch.review}”</p>}</div><div className="diary-actions"><Link className="icon-button" href={mediaHref(watch.media)} aria-label={`Edit ${watch.media.title}`}><Pencil size={15}/></Link><button className="icon-button danger" onClick={() => void mutate({ type: "movie.delete", watchId: watch.id })} aria-label={`Delete watch log for ${watch.media.title}`}><Trash2 size={15}/></button></div></article></div>; })}</div> : <div className="empty-state"><h2>Your movie diary starts here</h2><p>Log a watch to build your personal history.</p></div>}</section>}
-    <section className="section"><div className="section-head"><h2>From friends</h2></div>{showFixtureActivity ? <div className="feed-grid"><div className="panel">{activities.map((activity) => <div className="activity-row" key={activity.id}><Image className="avatar" src={activity.user.avatarUrl} width={42} height={42} alt=""/><div className="activity-copy"><strong>{activity.user.displayName}</strong> shared an update about<br/><strong>{activity.media?.title}</strong> {activity.rating && <span className="rating">★ {activity.rating}</span>}</div><span className="activity-time">{activity.createdAt}</span></div>)}</div><div className="panel" style={{ padding: 20 }}>{reviews.map((review) => <blockquote key={review.id} style={{ margin: "0 0 24px", color: "var(--foreground-secondary)", lineHeight: 1.6 }}>“{review.body}”<footer className="muted" style={{ marginTop: 8, fontSize: 12 }}>{review.user.displayName} · <span className="rating">★ {review.rating}</span></footer></blockquote>)}</div></div> : <div className="empty-state"><h2>Nothing from your circle yet</h2><p>Follow people to see their ratings, reviews, and progress here.</p></div>}</section>
+  const { state } = useMosaicState();
+  const searchParams = useSearchParams();
+  const isDiary = searchParams.get("view") === "diary";
+  const requestedType = searchParams.get("type");
+  const type = isDiary ? "movie" : filters.find(([, value]) => value === requestedType)?.[1] ?? null;
+  const activity = useMemo<ActivityItem[]>(() => [
+    ...state.movieWatches.map((watch) => ({ media: watch.media, date: watch.watchedAt, action: watch.isRewatch ? "Rewatched" : "Watched", detail: [watch.viewingContext, watch.streamingService, watch.rating ? `★ ${watch.rating}` : undefined].filter(Boolean).join(" · ") || undefined })),
+    ...state.episodeWatches.map((watch) => ({ media: watch.series, date: watch.watchedAt, action: `Watched S${String(watch.seasonNumber).padStart(2, "0")}E${String(watch.episodeNumber).padStart(2, "0")}`, detail: watch.rating ? `★ ${watch.rating}` : undefined })),
+    ...state.gamePlaythroughs.map((item) => ({ media: item.media, date: item.updatedAt, action: item.status === "completed" ? "Completed" : "Updated playthrough", detail: item.progressPercent !== undefined ? `${item.progressPercent}% complete` : undefined })),
+    ...state.bookReadings.map((item) => ({ media: item.media, date: item.updatedAt, action: item.status === "finished" ? "Finished" : "Updated reading", detail: item.totalPages ? `${item.currentPage ?? 0} / ${item.totalPages} pages` : item.progressPercent !== undefined ? `${item.progressPercent}%` : undefined })),
+  ].filter((item) => !type || item.media.mediaType === type).sort((first, second) => second.date.localeCompare(first.date)), [state, type]);
+
+  function selectType(value: MediaType | null) {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("view");
+    if (value) next.set("type", value); else next.delete("type");
+    window.history.pushState(null, "", `${window.location.pathname}${next.size ? `?${next}` : ""}`);
+  }
+
+  if (!user) return <div className="page"><div className="page-narrow"><div className="empty-state"><h1>Your history is private to you</h1><p>Sign in to see every watch, episode, playthrough, and reading update in one place.</p><Link className="button primary" href="/login">Sign in</Link></div></div></div>;
+
+  return <div className="page"><div className="page-narrow"><header className="page-hero"><span className="eyebrow">Personal history</span><h1>{isDiary ? "Movie diary" : "Activity"}</h1><p>{isDiary ? "Every movie watch, rewatch, rating, and review in one chronological record." : "A chronological record of the stories you have watched, played, and read."}</p>{isDiary ? <Link className="text-link" href="/activity">View all activity →</Link> : <Link className="text-link" href="/activity?view=diary">Open movie diary →</Link>}</header>
+    {!isDiary && <div className="filter-bar glass" aria-label="Activity media type">{filters.map(([label, value]) => <button key={label} className={`filter-button ${type === value ? "active" : ""}`} aria-pressed={type === value} onClick={() => selectType(value)}>{label}</button>)}</div>}
+    {activity.length ? isDiary ? <div className="diary-list">{activity.map((item, index) => <Link className="diary-entry" href={mediaHref(item.media)} key={`${item.media.provider}:${item.media.providerId}:${item.date}:${index}`}><time>{displayDate(item.date)}</time><span className="diary-poster"><Image src={item.media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="64px"/></span><span className="diary-copy"><strong>{item.media.title}</strong><span>{item.action}{item.detail ? ` · ${item.detail}` : ""}</span></span></Link>)}</div> : <div className="activity-timeline">{activity.map((item, index) => <Link className="history-card" href={mediaHref(item.media)} key={`${item.media.provider}:${item.media.providerId}:${item.date}:${index}`}><span className="history-art"><Image src={item.media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></span><span><small>{item.media.mediaType === "tv" ? "Series" : item.media.mediaType}</small><strong>{item.media.title}</strong><em>{item.action}{item.detail ? ` · ${item.detail}` : ""}</em></span><time>{displayDate(item.date)}</time></Link>)}</div> : <div className="empty-state"><h2>No {isDiary ? "movie watches" : type === "tv" ? "series" : type ?? "activity"} yet</h2><p>Use Quick Log to add the next moment to your Mosaic history.</p><Link className="button primary" href="/discover">Discover stories</Link></div>}
   </div></div>;
 }

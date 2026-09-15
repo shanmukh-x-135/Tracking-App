@@ -1,14 +1,14 @@
 # Mosaic portable export
 
-Mosaic exports the authenticated account as `mosaic-export-v1-YYYY-MM-DD.zip`. The archive is private, generated on demand, and is not retained by Mosaic.
+Mosaic exports the authenticated account as `mosaic-export-v2-YYYY-MM-DD.zip`. The archive is private, generated on demand, and is not retained by Mosaic.
 
-## Version 1 layout
+## Version 2 layout
 
 `manifest.json` is the entry point:
 
 ```json
 {
-  "mosaicExportVersion": 1,
+  "mosaicExportVersion": 2,
   "exportedAt": "2026-09-14T01:02:03.000Z",
   "format": "mosaic-portable-data",
   "files": ["csv/profile.csv", "json/profile.json"]
@@ -24,7 +24,7 @@ Every data section is present in both `json/` and `csv/`. JSON is the canonical 
 | `library` | Current library status/favorite state | `mediaId` |
 | `ratings` | Media ratings | `id`, `mediaId` |
 | `reviews` | Review body and spoiler flag | `id`, `mediaId`, `ratingId` |
-| `movie-watch-logs` | Distinct watches and rewatches | `id`, `mediaId` |
+| `movie-watch-logs` | Distinct watches and rewatches, including optional viewing context/service | `id`, `mediaId` |
 | `episode-watches` | Episode watch history and series coordinates | `id`, `seriesMediaId`, `seasonNumber`, `episodeNumber` |
 | `episode-ratings` | Episode-level ratings | `id`, `seriesMediaId`, `seasonNumber`, `episodeNumber` |
 | `game-playthroughs` | Status, platform, playtime, progress, and dates | `id`, `mediaId` |

@@ -13,7 +13,7 @@ test("Mosaic export contains a versioned manifest and every portable section", (
   const archive = unzipSync(createMosaicExportArchive(mosaicDataFromState(user, state), "2026-09-14T01:02:03.000Z"));
   const manifest = JSON.parse(strFromU8(archive["manifest.json"])) as { mosaicExportVersion: number; exportedAt: string; files: string[] };
 
-  assert.equal(manifest.mosaicExportVersion, 1);
+  assert.equal(manifest.mosaicExportVersion, 2);
   assert.equal(manifest.exportedAt, "2026-09-14T01:02:03.000Z");
   for (const section of exportSections) {
     assert.ok(archive[`json/${section}.json`]);

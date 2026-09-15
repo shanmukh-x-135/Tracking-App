@@ -2,11 +2,15 @@
 
 import { Check, Eye, Heart, ListPlus, Plus, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import type { CatalogMedia } from "@/lib/media/types";
 import { defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
+
+declare global {
+  interface Window { __mosaicQuickLogContext?: CatalogMedia }
+}
 
 export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
   const { user } = useAuth();
@@ -22,6 +26,17 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
   const isMovie = media.mediaType === "movie";
   const isWatchlisted = entry?.status === "watchlist";
   const hasWatched = state.movieWatches.some((watch) => mediaKey(watch.media) === key);
+
+  // Keep the global Quick Log aware of the current detail route. This is cleared
+  // on unmount, so opening Log after navigation cannot reuse a previous title.
+  useEffect(() => {
+    window.__mosaicQuickLogContext = media;
+    window.dispatchEvent(new CustomEvent<CatalogMedia | undefined>("mosaic:log-context", { detail: media }));
+    return () => {
+      if (window.__mosaicQuickLogContext === media) window.__mosaicQuickLogContext = undefined;
+      window.dispatchEvent(new CustomEvent<CatalogMedia | undefined>("mosaic:log-context", { detail: undefined }));
+    };
+  }, [media]);
 
   async function authenticatedMutation(action: () => Promise<void>, success: string) {
     if (!user) { router.push("/login"); return; }

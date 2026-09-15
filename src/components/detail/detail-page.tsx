@@ -1,14 +1,16 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Check, Star } from "lucide-react";
 import { useEffect, useState } from "react";
-import { allMedia, reviews } from "@/data/media";
 import { MediaShelf } from "@/components/media/media-card";
-import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSeries } from "@/lib/media/types";
+import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSearchResult, CatalogSeries } from "@/lib/media/types";
 import { PersistentMediaActions } from "@/components/detail/persistent-media-actions";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
+import { franchiseForMedia, type FranchiseDefinition } from "@/lib/media/franchises";
+import { bookSynopsis, normalizeBookCategories, shouldCollapseBookSynopsis } from "@/lib/media/book-presentation";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -16,7 +18,7 @@ function factsFor(media: CatalogMedia): Fact[] {
   switch (media.mediaType) {
     case "movie": return [["Director", media.director], ["Runtime", media.runtimeMinutes ? `${media.runtimeMinutes} min` : undefined], ["Released", media.releaseYear], ["Genres", media.genres.join(", ") || undefined]];
     case "tv": return [["Network", media.network], ["Seasons", media.seasonCount], ["Episodes", media.episodeCount], ["Genres", media.genres.join(", ") || undefined]];
-    case "game": return [["Developer", media.developer], ["Publisher", media.publisher], ["Released", media.releaseYear], ["Platforms", media.platforms.join(", ") || undefined]];
+    case "game": return [["Released", media.releaseYear]];
     case "book": return [["Author", media.authors.join(", ") || undefined], ["Pages", media.pageCount], ["Published", media.releaseYear], ["Publisher", media.publisher]];
   }
 }
@@ -30,6 +32,27 @@ function BrandMark({ media }: { media: CatalogMedia }) {
   const logoUrl = media.mediaType === "movie" ? media.studioLogoUrl : media.mediaType === "tv" ? media.networkLogoUrl : undefined;
   if (!name) return null;
   return <span className="brand-mark-detail" aria-label={media.mediaType === "movie" ? `Studio: ${name}` : `Network: ${name}`}>{logoUrl ? <Image src={logoUrl} alt={name} width={72} height={28}/> : name}</span>;
+}
+
+function BookHero({ media, franchise }: { media: CatalogBook; franchise?: FranchiseDefinition }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const categories = normalizeBookCategories(media.genres);
+  const visibleCategories = isExpanded ? categories : categories.slice(0, 3);
+  const synopsis = bookSynopsis(media.description);
+  const hasLongSynopsis = shouldCollapseBookSynopsis(synopsis);
+  return <section className="book-hero">
+    <div className="book-ambient" aria-hidden="true">{media.posterUrl && <Image src={media.posterUrl} alt="" fill sizes="100vw"/>}</div>
+    <div className="book-hero-content">
+      <div className="book-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt={`${media.title} cover`} fill loading="eager" sizes="(max-width: 560px) 150px, 240px"/></div>
+      <div className="book-copy"><span className="type-badge">Book</span><h1>{media.title}</h1>{media.subtitle && <p className="book-subtitle">{media.subtitle}</p>}
+        {media.authors.length > 0 && <p className="book-author-detail">{media.authors.join(", ")}</p>}
+        <div className="book-meta">{media.releaseYear && <span>Published {media.releaseYear}</span>}{media.pageCount && <span>{media.pageCount} pages</span>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        {categories.length > 0 && <div className="book-categories">{visibleCategories.map((category) => <span key={category}>{category}</span>)}{!isExpanded && categories.length > visibleCategories.length && <button type="button" onClick={() => setIsExpanded(true)}>+{categories.length - visibleCategories.length} more</button>}</div>}
+        <div className={`book-synopsis ${isExpanded ? "expanded" : ""}`}><p>{synopsis}</p>{hasLongSynopsis && <button type="button" className="text-link" onClick={() => setIsExpanded((value) => !value)}>{isExpanded ? "Show less" : "Read more"}</button>}</div>
+        {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>
+      </div>
+    </div>
+  </section>;
 }
 
 function SeriesSection({ media }: { media: CatalogSeries }) {
@@ -88,6 +111,15 @@ function GameSection({ media }: { media: CatalogGame }) {
   </form></section>;
 }
 
+function GameMetadata({ media }: { media: CatalogGame }) {
+  const platforms = [...new Map(media.platforms.map((platform) => [platform.toLocaleLowerCase(), platform.trim()])).values()].filter(Boolean);
+  if (!platforms.length && !media.developer && !media.publisher) return null;
+  return <section className="section game-metadata"><div className="section-head"><div><span className="eyebrow">Game details</span><h2>Platforms & credits</h2></div></div>
+    {platforms.length > 0 && <div><h3>Platforms</h3><div className="platform-chips">{platforms.map((platform) => <span key={platform}>{platform}</span>)}</div></div>}
+    {(media.developer || media.publisher) && <div className="game-credits">{media.developer && <div><span>Developed by</span><strong>{media.developerLogoUrl && <Image src={media.developerLogoUrl} alt="" width={88} height={32}/>} {media.developer}</strong></div>}{media.publisher && <div><span>Published by</span><strong>{media.publisherLogoUrl && <Image src={media.publisherLogoUrl} alt="" width={88} height={32}/>} {media.publisher}</strong></div>}</div>}
+  </section>;
+}
+
 function BookSection({ media }: { media: CatalogBook }) {
   const { state, mutate } = useMosaicState();
   const reading = state.bookReadings.find((item) => mediaKey(item.media) === mediaKey(media));
@@ -102,16 +134,36 @@ function BookSection({ media }: { media: CatalogBook }) {
 function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "movie" }> }) {
   const { state, mutate } = useMosaicState();
   const watches = state.movieWatches.filter((watch) => mediaKey(watch.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div>{watches.map((watch) => <div className="status-card" key={watch.id}><h3>Watched {watch.watchedAt}</h3><p>{watch.isRewatch ? "Rewatch" : "First watch"}{watch.rating ? ` · ★ ${watch.rating}` : ""}</p></div>)}<form className="status-card form-grid" action={(form) => void mutate({ type: "movie.log", media, watchedAt: String(form.get("watchedAt")), isRewatch: form.get("rewatch") === "on", rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}><label className="field">Watched date<input name="watchedAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)}/></label><label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5"/></label><label className="check-field"><input name="rewatch" type="checkbox"/> Rewatch</label><button className="button accent field" type="submit">Log watch</button></form></section>;
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div>{watches.map((watch) => <div className="status-card" key={watch.id}><h3>Watched {watch.watchedAt}</h3><p>{watch.isRewatch ? "Rewatch" : "First watch"}{watch.viewingContext ? ` · ${watch.viewingContext === "television" ? "TV / Broadcast" : watch.viewingContext}` : ""}{watch.streamingService ? ` · ${watch.streamingService}` : ""}{watch.rating ? ` · ★ ${watch.rating}` : ""}</p></div>)}<form className="status-card form-grid" action={(form) => { const viewingContext = String(form.get("viewingContext") || "") || undefined; return void mutate({ type: "movie.log", media, watchedAt: String(form.get("watchedAt")), isRewatch: form.get("rewatch") === "on", rating: Number(form.get("rating") || 0) || undefined, viewingContext: viewingContext as "theater" | "streaming" | "television" | "physical" | "digital" | "other" | undefined, streamingService: viewingContext === "streaming" ? String(form.get("streamingService") || "") || undefined : undefined }).catch(() => undefined); }}><label className="field">Watched date<input name="watchedAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)}/></label><label className="field">Viewing context<select name="viewingContext" defaultValue=""><option value="">Not specified</option><option value="theater">Theater</option><option value="streaming">Streaming</option><option value="television">TV / Broadcast</option><option value="physical">Blu-ray / DVD</option><option value="digital">Digital purchase/rental</option><option value="other">Other</option></select></label><label className="field">Streaming service<input name="streamingService" placeholder="Optional"/></label><label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5"/></label><label className="check-field"><input name="rewatch" type="checkbox"/> Rewatch</label><button className="button accent field" type="submit">Log watch</button></form></section>;
 }
 
 export function DetailPage({ media }: { media: CatalogMedia }) {
-  const related = allMedia.filter((item) => item.id !== media.providerId).slice(0, 6);
+  const [related, setRelated] = useState<CatalogMedia[]>([]);
+  const [relatedError, setRelatedError] = useState<string>();
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => { if (!controller.signal.aborted) { setRelated([]); setRelatedError(undefined); } });
+    void fetch(`/api/catalog/${media.provider}/${media.mediaType}/${encodeURIComponent(media.providerId)}/related`, { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() as Promise<CatalogSearchResult> : { items: [], failures: [{ message: "Related stories are unavailable." }] })
+      .then((result) => { if (!controller.signal.aborted) { setRelated(result.items); setRelatedError(result.failures[0]?.message); } })
+      .catch(() => { if (!controller.signal.aborted) setRelatedError("Related stories are unavailable."); });
+    return () => controller.abort();
+  }, [media]);
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
+  const franchise = franchiseForMedia(media);
   const heroMetadata = [media.releaseYear ? String(media.releaseYear) : undefined, media.genres.join(" / ") || undefined]
     .filter((value): value is string => value !== undefined);
   const poster = media.posterUrl ?? "/media-placeholder.svg";
   const backdrop = media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg";
+
+  if (media.mediaType === "book") return <>
+    <BookHero media={media} franchise={franchise}/>
+    <div className="detail-body book-detail-body"><div>
+      {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
+      <BookSection media={media}/>
+      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>More by this author</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
+    </div><aside><div className="status-card"><span className="eyebrow">Your activity</span><h3>Reading history</h3><p>Your saved progress, ratings, and reviews appear here.</p></div></aside></div>
+  </>;
 
   return <>
     <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill loading="eager" sizes="100vw"/></div><div className="detail-content">
@@ -120,19 +172,17 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
         <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
         <BrandMark media={media}/>
         <p>{media.description || "A description is not available for this title yet."}</p>
-        <PersistentMediaActions media={media}/>
+        {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>
       </div>
     </div></section>
     <div className="detail-body"><div>
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "tv" && <SeriesSection media={media}/>}
-      {media.mediaType === "game" && <GameSection media={media}/>}
-      {media.mediaType === "book" && <BookSection media={media}/>}
-      <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>
+      {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
+      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>Related stories</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
     </div><aside>
       <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
-      <section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0, 2).map((review) => <div className="activity-row" key={review.id} style={{ gridTemplateColumns: "34px 1fr" }}><Image className="avatar" src={review.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{review.user.displayName}</strong><br/><span className="rating">★ {review.rating}</span></div></div>)}</div></section>
     </aside></div>
   </>;
 }

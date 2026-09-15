@@ -5,7 +5,7 @@ import { IgdbProvider } from "@/lib/media/providers/igdb";
 import { mockCatalogProvider } from "@/lib/media/providers/mock";
 import { TmdbProvider } from "@/lib/media/providers/tmdb";
 import { aggregateProviderSearch } from "@/lib/media/search";
-import type { CatalogEpisode, CatalogMedia, CatalogProvider, CatalogSearchResult, MediaProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider, CatalogSearchResult, MediaProvider } from "@/lib/media/types";
 import type { ProviderIdentity } from "@/lib/media/identity";
 
 export function liveCatalogProviders(): CatalogProvider[] {
@@ -38,19 +38,40 @@ export async function getCatalogSeasonEpisodes(identity: ProviderIdentity, seaso
 
 export async function discoverCatalog(providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
   const mediaTypes = ["movie", "tv", "game", "book"] as const;
-  const outcomes = await Promise.all(providers.flatMap((provider) => mediaTypes.map(async (mediaType) => {
-    try { return { provider: provider.name, items: await provider.discover?.(mediaType) ?? [], failed: false }; }
-    catch { return { provider: provider.name, items: [] as CatalogMedia[], failed: true }; }
-  })));
+  const outcomes = await Promise.all(providers.map(async (provider) => {
+    try {
+      const sections = provider.discoverSections
+        ? await provider.discoverSections()
+        : await Promise.all(mediaTypes.map(async (mediaType) => ({
+          id: `${provider.name}-${mediaType}`, label: mediaType === "tv" ? "Series" : `${mediaType[0].toUpperCase()}${mediaType.slice(1)}s`, mediaType,
+          items: await provider.discover?.(mediaType) ?? [],
+        })));
+      return { provider: provider.name, sections, failed: false };
+    } catch {
+      return { provider: provider.name, sections: [] as CatalogDiscoverySection[], failed: true };
+    }
+  }));
   const items: CatalogMedia[] = [];
+  const sections: CatalogDiscoverySection[] = [];
   const failures: CatalogSearchResult["failures"] = [];
   for (const outcome of outcomes) {
-    items.push(...outcome.items);
+    sections.push(...outcome.sections);
+    items.push(...outcome.sections.flatMap((section) => section.items));
     if (outcome.failed && !failures.some((failure) => failure.provider === outcome.provider)) {
       failures.push({ provider: outcome.provider, message: "Discovery is temporarily unavailable." });
     }
   }
-  return { items, failures };
+  return { items: [...new Map(items.map((item) => [`${item.provider}:${item.mediaType}:${item.providerId}`, item])).values()], failures, sections };
+}
+
+export async function relatedCatalog(media: CatalogMedia, providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
+  const provider = providers.find((candidate) => candidate.name === media.provider);
+  if (!provider?.related) return { items: [], failures: [] };
+  try {
+    return { items: await provider.related(media), failures: [] };
+  } catch {
+    return { items: [], failures: [{ provider: media.provider, message: "Related stories are temporarily unavailable." }] };
+  }
 }
 
 export function isMediaProvider(value: string): value is MediaProvider {

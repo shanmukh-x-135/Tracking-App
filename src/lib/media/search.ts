@@ -12,5 +12,6 @@ export async function aggregateProviderSearch(query: string, providers: CatalogP
     if (result.status === "fulfilled") items.push(...result.value);
     else failures.push({ provider: providers[index].name, message: messageFor(result.reason) });
   });
-  return { items, failures };
+  const unique = [...new Map(items.map((item) => [`${item.provider}:${item.mediaType}:${item.providerId}`, item])).values()];
+  return { items: unique, failures };
 }

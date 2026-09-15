@@ -1,4 +1,4 @@
-import type { CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 const apiBase = "https://api.themoviedb.org/3";
@@ -93,8 +93,18 @@ export class TmdbProvider implements CatalogProvider {
   }
 
   async search(query: string): Promise<CatalogMedia[]> {
-    const data = await this.request<{ results?: TmdbMedia[] }>(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`);
-    return (data.results ?? []).map((item) => normalizeTmdb(item)).filter((item): item is CatalogMedia => item !== null).slice(0, 10);
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+    // Page one can be dominated by people and localized aliases. Looking one page
+    // further keeps normal searches useful without an unbounded provider crawl.
+    const pages = await Promise.all([1, 2].map((page) => this.request<{ results?: TmdbMedia[] }>(`/search/multi?query=${encodeURIComponent(normalizedQuery)}&include_adult=false&language=en-US&page=${page}`)));
+    const comparableQuery = normalizedQuery.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, " ").trim();
+    const items = pages.flatMap((page) => page.results ?? []).map((item) => normalizeTmdb(item)).filter((item): item is CatalogMedia => item !== null);
+    return [...new Map(items.map((item) => [`${item.mediaType}:${item.providerId}`, item])).values()]
+      .sort((first, second) => {
+        const score = (item: CatalogMedia) => [item.title, item.originalTitle].filter(Boolean).some((title) => title!.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, " ").trim() === comparableQuery) ? 1 : 0;
+        return score(second) - score(first);
+      }).slice(0, 20);
   }
 
   async getById(providerId: string, mediaType?: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia | null> {
@@ -122,5 +132,32 @@ export class TmdbProvider implements CatalogProvider {
     if (mediaType !== "movie" && mediaType !== "tv") return [];
     const data = await this.request<{ results?: TmdbMedia[] }>(`/trending/${mediaType}/week?language=en-US`);
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
+  }
+
+  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+    const definitions = [
+      ["movie-trending", "Trending now", "movie", "/trending/movie/week?language=en-US"],
+      ["movie-popular", "Popular movies", "movie", "/movie/popular?language=en-US&page=1"],
+      ["movie-now-playing", "Now playing", "movie", "/movie/now_playing?language=en-US&page=1"],
+      ["movie-upcoming", "Upcoming movies", "movie", "/movie/upcoming?language=en-US&page=1"],
+      ["movie-top-rated", "Top rated movies", "movie", "/movie/top_rated?language=en-US&page=1"],
+      ["tv-trending", "Trending series", "tv", "/trending/tv/week?language=en-US"],
+      ["tv-popular", "Popular series", "tv", "/tv/popular?language=en-US&page=1"],
+      ["tv-on-the-air", "Currently airing", "tv", "/tv/on_the_air?language=en-US&page=1"],
+      ["tv-top-rated", "Top rated series", "tv", "/tv/top_rated?language=en-US&page=1"],
+    ] as const;
+    const settled = await Promise.allSettled(definitions.map(async ([id, label, mediaType, path]) => {
+      const data = await this.request<{ results?: TmdbMedia[] }>(path);
+      return { id: `tmdb-${id}`, label, mediaType, items: (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12) } satisfies CatalogDiscoverySection;
+    }));
+    return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
+      id: `tmdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: definitions[index][2], items: [], error: "This provider section is temporarily unavailable.",
+    });
+  }
+
+  async related(media: CatalogMedia): Promise<CatalogMedia[]> {
+    if (media.provider !== this.name || (media.mediaType !== "movie" && media.mediaType !== "tv")) return [];
+    const data = await this.request<{ results?: TmdbMedia[] }>(`/${media.mediaType}/${encodeURIComponent(media.providerId)}/recommendations?language=en-US&page=1`);
+    return (data.results ?? []).map((item) => normalizeTmdb(item, media.mediaType)).filter((item): item is CatalogMedia => item !== null && item.providerId !== media.providerId).slice(0, 12);
   }
 }

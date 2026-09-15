@@ -42,11 +42,28 @@ test("TMDB season adapter returns every supplied episode in episode order", asyn
   assert.deepEqual(episodes.map(({ episodeNumber, title }) => [episodeNumber, title]), [[1, "First"], [2, "Second"], [3, "Third"]]);
 });
 
+test("TMDB search considers a second page and ranks punctuation variants first", async () => {
+  const provider = new TmdbProvider("token", async (input) => {
+    const page = new URL(String(input)).searchParams.get("page");
+    return new Response(JSON.stringify({ results: page === "1"
+      ? [{ id: 1, media_type: "movie", title: "Dune Messiah" }]
+      : [{ id: 2, media_type: "movie", title: "Dune: Part Two" }, { id: 1, media_type: "movie", title: "Dune Messiah" }] }), { status: 200 });
+  });
+  const results = await provider.search("Dune Part Two");
+  assert.deepEqual(results.map(({ title }) => title), ["Dune: Part Two", "Dune Messiah"]);
+});
+
 test("mock discovery and seasons remain deterministic for local UX checks", async () => {
   const movies = await mockCatalogProvider.discover?.("movie");
+  const sections = await mockCatalogProvider.discoverSections?.();
   const episodes = await mockCatalogProvider.getSeasonEpisodes?.("house", 1);
   assert.ok((movies?.length ?? 0) > 0);
+  assert.deepEqual(sections?.map(({ mediaType }) => mediaType), ["movie", "tv", "game", "book"]);
+  assert.ok(sections?.every(({ items }) => items.length > 0));
   assert.equal(episodes?.length, 23);
+  const related = await mockCatalogProvider.related?.({ provider: "mock", providerId: "dune", mediaType: "book", title: "Dune", genres: [], authors: [] });
+  assert.ok((related?.length ?? 0) > 0);
+  assert.ok(!(related ?? []).some((item) => item.providerId === "dune"));
 });
 
 test("IGDB normalizes game-specific metadata and rating scale", () => {
@@ -54,13 +71,14 @@ test("IGDB normalizes game-specific metadata and rating scale", () => {
     id: 1942, name: "The Witcher 3", first_release_date: 1431993600, rating: 92,
     cover: { image_id: "co1wyy" }, genres: [{ name: "Role-playing" }],
     platforms: [{ name: "PC" }], involved_companies: [
-      { developer: true, company: { name: "CD Projekt RED" } },
+      { developer: true, company: { name: "CD Projekt RED", logo: { image_id: "logo" } } },
       { publisher: true, company: { name: "CD Projekt" } },
     ],
   });
   assert.equal(game.mediaType, "game");
   assert.equal(game.communityRating, 4.6);
   assert.equal(game.developer, "CD Projekt RED");
+  assert.match(game.developerLogoUrl ?? "", /t_logo_med\/logo\.jpg$/);
   assert.deepEqual(game.platforms, ["PC"]);
 });
 

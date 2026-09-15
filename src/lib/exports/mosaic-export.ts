@@ -3,7 +3,7 @@ import type { AuthUser } from "@/lib/auth/types";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { MosaicState } from "@/lib/persistence/types";
 
-export const MOSAIC_EXPORT_VERSION = 1 as const;
+export const MOSAIC_EXPORT_VERSION = 2 as const;
 
 export const exportSections = [
   "profile",
@@ -109,7 +109,7 @@ export function mosaicDataFromState(profile: AuthUser, state: MosaicState): Mosa
     library: state.library.map((entry) => ({ mediaId: mediaId(entry.media), status: entry.status, isFavorite: entry.isFavorite, createdAt: null, updatedAt: entry.updatedAt })),
     ratings: state.ratings.map((rating) => ({ id: null, mediaId: rating.mediaKey, rating: rating.value, createdAt: null, updatedAt: rating.updatedAt })),
     reviews: state.reviews.map((review) => ({ id: review.id, mediaId: mediaId(review.media), body: review.body, containsSpoilers: review.containsSpoilers, rating: review.rating ?? null, createdAt: null, updatedAt: review.updatedAt })),
-    "movie-watch-logs": state.movieWatches.map((watch) => ({ id: watch.id, mediaId: mediaId(watch.media), watchedAt: watch.watchedAt, isRewatch: watch.isRewatch, rating: watch.rating ?? null, review: watch.review ?? null, createdAt: null, updatedAt: null })),
+    "movie-watch-logs": state.movieWatches.map((watch) => ({ id: watch.id, mediaId: mediaId(watch.media), watchedAt: watch.watchedAt, isRewatch: watch.isRewatch, rating: watch.rating ?? null, review: watch.review ?? null, viewingContext: watch.viewingContext ?? null, streamingService: watch.streamingService ?? null, createdAt: null, updatedAt: null })),
     "episode-watches": state.episodeWatches.map((watch) => ({ id: watch.id, seriesMediaId: mediaId(watch.series), seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, episodeTitle: watch.episodeTitle ?? null, watchedAt: watch.watchedAt, isRewatch: false, createdAt: null, updatedAt: null })),
     "episode-ratings": state.episodeWatches.flatMap((watch) => watch.rating === undefined ? [] : [{ id: null, seriesMediaId: mediaId(watch.series), seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, rating: watch.rating, createdAt: null, updatedAt: null }]),
     "game-playthroughs": state.gamePlaythroughs.map((playthrough) => ({ id: playthrough.id, mediaId: mediaId(playthrough.media), status: playthrough.status, platform: playthrough.platform ?? null, startedAt: null, completedAt: null, playtimeMinutes: playthrough.playtimeMinutes, progressPercent: playthrough.progressPercent ?? null, rating: playthrough.rating ?? null, notes: null, createdAt: null, updatedAt: playthrough.updatedAt })),
