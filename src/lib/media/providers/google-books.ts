@@ -78,4 +78,11 @@ export class GoogleBooksProvider implements CatalogProvider {
   async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
     return mediaType === "book" ? this.search("subject:fiction") : [];
   }
+
+  async related(media: CatalogMedia): Promise<CatalogMedia[]> {
+    if (media.mediaType !== "book") return [];
+    const book = media as CatalogBook;
+    const query = book.authors[0] ? `inauthor:${book.authors[0]}` : book.genres[0] ? `subject:${book.genres[0]}` : media.title;
+    return (await this.search(query)).filter((item) => item.providerId !== media.providerId).slice(0, 12);
+  }
 }

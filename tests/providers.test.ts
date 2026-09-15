@@ -58,6 +58,9 @@ test("mock discovery and seasons remain deterministic for local UX checks", asyn
   const episodes = await mockCatalogProvider.getSeasonEpisodes?.("house", 1);
   assert.ok((movies?.length ?? 0) > 0);
   assert.equal(episodes?.length, 23);
+  const related = await mockCatalogProvider.related?.({ provider: "mock", providerId: "dune", mediaType: "book", title: "Dune", genres: [], authors: [] });
+  assert.ok((related?.length ?? 0) > 0);
+  assert.ok(!(related ?? []).some((item) => item.providerId === "dune"));
 });
 
 test("IGDB normalizes game-specific metadata and rating scale", () => {

@@ -44,4 +44,7 @@ export const mockCatalogProvider: CatalogProvider = {
   async discover(mediaType) {
     return allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock);
   },
+  async related(media) {
+    return allMedia.filter((item) => item.id !== media.providerId && item.mediaType === media.mediaType).slice(0, 12).map(normalizeMock);
+  },
 };

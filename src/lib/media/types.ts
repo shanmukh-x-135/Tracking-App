@@ -71,6 +71,7 @@ export interface CatalogProvider {
   getById(providerId: string, mediaType?: MediaType): Promise<CatalogMedia | null>;
   getSeasonEpisodes?(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
   discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
+  related?(media: CatalogMedia): Promise<CatalogMedia[]>;
 }
 
 export interface CatalogFailure {

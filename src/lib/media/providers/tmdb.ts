@@ -133,4 +133,10 @@ export class TmdbProvider implements CatalogProvider {
     const data = await this.request<{ results?: TmdbMedia[] }>(`/trending/${mediaType}/week?language=en-US`);
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
   }
+
+  async related(media: CatalogMedia): Promise<CatalogMedia[]> {
+    if (media.provider !== this.name || (media.mediaType !== "movie" && media.mediaType !== "tv")) return [];
+    const data = await this.request<{ results?: TmdbMedia[] }>(`/${media.mediaType}/${encodeURIComponent(media.providerId)}/recommendations?language=en-US&page=1`);
+    return (data.results ?? []).map((item) => normalizeTmdb(item, media.mediaType)).filter((item): item is CatalogMedia => item !== null && item.providerId !== media.providerId).slice(0, 12);
+  }
 }

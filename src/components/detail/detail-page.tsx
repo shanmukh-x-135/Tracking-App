@@ -3,13 +3,11 @@
 import Image from "next/image";
 import { Check, Star } from "lucide-react";
 import { useEffect, useState } from "react";
-import { allMedia, reviews } from "@/data/media";
 import { MediaShelf } from "@/components/media/media-card";
-import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSeries } from "@/lib/media/types";
+import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSearchResult, CatalogSeries } from "@/lib/media/types";
 import { PersistentMediaActions } from "@/components/detail/persistent-media-actions";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
-import { isLiveMode } from "@/lib/config/env";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -139,8 +137,17 @@ function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "mo
 }
 
 export function DetailPage({ media }: { media: CatalogMedia }) {
-  const showFixtures = !isLiveMode();
-  const related = showFixtures ? allMedia.filter((item) => item.id !== media.providerId).slice(0, 6) : [];
+  const [related, setRelated] = useState<CatalogMedia[]>([]);
+  const [relatedError, setRelatedError] = useState<string>();
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => { if (!controller.signal.aborted) { setRelated([]); setRelatedError(undefined); } });
+    void fetch(`/api/catalog/${media.provider}/${media.mediaType}/${encodeURIComponent(media.providerId)}/related`, { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() as Promise<CatalogSearchResult> : { items: [], failures: [{ message: "Related stories are unavailable." }] })
+      .then((result) => { if (!controller.signal.aborted) { setRelated(result.items); setRelatedError(result.failures[0]?.message); } })
+      .catch(() => { if (!controller.signal.aborted) setRelatedError("Related stories are unavailable."); });
+    return () => controller.abort();
+  }, [media]);
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
   const heroMetadata = [media.releaseYear ? String(media.releaseYear) : undefined, media.genres.join(" / ") || undefined]
     .filter((value): value is string => value !== undefined);
@@ -152,7 +159,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
     <div className="detail-body book-detail-body"><div>
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       <BookSection media={media}/>
-      {showFixtures && <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>}
+      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>More by this author</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
     </div><aside><div className="status-card"><span className="eyebrow">Your activity</span><h3>Reading history</h3><p>Your saved progress, ratings, and reviews appear here.</p></div></aside></div>
   </>;
 
@@ -171,10 +178,9 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "tv" && <SeriesSection media={media}/>}
       {media.mediaType === "game" && <GameSection media={media}/>}
-      {showFixtures && <section className="section"><div className="section-head"><h2>Related stories</h2></div><MediaShelf items={related} showType/></section>}
+      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>Related stories</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
     </div><aside>
       <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
-      {showFixtures && <section className="section"><div className="section-head"><h2>Friends</h2></div><div className="panel">{reviews.slice(0, 2).map((review) => <div className="activity-row" key={review.id} style={{ gridTemplateColumns: "34px 1fr" }}><Image className="avatar" src={review.user.avatarUrl} width={34} height={34} alt=""/><div className="activity-copy"><strong>{review.user.displayName}</strong><br/><span className="rating">★ {review.rating}</span></div></div>)}</div></section>}
     </aside></div>
   </>;
 }

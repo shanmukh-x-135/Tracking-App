@@ -53,6 +53,16 @@ export async function discoverCatalog(providers = configuredCatalogProviders()):
   return { items, failures };
 }
 
+export async function relatedCatalog(media: CatalogMedia, providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
+  const provider = providers.find((candidate) => candidate.name === media.provider);
+  if (!provider?.related) return { items: [], failures: [] };
+  try {
+    return { items: await provider.related(media), failures: [] };
+  } catch {
+    return { items: [], failures: [{ provider: media.provider, message: "Related stories are temporarily unavailable." }] };
+  }
+}
+
 export function isMediaProvider(value: string): value is MediaProvider {
   return value === "tmdb" || value === "igdb" || value === "googlebooks" || value === "mock";
 }
