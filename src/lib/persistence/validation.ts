@@ -13,7 +13,7 @@ const base = {
 export const catalogMediaSchema = z.discriminatedUnion("mediaType", [
   z.object({ ...base, mediaType: z.literal("movie"), runtimeMinutes: z.number().int().positive().optional(), director: optionalText, studio: optionalText, studioLogoUrl: z.url().optional() }),
   z.object({ ...base, mediaType: z.literal("tv"), seasonCount: z.number().int().nonnegative().optional(), episodeCount: z.number().int().nonnegative().optional(), seasonNumbers: z.array(z.number().int().nonnegative()).max(100).optional(), network: optionalText, networkLogoUrl: z.url().optional() }),
-  z.object({ ...base, mediaType: z.literal("game"), platforms: z.array(z.string().max(100)).max(50), developer: optionalText, publisher: optionalText }),
+  z.object({ ...base, mediaType: z.literal("game"), platforms: z.array(z.string().max(100)).max(50), developer: optionalText, publisher: optionalText, developerLogoUrl: z.url().optional(), publisherLogoUrl: z.url().optional() }),
   z.object({ ...base, mediaType: z.literal("book"), subtitle: optionalText, authors: z.array(z.string().max(200)).max(30), publisher: optionalText, pageCount: z.number().int().positive().optional(), isbn: z.string().max(32).optional() }),
 ]);
 

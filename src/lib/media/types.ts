@@ -52,6 +52,8 @@ export interface CatalogGame extends CatalogMediaBase {
   platforms: string[];
   developer?: string;
   publisher?: string;
+  developerLogoUrl?: string;
+  publisherLogoUrl?: string;
 }
 
 export interface CatalogBook extends CatalogMediaBase {

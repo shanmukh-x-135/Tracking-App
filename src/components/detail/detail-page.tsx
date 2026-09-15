@@ -126,7 +126,7 @@ function GameMetadata({ media }: { media: CatalogGame }) {
   if (!platforms.length && !media.developer && !media.publisher) return null;
   return <section className="section game-metadata"><div className="section-head"><div><span className="eyebrow">Game details</span><h2>Platforms & credits</h2></div></div>
     {platforms.length > 0 && <div><h3>Platforms</h3><div className="platform-chips">{platforms.map((platform) => <span key={platform}>{platform}</span>)}</div></div>}
-    {(media.developer || media.publisher) && <div className="game-credits">{media.developer && <div><span>Developed by</span><strong>{media.developer}</strong></div>}{media.publisher && <div><span>Published by</span><strong>{media.publisher}</strong></div>}</div>}
+    {(media.developer || media.publisher) && <div className="game-credits">{media.developer && <div><span>Developed by</span><strong>{media.developerLogoUrl && <Image src={media.developerLogoUrl} alt="" width={88} height={32}/>} {media.developer}</strong></div>}{media.publisher && <div><span>Published by</span><strong>{media.publisherLogoUrl && <Image src={media.publisherLogoUrl} alt="" width={88} height={32}/>} {media.publisher}</strong></div>}</div>}
   </section>;
 }
 

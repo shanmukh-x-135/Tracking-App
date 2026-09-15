@@ -68,13 +68,14 @@ test("IGDB normalizes game-specific metadata and rating scale", () => {
     id: 1942, name: "The Witcher 3", first_release_date: 1431993600, rating: 92,
     cover: { image_id: "co1wyy" }, genres: [{ name: "Role-playing" }],
     platforms: [{ name: "PC" }], involved_companies: [
-      { developer: true, company: { name: "CD Projekt RED" } },
+      { developer: true, company: { name: "CD Projekt RED", logo: { image_id: "logo" } } },
       { publisher: true, company: { name: "CD Projekt" } },
     ],
   });
   assert.equal(game.mediaType, "game");
   assert.equal(game.communityRating, 4.6);
   assert.equal(game.developer, "CD Projekt RED");
+  assert.match(game.developerLogoUrl ?? "", /t_logo_med\/logo\.jpg$/);
   assert.deepEqual(game.platforms, ["PC"]);
 });
 

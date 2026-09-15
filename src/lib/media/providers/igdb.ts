@@ -1,7 +1,7 @@
 import type { CatalogGame, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
-interface IgdbNamed { name: string }
+interface IgdbNamed { name: string; logo?: { image_id?: string } }
 interface IgdbCompany { company?: IgdbNamed; developer?: boolean; publisher?: boolean }
 export interface IgdbGame {
   id: number; name?: string; summary?: string; first_release_date?: number; rating?: number;
@@ -12,13 +12,15 @@ export interface IgdbGame {
 interface TokenResponse { access_token: string; expires_in: number }
 let cachedToken: { value: string; expiresAt: number } | undefined;
 
-function igdbImage(imageId: string | undefined, size: "cover_big" | "screenshot_big"): string | undefined {
+function igdbImage(imageId: string | undefined, size: "cover_big" | "screenshot_big" | "logo_med"): string | undefined {
   return imageId ? `https://images.igdb.com/igdb/image/upload/t_${size}/${imageId}.jpg` : undefined;
 }
 
 export function normalizeIgdb(item: IgdbGame): CatalogGame {
   const releaseDate = item.first_release_date ? new Date(item.first_release_date * 1000).toISOString().slice(0, 10) : undefined;
   const companies = item.involved_companies ?? [];
+  const developer = companies.find((entry) => entry.developer)?.company;
+  const publisher = companies.find((entry) => entry.publisher)?.company;
   return {
     providerId: String(item.id), provider: "igdb", mediaType: "game", title: item.name || "Untitled game",
     description: item.summary || undefined, posterUrl: igdbImage(item.cover?.image_id, "cover_big"),
@@ -26,8 +28,8 @@ export function normalizeIgdb(item: IgdbGame): CatalogGame {
     releaseYear: releaseDate ? Number(releaseDate.slice(0, 4)) : undefined,
     genres: (item.genres ?? []).map(({ name }) => name), communityRating: item.rating ? item.rating / 20 : undefined,
     platforms: (item.platforms ?? []).map(({ name }) => name),
-    developer: companies.find((entry) => entry.developer)?.company?.name,
-    publisher: companies.find((entry) => entry.publisher)?.company?.name,
+    developer: developer?.name, publisher: publisher?.name,
+    developerLogoUrl: igdbImage(developer?.logo?.image_id, "logo_med"), publisherLogoUrl: igdbImage(publisher?.logo?.image_id, "logo_med"),
   };
 }
 
@@ -64,21 +66,21 @@ export class IgdbProvider implements CatalogProvider {
   }
 
   async search(query: string): Promise<CatalogMedia[]> {
-    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher";
+    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.company.logo.image_id,involved_companies.developer,involved_companies.publisher";
     return (await this.request(`search "${safeSearchQuery(query)}"; fields ${fields}; where version_parent = null; limit 8;`)).map(normalizeIgdb);
   }
 
   async getById(providerId: string, mediaType?: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia | null> {
     if (mediaType && mediaType !== "game") return null;
     if (!/^\d+$/.test(providerId)) return null;
-    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher";
+    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.company.logo.image_id,involved_companies.developer,involved_companies.publisher";
     const [item] = await this.request(`fields ${fields}; where id = ${providerId}; limit 1;`);
     return item ? normalizeIgdb(item) : null;
   }
 
   async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {
     if (mediaType !== "game") return [];
-    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.developer,involved_companies.publisher";
+    const fields = "id,name,summary,first_release_date,rating,cover.image_id,artworks.image_id,genres.name,platforms.name,involved_companies.company.name,involved_companies.company.logo.image_id,involved_companies.developer,involved_companies.publisher";
     return (await this.request(`fields ${fields}; where version_parent = null & rating != null; sort rating_count desc; limit 12;`)).map(normalizeIgdb);
   }
 }
