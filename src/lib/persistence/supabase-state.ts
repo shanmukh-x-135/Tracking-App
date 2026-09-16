@@ -208,7 +208,7 @@ async function saveDerivedSharedState(client: Client, userId: string, mutation: 
     await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.series, status: "watching" });
     return;
   }
-  const status = mutation.type === "movie.log" ? "watched" : mutation.status;
+  const status = mutation.type === "movie.log" || mutation.type === "movie.update" ? "watched" : mutation.status;
   await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.media, status });
   if (mutation.rating !== undefined) await applySharedSupabaseMutation(client, userId, { type: "rating.set", media: mutation.media, value: mutation.rating });
 }
@@ -221,9 +221,13 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
   }
   const media = mutation.type === "episode.log" || mutation.type === "episode.unwatch" ? mutation.series : mutation.media;
   const mediaId = await upsertMedia(client, media);
-  if (mutation.type === "movie.log") {
+  if (mutation.type === "movie.log" || mutation.type === "movie.update") {
     if (media.mediaType !== "movie") throw new Error("Movie log requires a movie.");
-    const { error } = await client.from("movie_watch_logs").insert({ user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null, viewing_context: mutation.viewingContext ?? null, streaming_service: mutation.streamingService ?? null });
+    const values = { user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null, viewing_context: mutation.viewingContext ?? null, streaming_service: mutation.streamingService ?? null };
+    const query = mutation.type === "movie.update"
+      ? client.from("movie_watch_logs").update(values).eq("id", mutation.watchId).eq("user_id", userId)
+      : client.from("movie_watch_logs").insert(values);
+    const { error } = await query;
     assertResult(error);
   } else if (mutation.type === "episode.log") {
     if (media.mediaType !== "tv" || (media.provider !== "tmdb" && media.provider !== "mock")) throw new Error("Episode log requires a supported TV series.");
@@ -283,7 +287,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
 }
 
 export async function applySupabaseMutation(client: Client, userId: string, mutation: PersistenceMutation): Promise<void> {
-  if (mutation.type === "movie.log" || mutation.type === "movie.delete" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
+  if (mutation.type === "movie.log" || mutation.type === "movie.update" || mutation.type === "movie.delete" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
     return applyDomainSupabaseMutation(client, userId, mutation);
   }
   return applySharedSupabaseMutation(client, userId, mutation);

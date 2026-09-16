@@ -122,6 +122,31 @@ test("movie watches and rewatches survive refresh", async ({ page }) => {
   await expect(page.getByText(/First watch · ★ 4.5/)).toBeVisible();
 });
 
+test("movie diary edits and deletes one persisted watch without affecting a rewatch", async ({ page }) => {
+  await signUp(page, "diary@example.com");
+  await page.goto("/movie/dune-part-two");
+  await page.getByLabel("Rating", { exact: true }).last().fill("4");
+  await page.getByRole("button", { name: "Log watch" }).click();
+  await page.getByLabel("Rewatch").check();
+  await page.getByLabel("Rating", { exact: true }).last().fill("4");
+  await page.getByRole("button", { name: "Log watch" }).click();
+
+  await page.goto("/activity?view=diary");
+  await expect(page.getByText("Rewatched · ★ 4")).toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  await page.getByLabel("Rating", { exact: true }).last().fill("4.5");
+  await page.getByLabel("Review (optional)").fill("A better second visit.");
+  await page.getByRole("button", { name: "Save watch" }).click();
+  await page.reload();
+  await expect(page.getByText(/Rewatched · ★ 4.5/)).toBeVisible();
+  await expect(page.getByText("A better second visit.")).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete" }).first().click();
+  await expect(page.getByText(/Watched · ★ 4/)).toBeVisible();
+  await expect(page.getByText(/Rewatched · ★ 4.5/)).toHaveCount(0);
+});
+
 test("episode watches and ratings survive refresh and can be undone", async ({ page }) => {
   await signUp(page, "series@example.com");
   await page.goto("/series/severance");
