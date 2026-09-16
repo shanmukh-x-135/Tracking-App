@@ -119,7 +119,7 @@ test("universal search opens public people profiles", async ({ page }) => {
 
 test("search tabs and typed discovery links keep media context", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Meta+k");
+  await page.getByRole("button", { name: /Search everything/ }).click();
   await page.getByRole("textbox", { name: "Search all media" }).fill("Dune");
   await expect(page.getByRole("button", { name: "Books" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Part of Dune →" }).first()).toBeVisible();
