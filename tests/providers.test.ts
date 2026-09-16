@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createProviderKey, isProviderKey, parseProviderKey } from "../src/lib/media/identity";
-import { normalizeGoogleBook } from "../src/lib/media/providers/google-books";
-import { normalizeIgdb } from "../src/lib/media/providers/igdb";
+import { GoogleBooksProvider, normalizeGoogleBook } from "../src/lib/media/providers/google-books";
+import { IgdbProvider, normalizeIgdb } from "../src/lib/media/providers/igdb";
 import { normalizeTmdb, TmdbProvider } from "../src/lib/media/providers/tmdb";
 import { mockCatalogProvider } from "../src/lib/media/providers/mock";
 import { aggregateProviderSearch } from "../src/lib/media/search";
+import { franchises } from "../src/lib/media/franchises";
 import type { CatalogProvider } from "../src/lib/media/types";
 
 test("provider-qualified identities round trip and enforce domains", () => {
@@ -15,6 +16,14 @@ test("provider-qualified identities round trip and enforce domains", () => {
   assert.equal(isProviderKey("igdb:game:1942"), true);
   assert.equal(isProviderKey("tmdb:book:157336"), false);
   assert.throws(() => createProviderKey({ provider: "googlebooks", mediaType: "movie", providerId: "book" }));
+});
+
+test("franchise curation covers several cross-media universes with provider identities", () => {
+  assert.ok(franchises.length >= 5);
+  for (const franchise of franchises) {
+    assert.ok(new Set(franchise.items.map((item) => item.mediaType)).size >= 2, `${franchise.title} needs multiple media types`);
+    assert.ok(franchise.items.every((item) => item.providerId.trim()), `${franchise.title} has an incomplete identity`);
+  }
 });
 
 test("TMDB normalizes movies and series without inventing missing metadata", () => {
@@ -82,6 +91,15 @@ test("IGDB normalizes game-specific metadata and rating scale", () => {
   assert.deepEqual(game.platforms, ["PC"]);
 });
 
+test("IGDB related games are sourced from the provider similarity relation", async () => {
+  const provider = new IgdbProvider("id", "secret", async (input) => {
+    if (String(input).startsWith("https://id.twitch.tv")) return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }), { status: 200 });
+    return new Response(JSON.stringify([{ id: 1, similar_games: [{ id: 2, name: "Similar Game", first_release_date: 1_700_000_000, platforms: [] }] }]), { status: 200 });
+  });
+  const related = await provider.related?.({ provider: "igdb", providerId: "1", mediaType: "game", title: "Original", genres: [], platforms: [] });
+  assert.deepEqual(related?.map(({ providerId, title }) => [providerId, title]), [["2", "Similar Game"]]);
+});
+
 test("Google Books treats incomplete metadata as optional", () => {
   const book = normalizeGoogleBook({ id: "volume-id", volumeInfo: { title: "A Book", publishedDate: "1999", imageLinks: { thumbnail: "http://books.google.com/cover.jpg" } } });
   assert.equal(book.mediaType, "book");
@@ -101,6 +119,18 @@ test("Google Books descriptions are normalized to readable plain text", () => {
   });
 
   assert.equal(book.description, "A & B Dune — readable");
+});
+
+test("Google Books retries transient discovery failures without parallel shelf fan-out", async () => {
+  let calls = 0;
+  const provider = new GoogleBooksProvider("key", async () => {
+    calls += 1;
+    if (calls === 1) return new Response("temporarily unavailable", { status: 503 });
+    return new Response(JSON.stringify({ items: [{ id: "fiction", volumeInfo: { title: "Fiction Shelf" } }] }), { status: 200 });
+  });
+  const sections = await provider.discoverSections();
+  assert.equal(calls, 2);
+  assert.deepEqual(sections.map(({ label, items }) => [label, items.length]), [["Fiction books", 1]]);
 });
 
 test("catalog search returns partial success when one provider fails", async () => {

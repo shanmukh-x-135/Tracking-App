@@ -6,7 +6,7 @@ interface IgdbCompany { company?: IgdbNamed; developer?: boolean; publisher?: bo
 export interface IgdbGame {
   id: number; name?: string; summary?: string; first_release_date?: number; rating?: number;
   cover?: { image_id?: string }; artworks?: Array<{ image_id?: string }>;
-  genres?: IgdbNamed[]; platforms?: IgdbNamed[]; involved_companies?: IgdbCompany[];
+  genres?: IgdbNamed[]; platforms?: IgdbNamed[]; involved_companies?: IgdbCompany[]; similar_games?: IgdbGame[];
 }
 
 interface TokenResponse { access_token: string; expires_in: number }
@@ -97,5 +97,12 @@ export class IgdbProvider implements CatalogProvider {
     return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
       id: `igdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: "game", items: [], error: "This provider section is temporarily unavailable.",
     });
+  }
+
+  async related(media: CatalogMedia): Promise<CatalogMedia[]> {
+    if (media.provider !== this.name || media.mediaType !== "game" || !/^\d+$/.test(media.providerId)) return [];
+    const fields = "similar_games.id,similar_games.name,similar_games.summary,similar_games.first_release_date,similar_games.rating,similar_games.cover.image_id,similar_games.artworks.image_id,similar_games.genres.name,similar_games.platforms.name,similar_games.involved_companies.company.name,similar_games.involved_companies.company.logo.image_id,similar_games.involved_companies.developer,similar_games.involved_companies.publisher";
+    const [game] = await this.request(`fields ${fields}; where id = ${media.providerId}; limit 1;`);
+    return (game?.similar_games ?? []).filter((item) => item.id !== Number(media.providerId)).map(normalizeIgdb).slice(0, 12);
   }
 }
