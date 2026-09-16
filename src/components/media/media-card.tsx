@@ -39,9 +39,16 @@ export function MediaCard({ media, showType = false, priority = false }: { media
     await mutate({ type: "library.upsert", media: catalogMedia, status: defaultLibraryStatus(catalogMedia) });
   }
 
+  function openQuickLog(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!user) { router.push("/login"); return; }
+    window.dispatchEvent(new CustomEvent<CatalogMedia>("mosaic:quick-log", { detail: catalogMedia }));
+  }
+
   const isBook = media.mediaType === "book";
   const author = media.mediaType === "book" ? media.authors.join(", ") : undefined;
-  return <article className={`media-card ${isBook ? "book-card" : ""}`}><Link href={mediaHref(media)} aria-label={`View ${media.title}`}><div className="poster-wrap"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}><button aria-label={isSaved ? `${media.title} is in your library` : `Add ${media.title} to library`} onClick={(event) => void save(event)}>{isSaved ? <BookmarkCheck size={15}/> : <Plus size={15}/>}</button><button aria-label={`Log ${media.title}`}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div></div><div className="card-info"><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></div></Link></article>;
+  return <article className={`media-card ${isBook ? "book-card" : ""}`}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={`View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}><button aria-label={isSaved ? `${media.title} is in your library` : `Add ${media.title} to library`} onClick={(event) => void save(event)}>{isSaved ? <BookmarkCheck size={15}/> : <Plus size={15}/>}</button><button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div></div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></article>;
 }
 
 export function MediaShelf({ items, showType = false }: { items: CardMedia[]; showType?: boolean }) {

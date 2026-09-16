@@ -29,6 +29,16 @@ test("a single movie diary entry can be removed without collapsing other rewatch
   assert.equal(state.movieWatches[0].isRewatch, false);
 });
 
+test("a movie diary entry can be edited without changing its identity or other watches", () => {
+  let state = applyMutation(emptyMosaicState(), { type: "movie.log", media: movie, watchedAt: "2026-09-12", isRewatch: false }, now);
+  state = applyMutation(state, { type: "movie.log", media: movie, watchedAt: "2026-09-13", isRewatch: true }, now);
+  const watchId = state.movieWatches[0].id;
+  state = applyMutation(state, { type: "movie.update", watchId, media: movie, watchedAt: "2026-09-14", isRewatch: true, rating: 4.5, review: "Still excellent.", viewingContext: "streaming", streamingService: "Mosaic+" }, now);
+  assert.equal(state.movieWatches.length, 2);
+  assert.deepEqual(state.movieWatches[0], { ...state.movieWatches[0], id: watchId, watchedAt: "2026-09-14", isRewatch: true, rating: 4.5, review: "Still excellent.", viewingContext: "streaming", streamingService: "Mosaic+" });
+  assert.throws(() => applyMutation(state, { type: "movie.update", watchId: "00000000-0000-4000-8000-000000000000", media: movie, watchedAt: "2026-09-14", isRewatch: false }, now), /not found/);
+});
+
 test("ratings update in place and can be cleared", () => {
   let state = applyMutation(emptyMosaicState(), { type: "rating.set", media: movie, value: 3.5 }, now);
   state = applyMutation(state, { type: "rating.set", media: movie, value: 4.5 }, now);

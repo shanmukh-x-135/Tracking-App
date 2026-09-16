@@ -1,2 +1,9 @@
 import { HomePage } from "@/components/home/home-page";
-export default function Page(){return <HomePage/>}
+import { discoverCatalog } from "@/lib/media/catalog";
+
+export const revalidate = 3600;
+
+export default async function Page() {
+  const discovery = await discoverCatalog();
+  return <HomePage initialDiscovery={discovery.items}/>;
+}

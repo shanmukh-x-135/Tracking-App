@@ -17,10 +17,10 @@ function progressForBook(currentPage?: number, totalPages?: number, percent?: nu
   return totalPages ? Math.round(((currentPage ?? 0) / totalPages) * 100) : 0;
 }
 
-export function HomePage() {
+export function HomePage({ initialDiscovery = [] }: { initialDiscovery?: CatalogMedia[] }) {
   const { user } = useAuth();
   const { state } = useMosaicState();
-  const [discovery, setDiscovery] = useState<CatalogMedia[]>([]);
+  const [discovery, setDiscovery] = useState<CatalogMedia[]>(initialDiscovery);
 
   useEffect(() => {
     const controller = new AbortController();

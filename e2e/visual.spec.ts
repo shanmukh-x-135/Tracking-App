@@ -73,6 +73,17 @@ test("search and media-specific log interactions work", async ({ page }) => {
   }
 });
 
+test("media-card log control opens a contextual, domain-aware form", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-card-log", email: "card@example.com", displayName: "Card Logger" }));
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Log Dune: Part Two" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Dune: Part Two", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Log watch" })).toBeVisible();
+});
+
 test("contextual Quick Log resets cleanly between media domains", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const globalLog = page.getByRole("banner").getByRole("button", { name: "Log", exact: true });
@@ -108,7 +119,7 @@ test("universal search opens public people profiles", async ({ page }) => {
 
 test("search tabs and typed discovery links keep media context", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Meta+k");
+  await page.getByRole("button", { name: /Search everything/ }).click();
   await page.getByRole("textbox", { name: "Search all media" }).fill("Dune");
   await expect(page.getByRole("button", { name: "Books" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Part of Dune →" }).first()).toBeVisible();

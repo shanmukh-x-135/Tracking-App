@@ -115,6 +115,7 @@ export type SharedMutation =
 
 export type DomainMutation =
   | { type: "movie.log"; media: CatalogMedia; watchedAt: string; isRewatch: boolean; rating?: number; review?: string; viewingContext?: MovieViewingContext; streamingService?: string }
+  | { type: "movie.update"; watchId: string; media: CatalogMedia; watchedAt: string; isRewatch: boolean; rating?: number; review?: string; viewingContext?: MovieViewingContext; streamingService?: string }
   | { type: "movie.delete"; watchId: string }
   | { type: "episode.log"; series: CatalogMedia; seasonNumber: number; episodeNumber: number; episodeTitle?: string; watchedAt: string; rating?: number }
   | { type: "episode.unwatch"; series: CatalogMedia; seasonNumber: number; episodeNumber: number }

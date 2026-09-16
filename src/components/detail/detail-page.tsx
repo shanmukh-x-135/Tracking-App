@@ -27,6 +27,12 @@ function actionLabel(type: CatalogMedia["mediaType"]): string {
   return type === "movie" ? "Watched" : type === "tv" ? "Watching" : type === "game" ? "Playing" : "Reading";
 }
 
+function relatedHeading(media: CatalogMedia): string {
+  if (media.mediaType === "game") return "Similar games";
+  if (media.mediaType === "book") return media.authors.length ? `More by ${media.authors[0]}` : "Related books";
+  return "Related stories";
+}
+
 function BrandMark({ media }: { media: CatalogMedia }) {
   const name = media.mediaType === "movie" ? media.studio : media.mediaType === "tv" ? media.network : undefined;
   const logoUrl = media.mediaType === "movie" ? media.studioLogoUrl : media.mediaType === "tv" ? media.networkLogoUrl : undefined;
@@ -140,13 +146,14 @@ function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "mo
 export function DetailPage({ media }: { media: CatalogMedia }) {
   const [related, setRelated] = useState<CatalogMedia[]>([]);
   const [relatedError, setRelatedError] = useState<string>();
+  const [isRelatedLoaded, setIsRelatedLoaded] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    queueMicrotask(() => { if (!controller.signal.aborted) { setRelated([]); setRelatedError(undefined); } });
+    queueMicrotask(() => { if (!controller.signal.aborted) { setRelated([]); setRelatedError(undefined); setIsRelatedLoaded(false); } });
     void fetch(`/api/catalog/${media.provider}/${media.mediaType}/${encodeURIComponent(media.providerId)}/related`, { signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<CatalogSearchResult> : { items: [], failures: [{ message: "Related stories are unavailable." }] })
-      .then((result) => { if (!controller.signal.aborted) { setRelated(result.items); setRelatedError(result.failures[0]?.message); } })
-      .catch(() => { if (!controller.signal.aborted) setRelatedError("Related stories are unavailable."); });
+      .then((result) => { if (!controller.signal.aborted) { setRelated(result.items); setRelatedError(result.failures[0]?.message); setIsRelatedLoaded(true); } })
+      .catch(() => { if (!controller.signal.aborted) { setRelatedError("Related stories are unavailable."); setIsRelatedLoaded(true); } });
     return () => controller.abort();
   }, [media]);
   const facts = factsFor(media).filter((fact): fact is [string, string | number] => fact[1] !== undefined);
@@ -161,7 +168,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
     <div className="detail-body book-detail-body"><div>
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       <BookSection media={media}/>
-      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>More by this author</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
+      {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related books are available from this provider right now."}</p>}</section>}
     </div><aside><div className="status-card"><span className="eyebrow">Your activity</span><h3>Reading history</h3><p>Your saved progress, ratings, and reviews appear here.</p></div></aside></div>
   </>;
 
@@ -180,7 +187,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "tv" && <SeriesSection media={media}/>}
       {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
-      {(related.length || relatedError) && <section className="section"><div className="section-head"><h2>Related stories</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError}</p>}</section>}
+      {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related titles are available from this provider right now."}</p>}</section>}
     </div><aside>
       <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
     </aside></div>

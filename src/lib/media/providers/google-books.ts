@@ -59,12 +59,24 @@ export class GoogleBooksProvider implements CatalogProvider {
     return url;
   }
 
-  async search(query: string): Promise<CatalogMedia[]> {
+  private async volumeSearch(query: string): Promise<{ items?: GoogleBookVolume[] }> {
     const url = this.url("volumes");
     url.searchParams.set("q", query);
     url.searchParams.set("printType", "books");
     url.searchParams.set("maxResults", "8");
-    const data = await providerJson<{ items?: GoogleBookVolume[] }>(this.name, await this.fetcher(url, { next: { revalidate: 3600 } }));
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await this.fetcher(url, { next: { revalidate: 3600 } });
+      if (response.ok || (response.status !== 429 && response.status < 500) || attempt === 2) {
+        return providerJson<{ items?: GoogleBookVolume[] }>(this.name, response);
+      }
+      // Google Books intermittently returns 503 under concurrent discovery load.
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+    throw new Error("Google Books search retries were exhausted.");
+  }
+
+  async search(query: string): Promise<CatalogMedia[]> {
+    const data = await this.volumeSearch(query);
     return (data.items ?? []).map(normalizeGoogleBook);
   }
 
@@ -80,11 +92,17 @@ export class GoogleBooksProvider implements CatalogProvider {
   }
 
   async discoverSections(): Promise<CatalogDiscoverySection[]> {
-    const definitions = [["fiction", "Fiction books", "subject:fiction"], ["fantasy", "Fantasy books", "subject:fantasy"], ["mystery", "Mystery books", "subject:mystery"]] as const;
-    const settled = await Promise.allSettled(definitions.map(async ([id, label, query]) => ({ id: `googlebooks-${id}`, label, mediaType: "book" as const, items: await this.search(query) } satisfies CatalogDiscoverySection)));
-    return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
-      id: `googlebooks-${definitions[index][0]}`, label: definitions[index][1], mediaType: "book", items: [], error: "This provider section is temporarily unavailable.",
-    });
+    try {
+      // Keep book discovery to one resilient request. Google Books throttles the
+      // previous parallel subject fan-out, which made Home look unavailable.
+      return [{ id: "googlebooks-fiction", label: "Fiction books", mediaType: "book", items: await this.search("subject:fiction") }];
+    } catch {
+      try {
+        return [{ id: "googlebooks-fiction", label: "Fiction books", mediaType: "book", items: await this.search("fiction") }];
+      } catch {
+        return [{ id: "googlebooks-fiction", label: "Fiction books", mediaType: "book", items: [], error: "This provider section is temporarily unavailable." }];
+      }
+    }
   }
 
   async related(media: CatalogMedia): Promise<CatalogMedia[]> {

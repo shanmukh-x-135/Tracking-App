@@ -99,6 +99,14 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       ensureLibrary(mutation.media, "watched");
       ensureRating(mutation.media, mutation.rating);
       break;
+    case "movie.update": {
+      const watch = next.movieWatches.find(({ id }) => id === mutation.watchId);
+      if (!watch) throw new Error("Movie watch not found.");
+      Object.assign(watch, { media: mutation.media, watchedAt: mutation.watchedAt, isRewatch: mutation.isRewatch, rating: mutation.rating, review: mutation.review, viewingContext: mutation.viewingContext, streamingService: mutation.streamingService });
+      ensureLibrary(mutation.media, "watched");
+      ensureRating(mutation.media, mutation.rating);
+      break;
+    }
     case "movie.delete":
       next.movieWatches = next.movieWatches.filter((watch) => watch.id !== mutation.watchId);
       break;

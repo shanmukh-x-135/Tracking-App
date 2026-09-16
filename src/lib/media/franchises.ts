@@ -20,6 +20,45 @@ export const franchises: FranchiseDefinition[] = [{
     { provider: "tmdb", mediaType: "movie", providerId: "438631" },
     { provider: "tmdb", mediaType: "movie", providerId: "693134" },
   ],
+}, {
+  slug: "the-witcher",
+  title: "The Witcher",
+  overview: "A curated path through Andrzej Sapkowski’s Continent across screen stories and games.",
+  items: [
+    { provider: "tmdb", mediaType: "tv", providerId: "71912" },
+    { provider: "tmdb", mediaType: "movie", providerId: "1203329" },
+    { provider: "igdb", mediaType: "game", providerId: "1942" },
+  ],
+}, {
+  slug: "wizarding-world",
+  title: "Wizarding World",
+  overview: "A curated collection of Wizarding World films, television, and games.",
+  items: [
+    { provider: "tmdb", mediaType: "movie", providerId: "671" },
+    { provider: "tmdb", mediaType: "movie", providerId: "674" },
+    { provider: "tmdb", mediaType: "tv", providerId: "224377" },
+    { provider: "igdb", mediaType: "game", providerId: "136625" },
+  ],
+}, {
+  slug: "star-wars",
+  title: "Star Wars",
+  overview: "A curated collection from a galaxy far, far away across films, series, and games.",
+  items: [
+    { provider: "tmdb", mediaType: "movie", providerId: "11" },
+    { provider: "tmdb", mediaType: "movie", providerId: "140607" },
+    { provider: "tmdb", mediaType: "tv", providerId: "4194" },
+    { provider: "igdb", mediaType: "game", providerId: "74701" },
+  ],
+}, {
+  slug: "middle-earth",
+  title: "Middle-earth",
+  overview: "A curated collection of Middle-earth films, series, and games.",
+  items: [
+    { provider: "tmdb", mediaType: "movie", providerId: "120" },
+    { provider: "tmdb", mediaType: "movie", providerId: "122" },
+    { provider: "tmdb", mediaType: "tv", providerId: "84773" },
+    { provider: "igdb", mediaType: "game", providerId: "3025" },
+  ],
 }];
 
 export function franchiseForMedia(media: CatalogMedia): FranchiseDefinition | undefined {
