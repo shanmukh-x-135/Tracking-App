@@ -95,7 +95,8 @@ button { color: inherit; }
 .poster-link { position:absolute; inset:0; }
 .poster-wrap img { object-fit:cover; transition:transform .35s cubic-bezier(.2,.7,.2,1); }
 .media-card:hover .poster-wrap img { transform:scale(1.035); }
-.poster-overlay { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; padding:9px; opacity:0; background:linear-gradient(180deg,rgba(3,4,6,.5),transparent 40%,rgba(3,4,6,.88)); transition:opacity .2s; }
+.poster-overlay { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between; padding:9px; opacity:0; pointer-events:none; background:linear-gradient(180deg,rgba(3,4,6,.5),transparent 40%,rgba(3,4,6,.88)); transition:opacity .2s; }
+.card-actions { pointer-events:auto; }
 .media-card:hover .poster-overlay,.media-card:focus-within .poster-overlay { opacity:1; }
 .card-actions { display:flex; justify-content:flex-end; gap:6px; }
 .card-actions button { width:32px; height:32px; border-radius:50%; background:rgba(10,12,16,.7); border:1px solid rgba(255,255,255,.15); display:grid; place-items:center; cursor:pointer; }
