@@ -60,7 +60,8 @@ export async function upsertMedia(client: Client, media: CatalogMedia): Promise<
 }
 
 export async function readSupabaseState(client: Client, userId: string): Promise<MosaicState> {
-  const [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult] = await Promise.all([
+  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult] = await Promise.all([
+    client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
     client.from("library_entries").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("ratings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("reviews").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
@@ -70,6 +71,10 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     client.from("game_playthroughs").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("book_readings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
   ]);
+  // Hosted projects created before watch regions will reject this one optional
+  // field until their migration is applied. The rest of the saved state remains
+  // readable, and the client keeps the region locally in the meantime.
+  if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
   [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
   const lists = listsResult.data ?? [];
   const listItemsResult = lists.length
@@ -94,6 +99,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   assertResult(mediaResult.error);
   const mediaById = new Map((mediaResult.data ?? []).map((row) => [row.id, catalogFromRow(row)]));
   const state = emptyMosaicState();
+  state.watchRegion = profileResult.data?.watch_region ?? undefined;
   state.library = (libraryResult.data ?? []).flatMap((row) => {
     const media = mediaById.get(row.media_id);
     return media ? [{ media, status: row.status as MosaicState["library"][number]["status"], isFavorite: row.is_favorite, updatedAt: row.updated_at }] : [];
@@ -136,6 +142,13 @@ export async function readSupabaseState(client: Client, userId: string): Promise
 }
 
 export async function applySharedSupabaseMutation(client: Client, userId: string, mutation: SharedMutation): Promise<void> {
+  if (mutation.type === "settings.watchRegion") {
+    const { error } = await client.from("profiles").update({ watch_region: mutation.value }).eq("id", userId);
+    // This lets the watch-provider UI use its local region preference while a
+    // pre-release production schema is waiting for the additive migration.
+    if (error?.code === "42703") return;
+    assertResult(error); return;
+  }
   if (mutation.type === "review.delete") {
     const { error } = await client.from("reviews").delete().eq("id", mutation.id).eq("user_id", userId);
     assertResult(error); return;
@@ -223,11 +236,17 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
   const mediaId = await upsertMedia(client, media);
   if (mutation.type === "movie.log" || mutation.type === "movie.update") {
     if (media.mediaType !== "movie") throw new Error("Movie log requires a movie.");
-    const values = { user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null, viewing_context: mutation.viewingContext ?? null, streaming_service: mutation.streamingService ?? null };
-    const query = mutation.type === "movie.update"
-      ? client.from("movie_watch_logs").update(values).eq("id", mutation.watchId).eq("user_id", userId)
-      : client.from("movie_watch_logs").insert(values);
-    const { error } = await query;
+    const values = { user_id: userId, media_id: mediaId, watched_at: mutation.watchedAt, is_rewatch: mutation.isRewatch, rating: mutation.rating ?? null, review: mutation.review ?? null };
+    const hasContext = mutation.viewingContext !== undefined || mutation.streamingService !== undefined;
+    const contextualValues = hasContext ? { ...values, viewing_context: mutation.viewingContext ?? null, streaming_service: mutation.streamingService ?? null } : values;
+    const writeMovieLog = async (payload: typeof values | typeof contextualValues) => mutation.type === "movie.update"
+      ? client.from("movie_watch_logs").update(payload).eq("id", mutation.watchId).eq("user_id", userId)
+      : client.from("movie_watch_logs").insert(payload);
+    let { error } = await writeMovieLog(contextualValues);
+    // Context fields were added after the original movie log table. Preserve
+    // core logging on legacy deployments, while retaining context everywhere
+    // the additive migration is already present.
+    if (error?.code === "42703" && hasContext) ({ error } = await writeMovieLog(values));
     assertResult(error);
   } else if (mutation.type === "episode.log") {
     if (media.mediaType !== "tv" || (media.provider !== "tmdb" && media.provider !== "mock")) throw new Error("Episode log requires a supported TV series.");

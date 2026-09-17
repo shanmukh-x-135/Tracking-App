@@ -37,6 +37,9 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
   };
 
   switch (mutation.type) {
+    case "settings.watchRegion":
+      next.watchRegion = mutation.value ?? undefined;
+      break;
     case "library.upsert": {
       const existing = next.library.find((entry) => mediaKey(entry.media) === key);
       if (existing) Object.assign(existing, { status: mutation.status, isFavorite: mutation.isFavorite ?? existing.isFavorite, updatedAt: now });

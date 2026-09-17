@@ -22,6 +22,7 @@ const viewingContext = z.enum(["theater", "streaming", "television", "physical",
 const libraryStatus = z.enum(["watchlist", "watched", "watching", "completed", "paused", "dropped", "backlog", "playing", "want_to_read", "reading", "finished", "dnf"]);
 
 export const sharedMutationSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("settings.watchRegion"), value: z.string().regex(/^[A-Z]{2}$/).nullable() }),
   z.object({ type: z.literal("library.upsert"), media: catalogMediaSchema, status: libraryStatus, isFavorite: z.boolean().optional() }),
   z.object({ type: z.literal("library.remove"), media: catalogMediaSchema }),
   z.object({ type: z.literal("rating.set"), media: catalogMediaSchema, value: rating.nullable() }),

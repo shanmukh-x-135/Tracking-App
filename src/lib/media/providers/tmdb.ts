@@ -1,4 +1,4 @@
-import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider, WatchAvailability, WatchProvider, WatchProviderKind } from "@/lib/media/types";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 const apiBase = "https://api.themoviedb.org/3";
@@ -40,6 +40,8 @@ interface TmdbSeasonEpisode {
 }
 
 interface TmdbSeason { episodes?: TmdbSeasonEpisode[] }
+interface TmdbWatchProvider { provider_id?: number; provider_name?: string; logo_path?: string | null }
+interface TmdbWatchResults { results?: Record<string, { link?: string; flatrate?: TmdbWatchProvider[]; free?: TmdbWatchProvider[]; ads?: TmdbWatchProvider[]; rent?: TmdbWatchProvider[]; buy?: TmdbWatchProvider[] }> }
 
 const genreNames: Record<number, string> = {
   12: "Adventure", 14: "Fantasy", 16: "Animation", 18: "Drama", 27: "Horror",
@@ -126,6 +128,16 @@ export class TmdbProvider implements CatalogProvider {
         stillUrl: image(episode.still_path, "w500"), airDate: episode.air_date || undefined,
         runtimeMinutes: episode.runtime ?? undefined,
       }));
+  }
+
+  async getWatchAvailability(providerId: string, mediaType: "movie" | "tv", country: string): Promise<WatchAvailability | null> {
+    if (!/^[A-Z]{2}$/.test(country)) return null;
+    const payload = await this.request<TmdbWatchResults>(`/${mediaType}/${encodeURIComponent(providerId)}/watch/providers`);
+    const region = payload.results?.[country];
+    if (!region) return null;
+    const groups: Array<[WatchProviderKind, TmdbWatchProvider[] | undefined]> = [["flatrate", region.flatrate], ["free", region.free], ["ads", region.ads], ["rent", region.rent], ["buy", region.buy]];
+    const providers: WatchProvider[] = groups.flatMap(([kind, items]) => (items ?? []).flatMap((item) => item.provider_id && item.provider_name ? [{ id: item.provider_id, name: item.provider_name, logoUrl: image(item.logo_path, "w500"), kind }] : []));
+    return { country, link: region.link, providers };
   }
 
   async discover(mediaType: "movie" | "tv" | "game" | "book"): Promise<CatalogMedia[]> {

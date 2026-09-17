@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, Eye, Heart, ListPlus, Plus, Star } from "lucide-react";
+import { Check, Heart, ListPlus, Plus, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import type { CatalogMedia } from "@/lib/media/types";
 import { defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
+import { RatingInput } from "@/components/ui/rating-input";
 
 declare global {
   interface Window { __mosaicQuickLogContext?: CatalogMedia }
@@ -25,7 +26,6 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
   const review = state.reviews.find((item) => mediaKey(item.media) === key);
   const isMovie = media.mediaType === "movie";
   const isWatchlisted = entry?.status === "watchlist";
-  const hasWatched = state.movieWatches.some((watch) => mediaKey(watch.media) === key);
 
   // Keep the global Quick Log aware of the current detail route. This is cleared
   // on unmount, so opening Log after navigation cannot reuse a previous title.
@@ -51,16 +51,13 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
 
   return <div className="persistent-actions">
     <div className="actions">
-      {isMovie ? <>
-        <button className={`button ${isWatchlisted ? "accent" : "primary"}`} onClick={() => void authenticatedMutation(() => mutate(isWatchlisted ? { type: "library.remove", media } : { type: "library.upsert", media, status: "watchlist" }), isWatchlisted ? "Removed from your watchlist." : "Added to your watchlist.")}>{isWatchlisted ? <Check size={16}/> : <Plus size={16}/>} {isWatchlisted ? "Watchlisted" : "Watchlist"}</button>
-        <button className={`button ${hasWatched ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate({ type: "movie.log", media, watchedAt: new Date().toISOString().slice(0, 10), isRewatch: hasWatched }), hasWatched ? "Rewatch logged." : "Watch logged.")}><Eye size={16}/>{hasWatched ? "Log rewatch" : "Watched"}</button>
-      </> : <button className={`button ${entry ? "accent" : "primary"}`} onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media) }), "Library updated.")}>{entry ? <Check size={16}/> : <Plus size={16}/>} {entry ? "In library" : "Add to library"}</button>}
-      <button className="button" onClick={openQuickLog}><Plus size={16}/>Log</button>
+      <button className="button accent" onClick={openQuickLog}><Plus size={16}/>Log</button>
+      {isMovie ? <button className={`button ${isWatchlisted ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate(isWatchlisted ? { type: "library.remove", media } : { type: "library.upsert", media, status: "watchlist" }), isWatchlisted ? "Removed from your watchlist." : "Added to your watchlist.")}>{isWatchlisted ? <Check size={16}/> : <Plus size={16}/>} {isWatchlisted ? "Watchlisted" : "Watchlist"}</button> : <button className={`button ${entry ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media) }), "Library updated.")}>{entry ? <Check size={16}/> : <Plus size={16}/>} {entry ? "In library" : "Add to library"}</button>}
       <button className="button" onClick={() => setShowReview((value) => !value)}><Star size={16}/>{review ? "Edit review" : "Review"}</button>
       <button className="button" onClick={() => setShowLists((value) => !value)}><ListPlus size={16}/>Add to list</button>
       <button className={`icon-button glass ${entry?.isFavorite ? "active" : ""}`} aria-label="Favourite" onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media), isFavorite: !entry?.isFavorite }), "Favourite updated.")}><Heart size={17} fill={entry?.isFavorite ? "currentColor" : "none"}/></button>
     </div>
-    <fieldset className="inline-rating"><legend>Your rating</legend>{[1, 2, 3, 4, 5].map((value) => <button key={value} aria-label={`Rate ${value} stars`} className={`star-button ${value <= (rating ?? 0) ? "active" : ""}`} onClick={() => void authenticatedMutation(() => mutate({ type: "rating.set", media, value: rating === value ? null : value }), rating === value ? "Rating cleared." : "Rating saved.")}><Star size={20} fill="currentColor"/></button>)}</fieldset>
+    <RatingInput value={rating} onChange={(value) => void authenticatedMutation(() => mutate({ type: "rating.set", media, value }), "Rating saved.")}/>
     {showReview && <form className="inline-form" onSubmit={(event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);

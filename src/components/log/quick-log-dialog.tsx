@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Check, Search, Star } from "lucide-react";
+import { ArrowLeft, Check, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { Dialog } from "@/components/ui/dialog";
+import { RatingInput } from "@/components/ui/rating-input";
 import type { CatalogEpisode, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
 
@@ -100,7 +101,7 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
         {selected.mediaType === "tv" && <><label className="field">Season<select value={seasonNumber} onChange={(event) => setSeasonNumber(Number(event.target.value))}>{(selected.seasonNumbers?.filter((number) => number > 0) ?? [1]).map((number) => <option key={number} value={number}>Season {number}</option>)}</select></label><label className="field">Episode<select name="episode" defaultValue={firstUnwatched?.episodeNumber}>{episodes.map((episode) => <option key={episode.id} value={episode.episodeNumber}>E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</option>)}</select>{!episodes.length && <small>Loading available episodes…</small>}</label></>}
         {selected.mediaType === "game" && <><label className="field">Status<select name="status" defaultValue={activePlaythrough?.status ?? "playing"}><option value="playing">Playing</option><option value="backlog">Backlog</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></label><label className="field">Platform<select name="platform" defaultValue={activePlaythrough?.platform}>{(selected.platforms.length ? selected.platforms : ["Other"]).map((platform) => <option key={platform}>{platform}</option>)}</select></label><label className="field">Playtime (hours)<input name="playtime" type="number" min="0" step="0.25" defaultValue={activePlaythrough ? activePlaythrough.playtimeMinutes / 60 : 0}/></label><label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={activePlaythrough?.progressPercent ?? 0}/></label></>}
         {selected.mediaType === "book" && <><label className="field">Status<select name="status" defaultValue={activeReading?.status ?? "reading"}><option value="reading">Reading</option><option value="want_to_read">Want to Read</option><option value="paused">Paused</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label>{selected.pageCount ? <label className="field">Current page<input name="page" type="number" min="0" max={selected.pageCount} defaultValue={activeReading?.currentPage ?? 0}/></label> : <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={activeReading?.progressPercent ?? 0}/></label>}</>}
-        <div className="field full inline-rating" role="group" aria-label="Your rating"><span className="rating-label">Your rating</span>{[1, 2, 3, 4, 5].map((value) => <button type="button" className={`star-button ${value <= rating ? "active" : ""}`} key={value} onClick={() => setRating(value)} aria-label={`${value} stars`}><Star fill="currentColor" size={22}/></button>)}</div>
+        <div className="field full"><RatingInput value={rating} onChange={setRating} ariaPrefix=""/></div>
         {error && <p className="form-error field full" role="alert">{error} {!user && <Link href="/login">Sign in</Link>}</p>}
         <button className="button accent field full" type="submit">{selected.mediaType === "movie" ? "Log watch" : selected.mediaType === "tv" ? "Log episode" : selected.mediaType === "game" ? activePlaythrough ? "Update playthrough" : "Start playthrough" : activeReading?.status === "finished" ? "Update reading" : "Log progress"}</button>
       </div></form></>}
