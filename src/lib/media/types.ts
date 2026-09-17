@@ -47,6 +47,22 @@ export interface CatalogEpisode {
   runtimeMinutes?: number;
 }
 
+export type WatchProviderKind = "flatrate" | "free" | "ads" | "rent" | "buy";
+
+/** Availability is deliberately provider-neutral: TMDB/JustWatch does not promise per-service deep links. */
+export interface WatchProvider {
+  id: number;
+  name: string;
+  logoUrl?: string;
+  kind: WatchProviderKind;
+}
+
+export interface WatchAvailability {
+  country: string;
+  link?: string;
+  providers: WatchProvider[];
+}
+
 export interface CatalogGame extends CatalogMediaBase {
   mediaType: "game";
   platforms: string[];
@@ -75,6 +91,7 @@ export interface CatalogProvider {
   discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
   discoverSections?(): Promise<CatalogDiscoverySection[]>;
   related?(media: CatalogMedia): Promise<CatalogMedia[]>;
+  getWatchAvailability?(providerId: string, mediaType: "movie" | "tv", country: string): Promise<WatchAvailability | null>;
 }
 
 export interface CatalogFailure {

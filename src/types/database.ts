@@ -36,7 +36,7 @@ export interface Database {
 }
 
 interface Timestamped { id: string; created_at: string; updated_at: string }
-export interface ProfileRow extends Timestamped { username: string; display_name: string; bio: string | null; avatar_url: string | null }
+export interface ProfileRow extends Timestamped { username: string; display_name: string; bio: string | null; avatar_url: string | null; watch_region: string | null }
 export interface MediaItemRow extends Timestamped { media_type: "movie"|"tv"|"game"|"book"; provider: "tmdb"|"igdb"|"googlebooks"|"mock"; external_id: string; title: string; original_title: string|null; poster_url: string|null; backdrop_url: string|null; release_date: string|null; release_year: number|null; metadata: Json }
 export interface LibraryEntryRow extends Timestamped { user_id: string; media_id: string; status: string; is_favorite: boolean }
 export interface RatingRow extends Timestamped { user_id: string; media_id: string; rating: number }

@@ -86,6 +86,7 @@ export interface BookReading {
 }
 
 export interface MosaicState {
+  watchRegion?: string;
   library: LibraryEntry[];
   ratings: UserRating[];
   reviews: UserReview[];
@@ -101,6 +102,7 @@ export const emptyMosaicState = (): MosaicState => ({
 });
 
 export type SharedMutation =
+  | { type: "settings.watchRegion"; value: string | null }
   | { type: "library.upsert"; media: CatalogMedia; status: LibraryStatus; isFavorite?: boolean }
   | { type: "library.remove"; media: CatalogMedia }
   | { type: "rating.set"; media: CatalogMedia; value: number | null }

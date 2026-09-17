@@ -51,6 +51,24 @@ test("TMDB season adapter returns every supplied episode in episode order", asyn
   assert.deepEqual(episodes.map(({ episodeNumber, title }) => [episodeNumber, title]), [[1, "First"], [2, "Second"], [3, "Third"]]);
 });
 
+test("TMDB watch providers normalize groups and preserve only the returned watch-options URL", async () => {
+  const provider = new TmdbProvider("token", async () => new Response(JSON.stringify({ results: { IN: {
+    link: "https://www.themoviedb.org/movie/1/watch?locale=IN",
+    flatrate: [{ provider_id: 8, provider_name: "Netflix", logo_path: "/netflix.png" }],
+    rent: [{ provider_id: 2, provider_name: "Apple TV", logo_path: "/apple.png" }],
+  } } }), { status: 200 }));
+  const availability = await provider.getWatchAvailability("1", "movie", "IN");
+  assert.equal(availability?.link, "https://www.themoviedb.org/movie/1/watch?locale=IN");
+  assert.deepEqual(availability?.providers.map(({ name, kind, logoUrl }) => [name, kind, logoUrl]), [["Netflix", "flatrate", "https://image.tmdb.org/t/p/w500/netflix.png"], ["Apple TV", "rent", "https://image.tmdb.org/t/p/w500/apple.png"]]);
+  assert.equal(await provider.getWatchAvailability("1", "movie", "india"), null);
+});
+
+test("TMDB watch availability keeps an empty regional response distinct from a missing region", async () => {
+  const provider = new TmdbProvider("token", async () => new Response(JSON.stringify({ results: { GB: { link: "https://www.themoviedb.org/tv/2/watch?locale=GB" } } }), { status: 200 }));
+  assert.deepEqual(await provider.getWatchAvailability("2", "tv", "GB"), { country: "GB", link: "https://www.themoviedb.org/tv/2/watch?locale=GB", providers: [] });
+  assert.equal(await provider.getWatchAvailability("2", "tv", "US"), null);
+});
+
 test("TMDB search considers a second page and ranks punctuation variants first", async () => {
   const provider = new TmdbProvider("token", async (input) => {
     const page = new URL(String(input)).searchParams.get("page");

@@ -60,7 +60,8 @@ export async function upsertMedia(client: Client, media: CatalogMedia): Promise<
 }
 
 export async function readSupabaseState(client: Client, userId: string): Promise<MosaicState> {
-  const [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult] = await Promise.all([
+  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult] = await Promise.all([
+    client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
     client.from("library_entries").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("ratings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("reviews").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
@@ -70,7 +71,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     client.from("game_playthroughs").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("book_readings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
   ]);
-  [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
+  [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
   const lists = listsResult.data ?? [];
   const listItemsResult = lists.length
     ? await client.from("list_items").select("*").in("list_id", lists.map(({ id }) => id)).order("position")
@@ -94,6 +95,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   assertResult(mediaResult.error);
   const mediaById = new Map((mediaResult.data ?? []).map((row) => [row.id, catalogFromRow(row)]));
   const state = emptyMosaicState();
+  state.watchRegion = profileResult.data?.watch_region ?? undefined;
   state.library = (libraryResult.data ?? []).flatMap((row) => {
     const media = mediaById.get(row.media_id);
     return media ? [{ media, status: row.status as MosaicState["library"][number]["status"], isFavorite: row.is_favorite, updatedAt: row.updated_at }] : [];
@@ -136,6 +138,10 @@ export async function readSupabaseState(client: Client, userId: string): Promise
 }
 
 export async function applySharedSupabaseMutation(client: Client, userId: string, mutation: SharedMutation): Promise<void> {
+  if (mutation.type === "settings.watchRegion") {
+    const { error } = await client.from("profiles").update({ watch_region: mutation.value }).eq("id", userId);
+    assertResult(error); return;
+  }
   if (mutation.type === "review.delete") {
     const { error } = await client.from("reviews").delete().eq("id", mutation.id).eq("user_id", userId);
     assertResult(error); return;

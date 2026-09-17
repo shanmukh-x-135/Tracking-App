@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Check, Star } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaShelf } from "@/components/media/media-card";
 import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSearchResult, CatalogSeries } from "@/lib/media/types";
@@ -11,6 +11,8 @@ import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { mediaKey } from "@/lib/persistence/domain";
 import { franchiseForMedia, type FranchiseDefinition } from "@/lib/media/franchises";
 import { bookSynopsis, normalizeBookCategories, shouldCollapseBookSynopsis } from "@/lib/media/book-presentation";
+import { WatchProviders } from "@/components/detail/watch-providers";
+import { RatingInput } from "@/components/ui/rating-input";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -61,6 +63,13 @@ function BookHero({ media, franchise }: { media: CatalogBook; franchise?: Franch
   </section>;
 }
 
+function EpisodeActions({ media, season, episode, watch }: { media: CatalogSeries; season: number; episode: CatalogEpisode; watch?: { rating?: number } }) {
+  const { mutate } = useMosaicState();
+  const [rating, setRating] = useState(watch?.rating ?? 0);
+  const rated = (value: number) => { setRating(value); void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: value }).catch(() => undefined); };
+  return <div className="episode-actions"><RatingInput label="Episode rating" value={rating} onChange={rated}/></div>;
+}
+
 function SeriesSection({ media }: { media: CatalogSeries }) {
   const seasonNumbers = media.seasonNumbers?.length
     ? [...new Set(media.seasonNumbers)].sort((first, second) => first - second)
@@ -99,7 +108,7 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
           ? { type: "episode.unwatch" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber }
           : { type: "episode.log" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString() };
         void mutate(mutation).catch(() => undefined);
-      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} S${String(season).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}: ${episode.title}`}><Check size={17}/></button><button className="button" onClick={() => void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: 5 }).catch(() => undefined)}><Star size={14}/>Rate 5</button></div>
+      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} S${String(season).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}: ${episode.title}`}><Check size={17}/></button><EpisodeActions media={media} season={season} episode={episode} watch={watched.find((watch) => watch.episodeNumber === episode.episodeNumber)}/></div>
     </article>)}</div>
   </section>;
 }
@@ -107,12 +116,14 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
 function GameSection({ media }: { media: CatalogGame }) {
   const { state, mutate } = useMosaicState();
   const playthrough = state.gamePlaythroughs.find((item) => mediaKey(item.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthroughs</h2></div></div><form key={playthrough ? `${playthrough.id}:${playthrough.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "game.upsert", media, playthroughId: playthrough?.id, status: String(form.get("status")) as "backlog" | "playing" | "paused" | "completed" | "dropped", platform: String(form.get("platform") || "") || undefined, playtimeMinutes: Math.round(Number(form.get("playtime") || 0) * 60), progressPercent: Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
+  const [rating, setRating] = useState<number | undefined>();
+  const selectedRating = rating === undefined ? playthrough?.rating ?? 0 : rating;
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your journey</span><h2>Playthroughs</h2></div></div><form key={playthrough ? `${playthrough.id}:${playthrough.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "game.upsert", media, playthroughId: playthrough?.id, status: String(form.get("status")) as "backlog" | "playing" | "paused" | "completed" | "dropped", platform: String(form.get("platform") || "") || undefined, playtimeMinutes: Math.round(Number(form.get("playtime") || 0) * 60), progressPercent: Number(form.get("progress") || 0), rating: selectedRating || undefined }).catch(() => undefined)}>
     <label className="field">Status<select name="status" defaultValue={playthrough?.status ?? "playing"}><option value="backlog">Backlog</option><option value="playing">Playing</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="dropped">Dropped</option></select></label>
     <label className="field">Platform<select name="platform" defaultValue={playthrough?.platform}>{(media.platforms.length ? media.platforms : ["Other"]).map((platform) => <option key={platform}>{platform}</option>)}</select></label>
     <label className="field">Playtime (hours)<input name="playtime" type="number" min="0" step="0.25" defaultValue={playthrough ? playthrough.playtimeMinutes / 60 : 0}/></label>
     <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={playthrough?.progressPercent ?? 0}/></label>
-    <label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5" defaultValue={playthrough?.rating}/></label>
+    <div className="field"><RatingInput value={selectedRating} onChange={setRating}/></div>
     <button className="button accent field" type="submit">Save playthrough</button>
   </form></section>;
 }
@@ -129,10 +140,12 @@ function GameMetadata({ media }: { media: CatalogGame }) {
 function BookSection({ media }: { media: CatalogBook }) {
   const { state, mutate } = useMosaicState();
   const reading = state.bookReadings.find((item) => mediaKey(item.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading progress</span><h2>{reading?.progressPercent !== undefined ? `${reading.progressPercent}% complete` : media.pageCount ? `${media.pageCount} pages` : "Page count unavailable"}</h2></div></div><form key={reading ? `${reading.id}:${reading.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "book.upsert", media, readingId: reading?.id, status: String(form.get("status")) as "want_to_read" | "reading" | "paused" | "finished" | "dnf", currentPage: Number(form.get("page") || 0), totalPages: media.pageCount, progressPercent: media.pageCount ? undefined : Number(form.get("progress") || 0), rating: Number(form.get("rating") || 0) || undefined }).catch(() => undefined)}>
+  const [rating, setRating] = useState<number | undefined>();
+  const selectedRating = rating === undefined ? reading?.rating ?? 0 : rating;
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Reading progress</span><h2>{reading?.progressPercent !== undefined ? `${reading.progressPercent}% complete` : media.pageCount ? `${media.pageCount} pages` : "Page count unavailable"}</h2></div></div><form key={reading ? `${reading.id}:${reading.updatedAt}` : "new"} className="status-card form-grid" action={(form) => void mutate({ type: "book.upsert", media, readingId: reading?.id, status: String(form.get("status")) as "want_to_read" | "reading" | "paused" | "finished" | "dnf", currentPage: Number(form.get("page") || 0), totalPages: media.pageCount, progressPercent: media.pageCount ? undefined : Number(form.get("progress") || 0), rating: selectedRating || undefined }).catch(() => undefined)}>
     <label className="field">Status<select name="status" defaultValue={reading?.status ?? "reading"}><option value="want_to_read">Want to Read</option><option value="reading">Reading</option><option value="paused">Paused</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label>
     {media.pageCount ? <label className="field">Current page<input name="page" type="number" min="0" max={media.pageCount} defaultValue={reading?.currentPage ?? 0}/></label> : <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={reading?.progressPercent ?? 0}/></label>}
-    <label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5" defaultValue={reading?.rating}/></label>
+    <div className="field"><RatingInput value={selectedRating} onChange={setRating}/></div>
     <button className="button accent field" type="submit">Save reading progress</button>
   </form></section>;
 }
@@ -140,7 +153,8 @@ function BookSection({ media }: { media: CatalogBook }) {
 function MovieSection({ media }: { media: Extract<CatalogMedia, { mediaType: "movie" }> }) {
   const { state, mutate } = useMosaicState();
   const watches = state.movieWatches.filter((watch) => mediaKey(watch.media) === mediaKey(media));
-  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div>{watches.map((watch) => <div className="status-card" key={watch.id}><h3>Watched {watch.watchedAt}</h3><p>{watch.isRewatch ? "Rewatch" : "First watch"}{watch.viewingContext ? ` · ${watch.viewingContext === "television" ? "TV / Broadcast" : watch.viewingContext}` : ""}{watch.streamingService ? ` · ${watch.streamingService}` : ""}{watch.rating ? ` · ★ ${watch.rating}` : ""}</p></div>)}<form className="status-card form-grid" action={(form) => { const viewingContext = String(form.get("viewingContext") || "") || undefined; return void mutate({ type: "movie.log", media, watchedAt: String(form.get("watchedAt")), isRewatch: form.get("rewatch") === "on", rating: Number(form.get("rating") || 0) || undefined, viewingContext: viewingContext as "theater" | "streaming" | "television" | "physical" | "digital" | "other" | undefined, streamingService: viewingContext === "streaming" ? String(form.get("streamingService") || "") || undefined : undefined }).catch(() => undefined); }}><label className="field">Watched date<input name="watchedAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)}/></label><label className="field">Viewing context<select name="viewingContext" defaultValue=""><option value="">Not specified</option><option value="theater">Theater</option><option value="streaming">Streaming</option><option value="television">TV / Broadcast</option><option value="physical">Blu-ray / DVD</option><option value="digital">Digital purchase/rental</option><option value="other">Other</option></select></label><label className="field">Streaming service<input name="streamingService" placeholder="Optional"/></label><label className="field">Rating<input name="rating" type="number" min="0.5" max="5" step="0.5"/></label><label className="check-field"><input name="rewatch" type="checkbox"/> Rewatch</label><button className="button accent field" type="submit">Log watch</button></form></section>;
+  const [rating, setRating] = useState(0);
+  return <section className="section"><div className="section-head"><div><span className="eyebrow">Your history</span><h2>Watches</h2></div></div>{watches.map((watch) => <div className="status-card" key={watch.id}><h3>Watched {watch.watchedAt}</h3><p>{watch.isRewatch ? "Rewatch" : "First watch"}{watch.viewingContext ? ` · ${watch.viewingContext === "television" ? "TV / Broadcast" : watch.viewingContext}` : ""}{watch.streamingService ? ` · ${watch.streamingService}` : ""}{watch.rating ? ` · ★ ${watch.rating}` : ""}</p></div>)}<form className="status-card form-grid" action={(form) => { const viewingContext = String(form.get("viewingContext") || "") || undefined; return void mutate({ type: "movie.log", media, watchedAt: String(form.get("watchedAt")), isRewatch: form.get("rewatch") === "on", rating: rating || undefined, viewingContext: viewingContext as "theater" | "streaming" | "television" | "physical" | "digital" | "other" | undefined, streamingService: viewingContext === "streaming" ? String(form.get("streamingService") || "") || undefined : undefined }).catch(() => undefined); }}><label className="field">Watched date<input name="watchedAt" type="date" required defaultValue={new Date().toISOString().slice(0, 10)}/></label><label className="field">Viewing context<select name="viewingContext" defaultValue=""><option value="">Not specified</option><option value="theater">Theater</option><option value="streaming">Streaming</option><option value="television">TV / Broadcast</option><option value="physical">Blu-ray / DVD</option><option value="digital">Digital purchase/rental</option><option value="other">Other</option></select></label><label className="field">Streaming service<input name="streamingService" placeholder="Optional"/></label><div className="field"><RatingInput value={rating} onChange={setRating}/></div><label className="check-field"><input name="rewatch" type="checkbox"/> Rewatch</label><button className="button accent field" type="submit">Log watch</button></form></section>;
 }
 
 export function DetailPage({ media }: { media: CatalogMedia }) {
@@ -185,7 +199,8 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
     <div className="detail-body"><div>
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
-      {media.mediaType === "tv" && <SeriesSection media={media}/>}
+      {media.mediaType === "movie" && <WatchProviders media={media}/>}
+      {media.mediaType === "tv" && <><SeriesSection media={media}/><WatchProviders media={media}/></>}
       {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
       {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related titles are available from this provider right now."}</p>}</section>}
     </div><aside>

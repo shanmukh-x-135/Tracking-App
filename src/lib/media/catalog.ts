@@ -5,7 +5,7 @@ import { IgdbProvider } from "@/lib/media/providers/igdb";
 import { mockCatalogProvider } from "@/lib/media/providers/mock";
 import { TmdbProvider } from "@/lib/media/providers/tmdb";
 import { aggregateProviderSearch } from "@/lib/media/search";
-import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider, CatalogSearchResult, MediaProvider } from "@/lib/media/types";
+import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider, CatalogSearchResult, MediaProvider, WatchAvailability } from "@/lib/media/types";
 import type { ProviderIdentity } from "@/lib/media/identity";
 
 export function liveCatalogProviders(): CatalogProvider[] {
@@ -34,6 +34,11 @@ export async function getCatalogSeasonEpisodes(identity: ProviderIdentity, seaso
   if (identity.mediaType !== "tv") return [];
   const provider = providers.find((candidate) => candidate.name === identity.provider);
   return provider?.getSeasonEpisodes?.(identity.providerId, seasonNumber) ?? [];
+}
+
+export async function getWatchAvailability(identity: ProviderIdentity, country: string, providers = configuredCatalogProviders()): Promise<WatchAvailability | null> {
+  if (identity.provider !== "tmdb" || (identity.mediaType !== "movie" && identity.mediaType !== "tv")) return null;
+  return providers.find((provider) => provider.name === identity.provider)?.getWatchAvailability?.(identity.providerId, identity.mediaType, country) ?? null;
 }
 
 export async function discoverCatalog(providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
