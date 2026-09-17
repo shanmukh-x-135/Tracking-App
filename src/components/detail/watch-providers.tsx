@@ -8,12 +8,14 @@ import type { CatalogMedia, WatchAvailability, WatchProviderKind } from "@/lib/m
 
 const regions = [{ code: "IN", label: "India" }, { code: "US", label: "United States" }, { code: "GB", label: "United Kingdom" }, { code: "CA", label: "Canada" }, { code: "AU", label: "Australia" }];
 const labels: Record<WatchProviderKind, string> = { flatrate: "Stream", free: "Free", ads: "Free with ads", rent: "Rent", buy: "Buy" };
+const regionStorageKey = "mosaic.watch-region";
 
 export function WatchProviders({ media }: { media: Extract<CatalogMedia, { mediaType: "movie" | "tv" }> }) {
   const { state, mutate } = useMosaicState();
   const [availability, setAvailability] = useState<WatchAvailability | null>();
   const [failed, setFailed] = useState(false);
-  const region = state.watchRegion ?? "";
+  const [localRegion, setLocalRegion] = useState(() => typeof window === "undefined" ? "" : window.localStorage.getItem(regionStorageKey) ?? "");
+  const region = state.watchRegion ?? localRegion;
   useEffect(() => {
     if (!region) return;
     const controller = new AbortController();
@@ -23,7 +25,12 @@ export function WatchProviders({ media }: { media: Extract<CatalogMedia, { media
       .catch(() => { if (!controller.signal.aborted) { setFailed(true); setAvailability(null); } });
     return () => controller.abort();
   }, [media.mediaType, media.provider, media.providerId, region]);
-  const chooseRegion = (next: string) => { void mutate({ type: "settings.watchRegion", value: next || null }).catch(() => undefined); };
+  const chooseRegion = (next: string) => {
+    setLocalRegion(next);
+    if (next) window.localStorage.setItem(regionStorageKey, next);
+    else window.localStorage.removeItem(regionStorageKey);
+    void mutate({ type: "settings.watchRegion", value: next || null }).catch(() => undefined);
+  };
   const grouped = availability?.providers.reduce<Partial<Record<WatchProviderKind, WatchAvailability["providers"]>>>((all, provider) => ({ ...all, [provider.kind]: [...(all[provider.kind] ?? []), provider] }), {}) ?? {};
   return <section className="section watch-providers"><div className="section-head"><div><span className="eyebrow">Availability</span><h2>Where to watch</h2></div><label className="region-select">Watch region<select value={region} onChange={(event) => chooseRegion(event.target.value)}><option value="">Choose a region</option>{regions.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label></div>
     {!region ? <p className="muted">Choose your region to see local streaming, rental, and purchase availability.</p> : failed ? <p className="muted">Watch-provider data is temporarily unavailable.</p> : availability === undefined ? <p className="muted">Checking availability…</p> : !availability?.providers.length ? <p className="muted">No watch-provider data is available for your selected region.</p> : <><div className="provider-groups">{(["flatrate", "free", "ads", "rent", "buy"] as const).map((kind) => grouped[kind]?.length ? <div className="provider-group" key={kind}><h3>{labels[kind]}</h3><div>{grouped[kind].map((provider) => <span className="provider" key={`${kind}-${provider.id}`}>{provider.logoUrl && <Image src={provider.logoUrl} alt="" width={28} height={28}/>}<span>{provider.name}</span></span>)}</div></div> : null)}</div>
