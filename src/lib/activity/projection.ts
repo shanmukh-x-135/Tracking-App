@@ -85,7 +85,15 @@ export function projectActivity(state: MosaicState): ActivityEvent[] {
       progressPercent: reading.progressPercent,
       detail: reading.totalPages ? `${reading.currentPage ?? 0} / ${reading.totalPages} pages` : undefined,
     })),
-  ].sort((first, second) => second.occurredAt.localeCompare(first.occurredAt) || second.eventId.localeCompare(first.eventId));
+  ].sort((first, second) => {
+    const dateOrder = second.occurredAt.localeCompare(first.occurredAt);
+    if (dateOrder) return dateOrder;
+    // Movie diary dates are day-granular. When an original watch and a
+    // deliberate rewatch share a date, surface the later rewatch first rather
+    // than letting an opaque UUID decide their visible order.
+    const repeatOrder = Number(Boolean(second.repeatKind)) - Number(Boolean(first.repeatKind));
+    return repeatOrder || second.eventId.localeCompare(first.eventId);
+  });
 }
 
 export function activityLabel(event: ActivityEvent): string {
