@@ -8,5 +8,6 @@ export default defineConfig({
     browserName: "chromium",
     headless: true,
     screenshot: "only-on-failure",
+    trace: "retain-on-failure",
   },
 });
