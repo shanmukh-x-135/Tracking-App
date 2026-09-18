@@ -17,6 +17,8 @@ export interface Database {
       episode_watch_logs: { Row: Row<EpisodeWatchRow>; Insert: Insert<EpisodeWatchRow>; Update: Update<EpisodeWatchRow>; Relationships: [] };
       episode_ratings: { Row: Row<EpisodeRatingRow>; Insert: Insert<EpisodeRatingRow>; Update: Update<EpisodeRatingRow>; Relationships: [] };
       tv_season_states: { Row: Row<TvSeasonStateRow>; Insert: Insert<TvSeasonStateRow>; Update: Update<TvSeasonStateRow>; Relationships: [] };
+      tv_series_states: { Row: Row<TvSeriesStateRow>; Insert: Insert<TvSeriesStateRow>; Update: Update<TvSeriesStateRow>; Relationships: [] };
+      tv_history_logs: { Row: Row<TvHistoryLogRow>; Insert: Insert<TvHistoryLogRow>; Update: Update<TvHistoryLogRow>; Relationships: [] };
       game_playthroughs: { Row: Row<GamePlaythroughRow>; Insert: Insert<GamePlaythroughRow>; Update: Update<GamePlaythroughRow>; Relationships: [] };
       book_readings: { Row: Row<BookReadingRow>; Insert: Insert<BookReadingRow>; Update: Update<BookReadingRow>; Relationships: [] };
       lists: { Row: Row<ListRow>; Insert: Insert<ListRow>; Update: Update<ListRow>; Relationships: [] };
@@ -44,9 +46,11 @@ export interface RatingRow extends Timestamped { user_id: string; media_id: stri
 export interface ReviewRow extends Timestamped { user_id: string; media_id: string; rating_id: string|null; body: string; contains_spoilers: boolean }
 export interface MovieWatchRow extends Timestamped { user_id: string; media_id: string; watched_at: string; is_rewatch: boolean; rating: number|null; review: string|null; viewing_context: "theater"|"streaming"|"television"|"physical"|"digital"|"other"|null; streaming_service: string|null }
 export interface TvEpisodeRow extends Timestamped { series_media_id: string; provider: string; external_id: string; season_number: number; episode_number: number; title: string; air_date: string|null; runtime_minutes: number|null; still_url: string|null; metadata: Json }
-export interface EpisodeWatchRow extends Timestamped { user_id: string; episode_id: string; watched_at: string; is_rewatch: boolean }
+export interface EpisodeWatchRow extends Timestamped { user_id: string; episode_id: string; watched_at: string; is_rewatch: boolean; rating: number|null; review: string|null; contains_spoilers: boolean; tags: Json }
 export interface EpisodeRatingRow extends Timestamped { user_id: string; episode_id: string; rating: number }
-export interface TvSeasonStateRow extends Timestamped { user_id: string; series_media_id: string; season_number: number; state: "watching"|"completed"|"paused"|"dropped"; provenance: "explicit_episode"|"bulk_season"|"imported_state"; completed_on: string|null; metadata: Json }
+export interface TvSeasonStateRow extends Timestamped { user_id: string; series_media_id: string; season_number: number; state: "watchlist"|"watching"|"completed"|"paused"|"dropped"; provenance: "explicit_episode"|"bulk_season"|"imported_state"; completed_on: string|null; metadata: Json }
+export interface TvSeriesStateRow extends Timestamped { user_id: string; series_media_id: string; state_facts: Json; source_metadata: Json }
+export interface TvHistoryLogRow extends Timestamped { user_id: string; series_media_id: string; target_type: "show"|"season"; season_number: number|null; occurred_at: string; is_rewatch: boolean; rating: number|null; review: string|null; contains_spoilers: boolean; tags: Json; source_metadata: Json }
 export interface GamePlaythroughRow extends Timestamped { user_id: string; media_id: string; status: string; platform: string|null; started_at: string|null; completed_at: string|null; playtime_minutes: number; progress_percent: number|null; rating: number|null; notes: string|null }
 export interface BookReadingRow extends Timestamped { user_id: string; media_id: string; status: string; started_at: string|null; finished_at: string|null; current_page: number|null; total_pages: number|null; progress_percent: number|null; rating: number|null }
 export interface ListRow extends Timestamped { user_id: string; title: string; description: string; visibility: "public"|"unlisted"|"private" }

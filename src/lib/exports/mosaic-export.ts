@@ -18,6 +18,9 @@ export const exportSections = [
   "book-readings",
   "lists",
   "list-items",
+  "series-states",
+  "season-states",
+  "tv-history",
 ] as const;
 
 export type ExportSection = typeof exportSections[number];
@@ -36,6 +39,9 @@ export interface MosaicExportData {
   "book-readings": Record<string, unknown>[];
   lists: Record<string, unknown>[];
   "list-items": Record<string, unknown>[];
+  "series-states"?: Record<string, unknown>[];
+  "season-states"?: Record<string, unknown>[];
+  "tv-history"?: Record<string, unknown>[];
 }
 
 interface ExportManifest {
@@ -72,8 +78,8 @@ export function recordsToCsv(value: ExportValue): string {
 export function createMosaicExportArchive(data: MosaicExportData, exportedAt = new Date().toISOString()): Uint8Array {
   const files: Record<string, Uint8Array> = {};
   for (const section of exportSections) {
-    files[`json/${section}.json`] = strToU8(`${JSON.stringify(data[section], null, 2)}\n`);
-    files[`csv/${section}.csv`] = strToU8(recordsToCsv(data[section]));
+    files[`json/${section}.json`] = strToU8(`${JSON.stringify(data[section] ?? [], null, 2)}\n`);
+    files[`csv/${section}.csv`] = strToU8(recordsToCsv(data[section] ?? []));
   }
   const manifest: ExportManifest = {
     mosaicExportVersion: MOSAIC_EXPORT_VERSION,
@@ -99,6 +105,9 @@ export function mosaicDataFromState(profile: AuthUser, state: MosaicState): Mosa
   state.reviews.forEach(({ media }) => remember(media));
   state.movieWatches.forEach(({ media }) => remember(media));
   state.episodeWatches.forEach(({ series }) => remember(series));
+  state.seriesStates.forEach(({ series }) => remember(series));
+  state.seasonStates.forEach(({ series }) => remember(series));
+  state.tvHistory.forEach(({ series }) => remember(series));
   state.gamePlaythroughs.forEach(({ media }) => remember(media));
   state.bookReadings.forEach(({ media }) => remember(media));
   state.lists.forEach(({ items }) => items.forEach(({ media }) => remember(media)));
@@ -110,7 +119,10 @@ export function mosaicDataFromState(profile: AuthUser, state: MosaicState): Mosa
     ratings: state.ratings.map((rating) => ({ id: null, mediaId: rating.mediaKey, rating: rating.value, createdAt: null, updatedAt: rating.updatedAt })),
     reviews: state.reviews.map((review) => ({ id: review.id, mediaId: mediaId(review.media), body: review.body, containsSpoilers: review.containsSpoilers, rating: review.rating ?? null, createdAt: null, updatedAt: review.updatedAt })),
     "movie-watch-logs": state.movieWatches.map((watch) => ({ id: watch.id, mediaId: mediaId(watch.media), watchedAt: watch.watchedAt, isRewatch: watch.isRewatch, rating: watch.rating ?? null, review: watch.review ?? null, viewingContext: watch.viewingContext ?? null, streamingService: watch.streamingService ?? null, createdAt: null, updatedAt: null })),
-    "episode-watches": state.episodeWatches.map((watch) => ({ id: watch.id, seriesMediaId: mediaId(watch.series), seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, episodeTitle: watch.episodeTitle ?? null, watchedAt: watch.watchedAt, isRewatch: false, createdAt: null, updatedAt: null })),
+    "episode-watches": state.episodeWatches.map((watch) => ({ id: watch.id, seriesMediaId: mediaId(watch.series), seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, episodeTitle: watch.episodeTitle ?? null, watchedAt: watch.watchedAt, isRewatch: watch.isRewatch ?? false, rating: watch.rating ?? null, review: watch.review ?? null, containsSpoilers: watch.containsSpoilers ?? false, tags: watch.tags ?? [], createdAt: null, updatedAt: null })),
+    "series-states": state.seriesStates.map((entry) => ({ id: entry.id, seriesMediaId: mediaId(entry.series), facts: entry.facts, updatedAt: entry.updatedAt })),
+    "season-states": state.seasonStates.map((entry) => ({ ...entry, series: undefined, seriesMediaId: mediaId(entry.series) })),
+    "tv-history": state.tvHistory.map((entry) => ({ ...entry, series: undefined, seriesMediaId: mediaId(entry.series) })),
     "episode-ratings": state.episodeWatches.flatMap((watch) => watch.rating === undefined ? [] : [{ id: null, seriesMediaId: mediaId(watch.series), seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, rating: watch.rating, createdAt: null, updatedAt: null }]),
     "game-playthroughs": state.gamePlaythroughs.map((playthrough) => ({ id: playthrough.id, mediaId: mediaId(playthrough.media), status: playthrough.status, platform: playthrough.platform ?? null, startedAt: null, completedAt: null, playtimeMinutes: playthrough.playtimeMinutes, progressPercent: playthrough.progressPercent ?? null, rating: playthrough.rating ?? null, notes: null, createdAt: null, updatedAt: playthrough.updatedAt })),
     "book-readings": state.bookReadings.map((reading) => ({ id: reading.id, mediaId: mediaId(reading.media), status: reading.status, startedAt: null, finishedAt: null, currentPage: reading.currentPage ?? null, totalPages: reading.totalPages ?? null, progressPercent: reading.progressPercent ?? null, rating: reading.rating ?? null, createdAt: null, updatedAt: reading.updatedAt })),

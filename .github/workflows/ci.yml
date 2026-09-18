@@ -63,7 +63,7 @@ jobs:
           set -a
           source /tmp/mosaic-supabase.env
           set +a
-          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" node tests/live-supabase.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node tests/live-supabase.mjs
       - name: Stop local Supabase
         if: always()
         run: npx supabase stop --no-backup

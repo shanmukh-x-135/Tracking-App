@@ -4,8 +4,11 @@ import { catalogMediaSchema } from "@/lib/persistence/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
+export const maxDuration = 300;
+
 const requestSchema = z.object({
   conflictPolicy: z.enum(["keep_mosaic", "use_imported", "review"]),
+  importFavorites: z.boolean().default(true),
   resolutions: z.array(z.object({
     sourceRecordKey: z.string().min(1).max(512),
     decision: z.enum(["accepted", "review", "skipped"]),
@@ -28,13 +31,17 @@ export async function POST(request: Request, context: { params: Promise<{ jobId:
   if (!parsed.success) return NextResponse.json({ error: "The import decisions were invalid." }, { status: 400 });
   if (parsed.data.resolutions.some((resolution) => resolution.decision === "review")) return NextResponse.json({ error: "Resolve or skip every import row before continuing." }, { status: 409 });
 
-  const { data: job, error: jobError } = await client.from("import_jobs").select("id,status").eq("id", jobId).eq("user_id", userId).single();
+  const { data: job, error: jobError } = await client.from("import_jobs").select("id,status,metadata").eq("id", jobId).eq("user_id", userId).single();
   if (jobError || !job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
   if (!["needs_review", "ready", "failed", "completed"].includes(String(job.status))) return NextResponse.json({ error: "This import job cannot be applied right now." }, { status: 409 });
 
-  const { data: records, error: recordsError } = await client.from("import_records").select("id,source_record_key,media_type").eq("import_job_id", jobId).eq("user_id", userId);
-  if (recordsError) return NextResponse.json({ error: "Import records could not be loaded." }, { status: 500 });
-  const recordByKey = new Map((records ?? []).map((record) => [String(record.source_record_key), record]));
+  const recordByKey = new Map<string, { id: string; source_record_key: string; media_type: string }>();
+  for (let offset = 0; offset < 20_000; offset += 500) {
+    const { data: records, error: recordsError } = await client.from("import_records").select("id,source_record_key,media_type").eq("import_job_id", jobId).eq("user_id", userId).order("id").range(offset, offset + 499);
+    if (recordsError) return NextResponse.json({ error: "Import records could not be loaded." }, { status: 500 });
+    for (const record of records ?? []) recordByKey.set(record.source_record_key, record);
+    if ((records?.length ?? 0) < 500) break;
+  }
   const seen = new Set<string>();
   for (const resolution of parsed.data.resolutions) {
     if (seen.has(resolution.sourceRecordKey)) return NextResponse.json({ error: "An import decision was repeated." }, { status: 400 });
@@ -45,7 +52,8 @@ export async function POST(request: Request, context: { params: Promise<{ jobId:
   }
   if (seen.size !== recordByKey.size) return NextResponse.json({ error: "Resolve or skip every import row before continuing." }, { status: 409 });
 
-  await client.from("import_jobs").update({ status: "importing", conflict_policy: parsed.data.conflictPolicy, started_at: new Date().toISOString(), error_summary: null }).eq("id", jobId).eq("user_id", userId);
+  const { error: startError } = await client.from("import_jobs").update({ status: "importing", conflict_policy: parsed.data.conflictPolicy, metadata: jsonValue({ ...(typeof job.metadata === "object" && job.metadata !== null ? job.metadata : {}), importFavorites: parsed.data.importFavorites }), started_at: new Date().toISOString(), error_summary: null }).eq("id", jobId).eq("user_id", userId);
+  if (startError) return NextResponse.json({ error: "The import could not be started." }, { status: 500 });
   let imported = 0;
   let skipped = 0;
   let conflicts = 0;

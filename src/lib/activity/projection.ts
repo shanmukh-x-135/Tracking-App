@@ -3,7 +3,7 @@ import { mediaKey } from "@/lib/persistence/domain";
 import type { MosaicState } from "@/lib/persistence/types";
 
 export type ActivityDomain = "movie" | "tv" | "game" | "book";
-export type ActivityEventType = "movie_watch" | "episode_watch" | "game_update" | "book_update";
+export type ActivityEventType = "movie_watch" | "episode_watch" | "tv_watch" | "game_update" | "book_update";
 export type RepeatKind = "rewatch" | "reread" | "replay";
 
 export interface ActivityEvent {
@@ -11,7 +11,7 @@ export interface ActivityEvent {
   media: CatalogMedia;
   mediaKey: string;
   mediaType: ActivityDomain;
-  targetType: "media" | "episode" | "playthrough" | "reading";
+  targetType: "media" | "season" | "episode" | "playthrough" | "reading";
   occurredAt: string;
   createdAt: string;
   eventType: ActivityEventType;
@@ -19,6 +19,7 @@ export interface ActivityEvent {
   repeatKind?: RepeatKind;
   detail?: string;
   episode?: { seasonNumber: number; episodeNumber: number; title?: string };
+  seasonNumber?: number;
   progressPercent?: number;
 }
 
@@ -55,8 +56,10 @@ export function projectActivity(state: MosaicState): ActivityEvent[] {
       createdAt: watch.watchedAt,
       eventType: "episode_watch",
       rating: watch.rating,
+      repeatKind: watch.isRewatch ? "rewatch" : undefined,
       episode: { seasonNumber: watch.seasonNumber, episodeNumber: watch.episodeNumber, title: watch.episodeTitle },
     })),
+    ...state.tvHistory.map((watch): ActivityEvent => ({ eventId: `tv-history:${watch.id}`, media: watch.series, mediaKey: mediaKey(watch.series), mediaType: "tv", targetType: watch.targetType === "season" ? "season" : "media", seasonNumber: watch.seasonNumber, occurredAt: watch.occurredAt, createdAt: watch.occurredAt, eventType: "tv_watch", rating: watch.rating, repeatKind: watch.isRewatch ? "rewatch" : undefined })),
     ...state.gamePlaythroughs.map((playthrough): ActivityEvent => ({
       eventId: `game-playthrough:${playthrough.id}`,
       media: playthrough.media,
@@ -98,7 +101,8 @@ export function projectActivity(state: MosaicState): ActivityEvent[] {
 
 export function activityLabel(event: ActivityEvent): string {
   if (event.eventType === "movie_watch") return event.repeatKind ? "Rewatched" : "Watched";
-  if (event.eventType === "episode_watch") return `Watched S${String(event.episode?.seasonNumber).padStart(2, "0")}E${String(event.episode?.episodeNumber).padStart(2, "0")}`;
+  if (event.eventType === "episode_watch") return `${event.repeatKind ? "Rewatched" : "Watched"} S${String(event.episode?.seasonNumber).padStart(2, "0")}E${String(event.episode?.episodeNumber).padStart(2, "0")}`;
+  if (event.eventType === "tv_watch") return `${event.repeatKind ? "Rewatched" : "Watched"} ${event.targetType === "season" ? `season ${event.seasonNumber}` : "series"}`;
   if (event.eventType === "game_update") return event.progressPercent === 100 ? "Completed playthrough" : "Updated playthrough";
   return event.progressPercent === 100 ? "Finished reading" : "Updated reading";
 }

@@ -528,9 +528,9 @@ button { color: inherit; }
   .preview-stats { grid-template-columns:repeat(2,1fr); }
   .reconcile-match { grid-template-columns:1fr; }
   .history-card { grid-template-columns:46px minmax(0,1fr); }.history-card time { grid-column:2; font-size:10px; }
-  .import-footer { bottom:88px; }
+  .import-footer { bottom:88px; flex-wrap:wrap; }
   .import-footer small { display:none; }
-  .conflict-policy { display:none; }
+  .conflict-policy { display:flex; margin-left:0; width:100%; order:3; }
   .import-footer .button { padding:0 12px; }
   .history-row { grid-template-columns:38px 1fr auto; }
   .history-row .button { grid-column:2/-1; justify-self:start; }

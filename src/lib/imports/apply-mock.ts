@@ -1,4 +1,5 @@
 import { mediaKey } from "@/lib/persistence/domain";
+import { applySerializdMockRecord } from "@/lib/imports/apply-serializd-mock";
 import type { ImportConflictPolicy, ReconciliationRow } from "@/lib/imports/types";
 import type { LibraryEntry, MosaicState, UserReview } from "@/lib/persistence/types";
 
@@ -27,6 +28,13 @@ export function applyMockImport(state: MosaicState, rows: ReconciliationRow[], p
   for (const row of rows) {
     if (row.decision !== "accepted" || !row.selected) { skipped += 1; continue; }
     const { record, selected: media } = row;
+    if (record.mediaType === "tv" && record.source === "serializd_normalized_v1") {
+      if (record.defaultImport === false) { skipped++; continue; }
+      const result = applySerializdMockRecord(next, record, media, policy, now);
+      conflicts += result.conflicts;
+      if (result.changed) imported++; else { skipped++; wasReimport = true; }
+      continue;
+    }
     const key = mediaKey(media);
     const timestamp = historicalDate(row, now);
     const importedId = `import:${record.sourceRecordKey}`;

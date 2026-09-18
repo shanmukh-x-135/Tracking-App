@@ -18,7 +18,8 @@ import { createMosaicExportArchive, mosaicDataFromState, mosaicExportFilename } 
 const sources: { value: ImportSource; label: string; detail: string; native: boolean }[] = [
   { value: "letterboxd", label: "Letterboxd", detail: "Official account export (.zip)", native: true },
   { value: "generic_movies", label: "Movies CSV", detail: "Mosaic movie template", native: false },
-  { value: "serializd", label: "Serializd", detail: "Use Mosaic's series CSV template", native: false },
+  { value: "serializd_normalized_v1", label: "Serializd JSON", detail: "Recommended: prepared normalized export v1", native: false },
+  { value: "serializd", label: "Serializd CSV", detail: "Legacy / limited: Mosaic series template", native: false },
   { value: "backloggd", label: "Backloggd", detail: "Use Mosaic's games CSV template", native: false },
   { value: "fable", label: "Fable", detail: "Use Mosaic's books CSV template", native: false },
 ];
@@ -46,6 +47,7 @@ function ReconciliationItem({ row, onChange }: { row: ReconciliationRow; onChang
       setResults((body.items ?? []).filter((media) => media.mediaType === row.record.mediaType).slice(0, 4));
     } finally { setIsSearching(false); }
   }
+  if (row.record.source === "serializd_normalized_v1") return <article className={`reconcile-row ${row.decision}`}><div className="reconcile-source"><span className="type-badge">Series</span><strong>{row.selected?.title ?? row.record.title}</strong><small>{row.record.mediaType === "tv" ? [row.record.recordKind?.replaceAll("_", " "),row.record.targetType,row.record.isRewatch ? "Rewatch" : undefined].filter(Boolean).join(" · ") : ""}</small></div><div className="reconcile-match"><strong>{row.decision === "skipped" ? "Skipped duplicate / source record" : row.match.confidence === "exact" ? "Resolved from exact TMDB ID" : "Provider target unresolved — retry preview or skip"}</strong><small>{row.record.providerIdentity?.providerId}</small></div>{row.decision !== "skipped" && <button className="button ghost" type="button" onClick={() => onChange(skipReconciliationRow(row))}>Skip</button>}</article>;
   return <article className={`reconcile-row ${row.decision}`}>
     <div className="reconcile-source"><span className="type-badge">{row.record.mediaType === "tv" ? "Series" : row.record.mediaType}</span><strong>{row.record.title}</strong><small>{[row.record.year, row.record.rating ? `${row.record.rating}★` : undefined].filter(Boolean).join(" · ") || "No extra metadata"}</small></div>
     <div className="reconcile-match">
@@ -86,10 +88,12 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [conflictPolicy, setConflictPolicy] = useState<ImportConflictPolicy>("review");
+  const [importFavorites, setImportFavorites] = useState(true);
   const [result, setResult] = useState<ImportApplyResult>();
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [undoingId, setUndoingId] = useState<string>();
   const [isExporting, setIsExporting] = useState(false);
+  const [visibleRecords, setVisibleRecords] = useState(50);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -133,7 +137,7 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
     if (!preview) return;
     setIsImporting(true); setError(undefined);
     try {
-      const applied = await applyImportPreview(user.id, preview, conflictPolicy);
+      const applied = await applyImportPreview(user.id, preview, conflictPolicy, importFavorites);
       await refresh();
       await refreshHistory();
       setResult(applied);
@@ -176,8 +180,9 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
   }
 
   const counts = preview?.counts;
-  const canImport = Boolean(preview && counts && counts.needsReview === 0 && preview.rows.some((row) => row.decision === "accepted"));
+  const canImport = Boolean(preview && counts && counts.invalid === 0 && counts.needsReview === 0 && preview.rows.some((row) => row.decision === "accepted"));
   const selectedSource = sources.find((item) => item.value === source)!;
+  const isNormalized = source === "serializd_normalized_v1";
   const template = source === "serializd" ? "series" : source === "backloggd" ? "games" : source === "fable" ? "books" : source.replace("generic_", "");
   const summary = useMemo(() => counts ? [
     ["Records", counts.total], ["Matched", counts.automaticMatches], ["Needs review", counts.needsReview], ["Watch history", counts.movieWatches + counts.episodeWatches],
@@ -193,12 +198,14 @@ function AuthenticatedDataSettings({ user }: { user: AuthUser }) {
 
     {!preview ? <><div className="import-layout">
       <section><div className="section-head"><div><h2>Choose a source</h2><p>Native where a trustworthy export exists; templates everywhere else.</p></div></div><div className="source-grid">{sources.map((item) => <button type="button" key={item.value} className={`source-card ${source === item.value ? "selected" : ""}`} onClick={() => { setSource(item.value); setFile(undefined); }}><span className="source-icon">{item.native ? <FileArchive/> : <FileSpreadsheet/>}</span><span><strong>{item.label}</strong><small>{item.detail}</small></span>{source === item.value && <Check size={17}/>}</button>)}</div></section>
-      <section className="upload-panel glass"><span className="eyebrow">{selectedSource.label}</span><h2>Drop in your {source === "letterboxd" ? "export" : "CSV"}</h2><p>{selectedSource.detail}. Mosaic accepts files up to 12 MB and shows a dry run first.</p>{source !== "letterboxd" && <a className="text-link template-link" href={`/templates/${template}.csv`} download>Download the {template} template ↓</a>}<button className="upload-drop" type="button" onClick={() => input.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); setFile(event.dataTransfer.files[0]); }}><Upload size={25}/><strong>{file?.name ?? "Choose a file or drop it here"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB` : source === "letterboxd" ? ".zip" : ".csv"}</small></button><input ref={input} className="sr-only" type="file" accept={source === "letterboxd" ? ".zip,application/zip" : ".csv,text/csv"} onChange={(event) => setFile(event.target.files?.[0])}/>{error && <p className="form-error"><AlertCircle size={14}/>{error}</p>}<button className="button accent import-continue" type="button" disabled={!file || isParsing} onClick={() => void parseFile()}>{isParsing ? <><LoaderCircle className="spin" size={16}/>Parsing securely…</> : <>Preview import<ArrowRight size={16}/></>}</button></section>
+      <section className="upload-panel glass"><span className="eyebrow">{selectedSource.label}</span><h2>Drop in your {source === "letterboxd" ? "export" : isNormalized ? "normalized JSON" : "CSV"}</h2><p>{selectedSource.detail}. Mosaic accepts files up to 12 MB and shows a dry run first.</p>{source !== "letterboxd" && !isNormalized && <a className="text-link template-link" href={`/templates/${template}.csv`} download>Download the {template} template ↓</a>}<button className="upload-drop" type="button" onClick={() => input.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); setFile(event.dataTransfer.files[0]); }}><Upload size={25}/><strong>{file?.name ?? "Choose a file or drop it here"}</strong><small>{file ? `${(file.size / 1024).toFixed(1)} KB` : source === "letterboxd" ? ".zip" : isNormalized ? ".json" : ".csv"}</small></button><input ref={input} className="sr-only" type="file" accept={source === "letterboxd" ? ".zip,application/zip" : isNormalized ? ".json,application/json" : ".csv,text/csv"} onChange={(event) => setFile(event.target.files?.[0])}/>{error && <p className="form-error"><AlertCircle size={14}/>{error}</p>}<button className="button accent import-continue" type="button" disabled={!file || isParsing} onClick={() => void parseFile()}>{isParsing ? <><LoaderCircle className="spin" size={16}/>Parsing securely…</> : <>Preview import<ArrowRight size={16}/></>}</button></section>
     </div><section className="import-history"><div className="section-head"><div><h2>Import history</h2><p>Undo removes only unchanged rows created by that job.</p></div></div>{history.length ? <div className="history-list">{history.map((job) => <article className="history-row" key={job.id}><span className="history-icon"><Clock3 size={17}/></span><div><strong>{job.filename}</strong><small>{job.source.replace("generic_", "")} · {new Date(job.createdAt).toLocaleDateString()} · {job.totalRecords} records</small>{job.errorSummary && <small className="history-error">{job.errorSummary}</small>}</div><span className={`history-status ${job.status}`}>{job.status.replaceAll("_", " ")}</span>{job.status === "completed" && <button className="button ghost" type="button" disabled={undoingId === job.id} onClick={() => void undo(job)}>{undoingId === job.id ? <LoaderCircle className="spin" size={14}/> : <RotateCcw size={14}/>}Undo</button>}</article>)}</div> : <div className="history-empty">No imports yet. Your completed jobs will appear here.</div>}</section></> : <>
       <section className="preview-head"><div><span className="eyebrow">Dry run · {preview.filename}</span><h2>Review the matches</h2><p>High-confidence matches are selected. Ambiguous and unmatched rows wait for you.</p></div><div className="actions"><button className="button ghost" type="button" onClick={() => { setPreview(undefined); window.localStorage.removeItem(storageKey(user.id)); }}>Start over</button><button className="button" type="button" onClick={() => { const rows = acceptHighConfidence(preview.rows); savePreview({ ...preview, rows, counts: previewCounts(rows, preview.counts.duplicates, preview.counts.invalid) }); }}><Check size={15}/>Accept safe matches</button></div></section>
       <div className="preview-stats">{summary.map(([label, value]) => <div className="preview-stat" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
+      {preview.normalizedSummary && <section aria-label="Serializd source reconciliation"><h3>Recognized: Mosaic Serializd Normalized Export v1</h3><div className="preview-stats">{Object.entries(preview.normalizedSummary).map(([label,value]) => <div className="preview-stat" key={label}><strong>{value}</strong><span>{label.replaceAll("_", " ")}</span></div>)}</div><p className="muted">Completed seasons create watched state without fabricated episode dates. Event likes stay in provenance. Existing Mosaic data is preserved by the default conflict policy.</p></section>}
       {(preview.warnings.length > 0 || preview.errors.length > 0) && <div className="import-notices">{preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}{preview.errors.slice(0, 5).map((item) => <p className="error" key={`${item.row}:${item.field}:${item.message}`}>Row {item.row}: {item.message}</p>)}</div>}
-      <section className="reconcile-list" aria-label="Imported records">{preview.rows.map((row, index) => <ReconciliationItem key={row.record.sourceRecordKey} row={row} onChange={(next) => updateRow(index, next)}/>)}</section>
+      {preview.source === "serializd_normalized_v1" && <label><input type="checkbox" checked={importFavorites} onChange={(event) => setImportFavorites(event.target.checked)}/> Import explicit show favorites (never event likes)</label>}
+      <section className="reconcile-list" aria-label="Imported records">{preview.rows.slice(0,visibleRecords).map((row, index) => <ReconciliationItem key={row.record.sourceRecordKey} row={row} onChange={(next) => updateRow(index, next)}/>)}</section>{visibleRecords < preview.rows.length && <button className="button" type="button" onClick={() => setVisibleRecords((value) => value + 50)}>Show more records ({preview.rows.length - visibleRecords} remaining)</button>}
       <div className="import-footer glass"><div><strong>{counts?.needsReview ? `${counts.needsReview} record${counts.needsReview === 1 ? "" : "s"} still need review` : "Ready to import"}</strong><small>Nothing has been written to your library yet.</small></div><label className="conflict-policy">On conflicts<select value={conflictPolicy} onChange={(event) => setConflictPolicy(event.target.value as ImportConflictPolicy)}><option value="review">Keep Mosaic and report</option><option value="keep_mosaic">Keep Mosaic</option><option value="use_imported">Use imported</option></select></label><button className="button accent" type="button" disabled={!canImport || isImporting} onClick={() => void applyImport()}>{isImporting ? <><LoaderCircle className="spin" size={15}/>Importing…</> : <>Import selected records<ArrowRight size={16}/></>}</button></div>{error && <p className="form-error import-apply-error"><AlertCircle size={14}/>{error}</p>}
     </>}
   </div></div>;

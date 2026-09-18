@@ -113,18 +113,20 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
     case "movie.delete":
       next.movieWatches = next.movieWatches.filter((watch) => watch.id !== mutation.watchId);
       break;
-    case "episode.log":
-      next.episodeWatches = next.episodeWatches.filter((watch) => !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));
-      next.episodeWatches.unshift({ id: crypto.randomUUID(), series: mutation.series, seasonNumber: mutation.seasonNumber, episodeNumber: mutation.episodeNumber, episodeTitle: mutation.episodeTitle, watchedAt: mutation.watchedAt, rating: mutation.rating });
+    case "episode.log": {
+      const existing = next.episodeWatches.find((watch) => !watch.isRewatch && mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber);
+      next.episodeWatches = next.episodeWatches.filter((watch) => watch.isRewatch || !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));
+      next.episodeWatches.unshift({ ...existing, id: existing?.id ?? crypto.randomUUID(), series: mutation.series, seasonNumber: mutation.seasonNumber, episodeNumber: mutation.episodeNumber, episodeTitle: mutation.episodeTitle, watchedAt: mutation.watchedAt, rating: mutation.rating });
       ensureLibrary(mutation.series, "watching");
       break;
+    }
     case "season.state":
       next.seasonStates = next.seasonStates.filter((item) => !(mediaKey(item.series) === key && item.seasonNumber === mutation.seasonNumber));
       next.seasonStates.unshift({ id: crypto.randomUUID(), series: mutation.series, seasonNumber: mutation.seasonNumber, state: mutation.state, provenance: mutation.provenance, completedOn: mutation.completedOn, updatedAt: now });
       ensureLibrary(mutation.series, mutation.state === "completed" ? "completed" : mutation.state);
       break;
     case "episode.unwatch":
-      next.episodeWatches = next.episodeWatches.filter((watch) => !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));
+      next.episodeWatches = next.episodeWatches.filter((watch) => watch.isRewatch || !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));
       break;
     case "game.upsert": {
       next.gamePlaythroughs = next.gamePlaythroughs.filter(({ id }) => id !== mutation.playthroughId);
