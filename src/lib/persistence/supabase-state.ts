@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalogMediaSchema, statusMatchesMedia } from "@/lib/persistence/validation";
 import { calculateBookProgress } from "@/lib/persistence/domain";
+import { fetchRowsInDatabaseChunks } from "@/lib/persistence/database-query-chunks";
 import type { CurrentMediaState } from "@/lib/persistence/current-media-state";
 import { emptyMosaicState, type DomainMutation, type MosaicState, type PersistenceMutation, type SharedMutation } from "@/lib/persistence/types";
 import type { CatalogMedia } from "@/lib/media/types";
@@ -83,30 +84,29 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
   for (const result of [seriesStateResult,tvHistoryResult]) if (result.error && !["42P01","PGRST205"].includes(result.error.code)) assertResult(result.error);
   const lists = listsResult.data ?? [];
-  const listItemsResult = lists.length
-    ? await client.from("list_items").select("*").in("list_id", lists.map(({ id }) => id)).order("position")
-    : { data: [], error: null };
-  assertResult(listItemsResult.error);
+  const listItems = await fetchRowsInDatabaseChunks(
+    lists.map(({ id }) => id),
+    (ids) => client.from("list_items").select("*").in("list_id", ids).order("position"),
+  );
   const episodeIds = (episodeWatchResult.data ?? []).map(({ episode_id }) => episode_id);
-  const episodesResult = episodeIds.length ? await client.from("tv_episodes").select("*").in("id", episodeIds) : { data: [], error: null };
-  assertResult(episodesResult.error);
-  const episodeRatingsResult = episodeIds.length ? await client.from("episode_ratings").select("*").eq("user_id", userId).in("episode_id", episodeIds) : { data: [], error: null };
-  assertResult(episodeRatingsResult.error);
+  const [episodes, episodeRatings] = await Promise.all([
+    fetchRowsInDatabaseChunks(episodeIds, (ids) => client.from("tv_episodes").select("*").in("id", ids)),
+    fetchRowsInDatabaseChunks(episodeIds, (ids) => client.from("episode_ratings").select("*").eq("user_id", userId).in("episode_id", ids)),
+  ]);
   const mediaIds = new Set<string>();
   for (const row of libraryResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of ratingsResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of reviewsResult.data ?? []) mediaIds.add(row.media_id);
-  for (const row of listItemsResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of listItems) mediaIds.add(row.media_id);
   for (const row of movieResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
-  for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of episodes) mediaIds.add(row.series_media_id);
   for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
   for (const row of seriesStateResult.data ?? []) mediaIds.add(row.series_media_id);
   for (const row of tvHistoryResult.data ?? []) mediaIds.add(row.series_media_id);
-  const mediaResult = mediaIds.size ? await client.from("media_items").select("*").in("id", [...mediaIds]) : { data: [], error: null };
-  assertResult(mediaResult.error);
-  const mediaById = new Map((mediaResult.data ?? []).map((row) => [row.id, catalogFromRow(row)]));
+  const mediaRows = await fetchRowsInDatabaseChunks([...mediaIds], (ids) => client.from("media_items").select("*").in("id", ids));
+  const mediaById = new Map(mediaRows.map((row) => [row.id, catalogFromRow(row)]));
   const state = emptyMosaicState();
   state.watchRegion = profileResult.data?.watch_region ?? undefined;
   state.library = (libraryResult.data ?? []).flatMap((row) => {
@@ -124,7 +124,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   state.lists = lists.map((list) => ({
     id: list.id, title: list.title, description: list.description, visibility: list.visibility,
     updatedAt: list.updated_at,
-    items: (listItemsResult.data ?? []).filter((item) => item.list_id === list.id).flatMap((item) => {
+    items: listItems.filter((item) => item.list_id === list.id).sort((first, second) => first.position - second.position).flatMap((item) => {
       const media = mediaById.get(item.media_id);
       return media ? [{ id: item.id, media, position: item.position, note: item.note ?? undefined }] : [];
     }),
@@ -133,11 +133,11 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     const media = mediaById.get(row.media_id);
     return media ? [{ id: row.id, media, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? undefined, review: row.review ?? undefined, viewingContext: row.viewing_context ?? undefined, streamingService: row.streaming_service ?? undefined }] : [];
   });
-  const episodesById = new Map((episodesResult.data ?? []).map((episode) => [episode.id, episode]));
+  const episodesById = new Map(episodes.map((episode) => [episode.id, episode]));
   state.episodeWatches = (episodeWatchResult.data ?? []).flatMap((row) => {
     const episode = episodesById.get(row.episode_id);
     const series = episode ? mediaById.get(episode.series_media_id) : undefined;
-    return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? episodeRatingsResult.data?.find((rating) => rating.episode_id === episode.id)?.rating, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
+    return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? episodeRatings.find((rating) => rating.episode_id === episode.id)?.rating, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
   });
   state.seasonStates = (seasonStateResult.data ?? []).flatMap((row) => {
     const series = mediaById.get(row.series_media_id);
@@ -182,22 +182,16 @@ export async function readSupabaseCurrentMediaState(client: Client, userId: stri
   [libraryResult, ratingsResult, gameResult, bookResult, episodeWatchResult, seasonStateResult].forEach(({ error }) => assertResult(error));
 
   const episodeIds = (episodeWatchResult.data ?? []).map(({ episode_id }) => episode_id);
-  const episodesResult = episodeIds.length
-    ? await client.from("tv_episodes").select("id,series_media_id").in("id", episodeIds)
-    : { data: [], error: null };
-  assertResult(episodesResult.error);
+  const episodes = await fetchRowsInDatabaseChunks(episodeIds, (ids) => client.from("tv_episodes").select("id,series_media_id").in("id", ids));
   const mediaIds = new Set<string>();
   for (const row of libraryResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of ratingsResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
-  for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
-  const mediaResult = mediaIds.size
-    ? await client.from("media_items").select("id,provider,media_type,external_id").in("id", [...mediaIds])
-    : { data: [], error: null };
-  assertResult(mediaResult.error);
-  const keyByMediaId = new Map((mediaResult.data ?? []).map((row) => [row.id, `${row.provider}:${row.media_type}:${row.external_id}`]));
+  for (const row of episodes) mediaIds.add(row.series_media_id);
+  const mediaRows = await fetchRowsInDatabaseChunks([...mediaIds], (ids) => client.from("media_items").select("id,provider,media_type,external_id").in("id", ids));
+  const keyByMediaId = new Map(mediaRows.map((row) => [row.id, `${row.provider}:${row.media_type}:${row.external_id}`]));
   const snapshot = new Map<string, CurrentMediaState>();
   const ensure = (mediaId: string): CurrentMediaState | undefined => {
     const key = keyByMediaId.get(mediaId);
@@ -216,7 +210,7 @@ export async function readSupabaseCurrentMediaState(client: Client, userId: stri
   for (const row of gameResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
   for (const row of bookResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
   for (const row of seasonStateResult.data ?? []) { const item = ensure(row.series_media_id); if (item) Object.assign(item, { status: row.state, latestOccurredAt: row.updated_at }); }
-  const episodeById = new Map((episodesResult.data ?? []).map((row) => [row.id, row]));
+  const episodeById = new Map(episodes.map((row) => [row.id, row]));
   for (const row of episodeWatchResult.data ?? []) {
     const episode = episodeById.get(row.episode_id);
     const item = episode && ensure(episode.series_media_id);

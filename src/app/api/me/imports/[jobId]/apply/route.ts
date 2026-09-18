@@ -52,8 +52,11 @@ export async function POST(request: Request, context: { params: Promise<{ jobId:
   }
   if (seen.size !== recordByKey.size) return NextResponse.json({ error: "Resolve or skip every import row before continuing." }, { status: 409 });
 
-  const { error: startError } = await client.from("import_jobs").update({ status: "importing", conflict_policy: parsed.data.conflictPolicy, metadata: jsonValue({ ...(typeof job.metadata === "object" && job.metadata !== null ? job.metadata : {}), importFavorites: parsed.data.importFavorites }), started_at: new Date().toISOString(), error_summary: null }).eq("id", jobId).eq("user_id", userId);
-  if (startError) return NextResponse.json({ error: "The import could not be started." }, { status: 500 });
+  const { error: startError } = await client.from("import_jobs").update({ status: "importing", conflict_policy: parsed.data.conflictPolicy, metadata: jsonValue({ ...(typeof job.metadata === "object" && job.metadata !== null ? job.metadata : {}), importFavorites: parsed.data.importFavorites }), started_at: new Date().toISOString(), completed_at: null, error_summary: null }).eq("id", jobId).eq("user_id", userId);
+  if (startError) {
+    console.error("Import job could not be started.", { code: startError.code });
+    return NextResponse.json({ error: "The import could not be started." }, { status: 500 });
+  }
   let imported = 0;
   let skipped = 0;
   let conflicts = 0;

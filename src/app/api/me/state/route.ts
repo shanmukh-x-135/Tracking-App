@@ -14,7 +14,10 @@ export async function GET() {
   const { client, userId } = await authenticated();
   if (!userId) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   try { return NextResponse.json(await readSupabaseState(client, userId)); }
-  catch { return NextResponse.json({ error: "Your Mosaic data could not be loaded." }, { status: 500 }); }
+  catch (error) {
+    console.error("Mosaic state could not be loaded.", { message: error instanceof Error ? error.message : "Unknown error" });
+    return NextResponse.json({ error: "Your Mosaic data could not be loaded." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
