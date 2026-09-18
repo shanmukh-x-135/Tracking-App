@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { projectActivity } from "../src/lib/activity/projection";
 import { deriveContinue } from "../src/lib/home/continue";
+import { deriveAnalytics } from "../src/lib/analytics/derive";
 import { deriveCurrentMediaState } from "../src/lib/persistence/current-media-state";
 import { emptyMosaicState } from "../src/lib/persistence/types";
 import type { CatalogBook, CatalogGame, CatalogMovie, CatalogSeries } from "../src/lib/media/types";
@@ -50,4 +51,14 @@ test("Continue only includes unfinished series, games, and books", () => {
   assert.deepEqual(items.map(({ kind }) => kind), ["game", "series", "book"]);
   assert.equal(items.some(({ media }) => media.mediaType === "movie"), false);
   assert.equal(items.find(({ kind }) => kind === "series")?.label, "Next: S01E04");
+});
+
+test("analytics remain rebuildable and never become a source of truth", () => {
+  const state = emptyMosaicState();
+  state.movieWatches = [{ id: "one", media: movie, watchedAt: "2026-02-01", isRewatch: false }, { id: "two", media: movie, watchedAt: "2026-02-03", isRewatch: true }];
+  state.gamePlaythroughs = [{ id: "game", media: game, status: "completed", playtimeMinutes: 120, updatedAt: "2026-02-02T00:00:00.000Z" }];
+  const analytics = deriveAnalytics(state, "2026-02-04T00:00:00.000Z");
+  assert.deepEqual(analytics.movie, { watches: 2, rewatches: 1, uniqueMovies: 1 });
+  assert.deepEqual(analytics.game, { completedPlaythroughs: 1, playtimeMinutes: 120 });
+  assert.deepEqual(analytics.monthlyActivity, [{ month: "2026-02", count: 3 }]);
 });

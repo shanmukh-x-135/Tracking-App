@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { mediaHref } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { RatingInput } from "@/components/ui/rating-input";
+import { activityLabel, projectActivity } from "@/lib/activity/projection";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { MovieWatch } from "@/lib/persistence/types";
 import type { MediaType } from "@/types/media";
@@ -36,12 +37,18 @@ export function ActivityPage() {
   const requestedType = searchParams.get("type");
   const type = isDiary ? "movie" : filters.find(([, value]) => value === requestedType)?.[1] ?? null;
   const [editingWatch, setEditingWatch] = useState<MovieWatch>();
-  const activity = useMemo<ActivityItem[]>(() => [
-    ...state.movieWatches.map((watch) => ({ media: watch.media, date: watch.watchedAt, action: watch.isRewatch ? "Rewatched" : "Watched", detail: [watch.viewingContext, watch.streamingService, watch.rating ? `★ ${watch.rating}` : undefined].filter(Boolean).join(" · ") || undefined, movieWatch: watch })),
-    ...state.episodeWatches.map((watch) => ({ media: watch.series, date: watch.watchedAt, action: `Watched S${String(watch.seasonNumber).padStart(2, "0")}E${String(watch.episodeNumber).padStart(2, "0")}`, detail: watch.rating ? `★ ${watch.rating}` : undefined })),
-    ...state.gamePlaythroughs.map((item) => ({ media: item.media, date: item.updatedAt, action: item.status === "completed" ? "Completed" : "Updated playthrough", detail: item.progressPercent !== undefined ? `${item.progressPercent}% complete` : undefined })),
-    ...state.bookReadings.map((item) => ({ media: item.media, date: item.updatedAt, action: item.status === "finished" ? "Finished" : "Updated reading", detail: item.totalPages ? `${item.currentPage ?? 0} / ${item.totalPages} pages` : item.progressPercent !== undefined ? `${item.progressPercent}%` : undefined })),
-  ].filter((item) => !type || item.media.mediaType === type).sort((first, second) => second.date.localeCompare(first.date)), [state, type]);
+  const activity = useMemo<ActivityItem[]>(() => {
+    const movies = new Map(state.movieWatches.map((watch) => [watch.id, watch]));
+    return projectActivity(state)
+      .filter((event) => !type || event.mediaType === type)
+      .map((event) => ({
+        media: event.media,
+        date: event.occurredAt,
+        action: activityLabel(event),
+        detail: [event.detail, event.rating ? `★ ${event.rating}` : undefined].filter(Boolean).join(" · ") || undefined,
+        movieWatch: event.eventType === "movie_watch" ? movies.get(event.eventId.replace("movie-watch:", "")) : undefined,
+      }));
+  }, [state, type]);
 
   function selectType(value: MediaType | null) {
     const next = new URLSearchParams(searchParams.toString());

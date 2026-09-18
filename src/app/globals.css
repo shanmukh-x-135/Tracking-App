@@ -85,6 +85,7 @@ button { color: inherit; }
 .button.primary:hover { background:#fff; }
 .button.accent { background:var(--accent); color:#07101d; border-color:transparent; }
 .button.ghost { background:transparent; }
+.button.compact { min-height:32px; margin-top:12px; padding:0 11px; border-color:rgba(255,255,255,.16); background:rgba(7,9,12,.38); font-size:11px; }
 .home-content { padding:0 var(--page-gutter) 60px; }
 
 .shelf { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(155px, 1fr); grid-template-rows:auto; gap:14px; overflow-x:auto; overscroll-behavior-inline:contain; scroll-snap-type:x proximity; scrollbar-width:none; padding:4px 1px 12px; }
@@ -141,6 +142,7 @@ button { color: inherit; }
 .toolbar-right { display:flex; gap:8px; }
 .toolbar-select { display:flex; align-items:center; gap:8px; color:var(--foreground-muted); font-size:12px; font-weight:700; }.toolbar-select select { min-height:38px; border:1px solid var(--glass-border); border-radius:10px; padding:0 10px; background:var(--surface); color:var(--foreground); }
 .discover-sections { display:grid; gap:38px; margin-top:30px; }.discover-section .section-head { margin-bottom:15px; }.discover-section .section-head h2 { margin-top:3px; }
+.theme-explorer { margin-top:34px; }.theme-explorer .section-head { margin-bottom:10px; }.theme-explorer .filter-bar { width:100%; margin-top:0; padding:0; border-radius:0; background:none; border:0; box-shadow:none; backdrop-filter:none; }
 
 .list-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; margin-top:30px; }
 .list-card { border-radius:17px; border:1px solid rgba(255,255,255,.08); background:var(--background-elevated); overflow:hidden; transition:transform .2s,border-color .2s; }
@@ -159,6 +161,7 @@ button { color: inherit; }
 .profile-counts strong { display:block; font-size:21px; }
 .profile-counts span { font-size:11px; color:var(--foreground-muted); }
 .profile-header-personal { grid-template-columns:auto 1fr auto; }.profile-shortcuts { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }.profile-shortcuts a { display:inline-flex; align-items:center; gap:7px; min-height:38px; padding:0 12px; border:1px solid var(--glass-border); border-radius:10px; background:var(--background-elevated); color:var(--foreground-secondary); font-size:12px; font-weight:700; }.profile-shortcuts a:hover { color:var(--foreground); background:var(--surface); }.profile-secondary-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:10px; }.profile-secondary-stats div { padding:13px 15px; border:1px solid rgba(255,255,255,.06); border-radius:12px; background:rgba(255,255,255,.025); }.profile-secondary-stats strong,.profile-secondary-stats span { display:block; }.profile-secondary-stats strong { font-size:16px; }.profile-secondary-stats span { margin-top:4px; color:var(--foreground-muted); font-size:10px; text-transform:uppercase; letter-spacing:.07em; }.recent-log-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.recent-log-card { display:grid; grid-template-columns:55px minmax(0,1fr); gap:11px; padding:9px; border:1px solid rgba(255,255,255,.075); border-radius:13px; background:var(--background-elevated); }.recent-log-card:hover { background:var(--surface); }.recent-log-art { position:relative; aspect-ratio:2/3; overflow:hidden; border-radius:7px; background:var(--surface); }.recent-log-art img { object-fit:cover; }.recent-log-card small,.recent-log-card strong,.recent-log-card em,.recent-log-card time { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.recent-log-card small { color:var(--accent); font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }.recent-log-card strong { margin-top:3px; font-size:13px; }.recent-log-card em { margin-top:4px; color:var(--foreground-secondary); font-size:11px; font-style:normal; }.recent-log-card time { margin-top:4px; color:var(--foreground-muted); font-size:10px; }
+.profile-tabs { width:100%; margin-top:26px; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:28px; }
 .stat { padding:18px; border:1px solid rgba(255,255,255,.075); border-radius:14px; background:var(--background-elevated); }
 .stat strong { display:block; font-size:26px; letter-spacing:-.04em; }
