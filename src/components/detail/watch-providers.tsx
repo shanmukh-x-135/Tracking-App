@@ -14,7 +14,12 @@ export function WatchProviders({ media }: { media: Extract<CatalogMedia, { media
   const { state, mutate } = useMosaicState();
   const [availability, setAvailability] = useState<WatchAvailability | null>();
   const [failed, setFailed] = useState(false);
-  const [localRegion, setLocalRegion] = useState(() => typeof window === "undefined" ? "" : window.localStorage.getItem(regionStorageKey) ?? "");
+  // The first client render must match SSR. Read the browser-only fallback
+  // after hydration; the authenticated account region remains authoritative.
+  const [localRegion, setLocalRegion] = useState("");
+  useEffect(() => {
+    queueMicrotask(() => setLocalRegion(window.localStorage.getItem(regionStorageKey) ?? ""));
+  }, []);
   const region = state.watchRegion ?? localRegion;
   useEffect(() => {
     if (!region) return;

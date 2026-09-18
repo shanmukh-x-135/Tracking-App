@@ -11,6 +11,7 @@ let email: string | undefined;
 let user: User | undefined;
 let consoleErrors: string[] = [];
 let failedRequests: string[] = [];
+let pageErrors: string[] = [];
 
 test.skip(!productionUrl || !supabaseUrl || !serviceRoleKey, "Production verification requires protected-environment credentials.");
 test.describe.configure({ mode: "serial" });
@@ -68,6 +69,8 @@ test.beforeAll(async () => {
 test.beforeEach(({ page }) => {
   consoleErrors = [];
   failedRequests = [];
+  pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
@@ -80,6 +83,7 @@ test.afterEach(async ({ page }, testInfo) => {
     log(testInfo.title, `console_errors=${consoleErrors.length ? consoleErrors.join(" | ") : "none"}`);
     log(testInfo.title, `failed_network_requests=${failedRequests.length ? failedRequests.join(" | ") : "none"}`);
   }
+  expect(pageErrors, "uncaught runtime/hydration errors").toEqual([]);
 });
 
 test.afterAll(async () => {
