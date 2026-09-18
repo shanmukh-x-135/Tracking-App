@@ -15,7 +15,7 @@ export async function GET() {
   const userId = typeof claims?.claims?.sub === "string" ? claims.claims.sub : undefined;
   if (!userId) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-  const [profile, library, ratings, reviews, movieWatches, episodeWatches, episodeRatings, gamePlaythroughs, bookReadings, lists] = await Promise.all([
+  const [profile, library, ratings, reviews, movieWatches, episodeWatches, episodeRatings, gamePlaythroughs, bookReadings, lists, seriesStates, seasonStates, tvHistory] = await Promise.all([
     client.from("profiles").select("*").eq("id", userId).single(),
     client.from("library_entries").select("*").eq("user_id", userId),
     client.from("ratings").select("*").eq("user_id", userId),
@@ -26,8 +26,11 @@ export async function GET() {
     client.from("game_playthroughs").select("*").eq("user_id", userId),
     client.from("book_readings").select("*").eq("user_id", userId),
     client.from("lists").select("*").eq("user_id", userId),
+    client.from("tv_series_states").select("*").eq("user_id", userId),
+    client.from("tv_season_states").select("*").eq("user_id", userId),
+    client.from("tv_history_logs").select("*").eq("user_id", userId),
   ]);
-  const initial = [profile, library, ratings, reviews, movieWatches, episodeWatches, episodeRatings, gamePlaythroughs, bookReadings, lists];
+  const initial = [profile, library, ratings, reviews, movieWatches, episodeWatches, episodeRatings, gamePlaythroughs, bookReadings, lists, seriesStates, seasonStates, tvHistory];
   if (initial.some(({ error }) => error)) return NextResponse.json({ error: "Your Mosaic export could not be prepared." }, { status: 500 });
 
   const ownedLists = lists.data ?? [];
@@ -44,6 +47,7 @@ export async function GET() {
     for (const row of rows ?? []) if (typeof row.media_id === "string") mediaIds.add(row.media_id);
   }
   for (const episode of episodes.data ?? []) mediaIds.add(episode.series_media_id);
+  for (const entry of [...(seriesStates.data ?? []), ...(seasonStates.data ?? []), ...(tvHistory.data ?? [])]) mediaIds.add(entry.series_media_id);
   const media = mediaIds.size ? await client.from("media_items").select("*").in("id", [...mediaIds]) : { data: [], error: null };
   if (media.error) return NextResponse.json({ error: "Your Mosaic export could not be prepared." }, { status: 500 });
 
@@ -62,6 +66,9 @@ export async function GET() {
     "book-readings": (bookReadings.data ?? []).map((reading) => ({ id: reading.id, mediaId: reading.media_id, status: reading.status, startedAt: reading.started_at, finishedAt: reading.finished_at, currentPage: reading.current_page, totalPages: reading.total_pages, progressPercent: reading.progress_percent, rating: reading.rating, createdAt: reading.created_at, updatedAt: reading.updated_at })),
     lists: ownedLists.map((list) => ({ id: list.id, title: list.title, description: list.description, visibility: list.visibility, createdAt: list.created_at, updatedAt: list.updated_at })),
     "list-items": (listItems.data ?? []).map((item) => ({ id: item.id, listId: item.list_id, mediaId: item.media_id, position: item.position, note: item.note, createdAt: item.created_at })),
+    "series-states": seriesStates.data ?? [],
+    "season-states": seasonStates.data ?? [],
+    "tv-history": tvHistory.data ?? [],
   };
   const archive = createMosaicExportArchive(data);
   return new NextResponse(Buffer.from(archive), {

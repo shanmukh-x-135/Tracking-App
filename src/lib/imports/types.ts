@@ -2,7 +2,7 @@ import type { ProviderIdentity } from "@/lib/media/identity";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { MediaType } from "@/types/media";
 
-export type ImportSource = "letterboxd" | "backloggd" | "serializd" | "fable" | "generic_movies" | "generic_series" | "generic_games" | "generic_books";
+export type ImportSource = "letterboxd" | "backloggd" | "serializd" | "serializd_normalized_v1" | "fable" | "generic_movies" | "generic_series" | "generic_games" | "generic_books";
 export type ImportConflictPolicy = "keep_mosaic" | "use_imported" | "review";
 export type MatchConfidence = "exact" | "high" | "medium" | "ambiguous" | "unmatched";
 
@@ -45,10 +45,23 @@ export interface MovieImportRecord extends ImportRecordBase {
 
 export interface SeriesImportRecord extends ImportRecordBase {
   mediaType: "tv";
-  status?: "watching" | "completed" | "paused" | "dropped";
+  status?: "watchlist" | "watching" | "completed" | "paused" | "dropped";
+  recordKind?: "show_state" | "season_state" | "event";
+  targetType?: "show" | "season" | "episode";
+  tmdbSeasonId?: number;
+  seasonState?: "completed" | "watchlist";
+  stateFacts?: Record<string, boolean | null>;
+  isFavorite?: boolean;
+  defaultImport?: boolean;
+  isRewatch?: boolean;
+  isLog?: boolean;
+  containsSpoilers?: boolean;
+  tags?: string[];
+  sourceCreatedAt?: string;
   seasonNumber?: number;
   episodeNumber?: number;
   episodeTitle?: string;
+  episodeProviderId?: string;
   watchedDate?: string;
 }
 
@@ -79,6 +92,7 @@ export interface ParseResult {
   errors: ImportRowError[];
   duplicateCount: number;
   warnings: string[];
+  normalizedSummary?: Record<string, number>;
 }
 
 export interface ImportParser {
@@ -134,4 +148,5 @@ export interface ImportPreview {
   counts: ImportPreviewCounts;
   errors: ImportRowError[];
   warnings: string[];
+  normalizedSummary?: Record<string, number>;
 }

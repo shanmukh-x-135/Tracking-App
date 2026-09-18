@@ -12,6 +12,7 @@ export function reconcileRecord(record: NormalizedImportRecord, candidates: Cata
 
 export function selectCandidate(row: ReconciliationRow, media: CatalogMedia): ReconciliationRow {
   if (row.record.mediaType !== media.mediaType) throw new Error("The selected media type does not match the imported record.");
+  if (row.record.source === "serializd_normalized_v1" && (row.record.providerIdentity?.provider !== media.provider || row.record.providerIdentity.providerId !== media.providerId || (row.record.mediaType === "tv" && row.record.tmdbSeasonId !== undefined && row.record.seasonNumber === undefined))) throw new Error("Normalized Serializd records require their exact resolved TMDB target.");
   return { ...row, decision: "accepted", selected: media };
 }
 
@@ -38,7 +39,10 @@ export function previewCounts(rows: ReconciliationRow[], duplicateCount = 0, inv
       if (record.recordKind === "history" || (!record.recordKind && record.watchedDate)) movieWatches += 1;
       else if (record.recordKind === "list_item" && record.list) sourceLists.add(record.list.sourceListKey);
       else libraryEntries += 1;
-    } else if (record.mediaType === "tv" && record.seasonNumber !== undefined && record.episodeNumber !== undefined) episodeWatches += 1;
+    } else if (record.mediaType === "tv") {
+      if (record.recordKind === "show_state") libraryEntries += 1;
+      if (record.seasonNumber !== undefined && record.episodeNumber !== undefined && record.isLog !== false) episodeWatches += 1;
+    }
     else if (record.mediaType === "game") gamePlaythroughs += 1;
     else if (record.mediaType === "book") bookReadings += 1;
   }
@@ -48,7 +52,7 @@ export function previewCounts(rows: ReconciliationRow[], duplicateCount = 0, inv
     needsReview: rows.filter((row) => row.decision === "review").length,
     unmatched: rows.filter((row) => row.match.confidence === "unmatched").length,
     libraryEntries,
-    ratings: accepted.filter(({ record }) => record.rating !== undefined).length,
+    ratings: accepted.filter(({ record }) => record.rating !== undefined && !(record.mediaType === "tv" && record.source === "serializd_normalized_v1" && record.targetType === "season")).length,
     reviews: accepted.filter(({ record }) => Boolean(record.review)).length,
     movieWatches,
     episodeWatches,

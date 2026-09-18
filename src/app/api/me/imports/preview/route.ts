@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
-const sourceSchema = z.enum(["letterboxd", "backloggd", "serializd", "fable", "generic_movies", "generic_series", "generic_games", "generic_books"]);
+const sourceSchema = z.enum(["letterboxd", "backloggd", "serializd", "serializd_normalized_v1", "fable", "generic_movies", "generic_series", "generic_games", "generic_books"]);
 
 function jsonValue(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
@@ -64,9 +64,32 @@ export async function POST(request: Request) {
 
   const started = Date.now();
   const parsed = parser.parse(contents, filename);
+  if (source === "serializd_normalized_v1" && parsed.errors.length) return NextResponse.json({ error: "The normalized Serializd v1 file failed validation.", errors: parsed.errors }, { status: 422 });
   const rows = await reconcileImportRecords(parsed.records);
+  if (parsed.normalizedSummary) {
+    Object.assign(parsed.normalizedSummary, {
+      exact_resolved_records: rows.filter((row) => row.decision === "accepted").length,
+      unresolved_show_records: rows.filter((row) => row.decision === "review" && row.record.mediaType === "tv" && row.record.recordKind === "show_state").length,
+      unresolved_season_records: rows.filter((row) => row.decision === "review" && row.record.mediaType === "tv" && (row.record.recordKind === "season_state" || row.record.targetType === "season")).length,
+      unresolved_episode_records: rows.filter((row) => row.decision === "review" && row.record.mediaType === "tv" && row.record.targetType === "episode").length,
+      already_imported_records: 0,
+    });
+    if (live?.userId) {
+      const importedKeys = new Set<string>();
+      for (let offset = 0; offset < 20000; offset += 500) {
+        const { data, error } = await live.client.from("import_provenance").select("source_record_key").eq("user_id", live.userId).eq("source", source).in("undo_status", ["active", "preserved_modified"]).order("id").range(offset, offset + 499);
+        if (error) return NextResponse.json({ error: "Existing import provenance could not be checked. Please retry." }, { status: 500 });
+        for (const row of data ?? []) importedKeys.add(row.source_record_key);
+        if ((data?.length ?? 0) < 500) break;
+      }
+      parsed.normalizedSummary.already_imported_records = rows.filter((row) => importedKeys.has(row.record.sourceRecordKey)).length;
+    }
+  }
   const counts = previewCounts(rows, parsed.duplicateCount, parsed.errors.length);
-  const preview: ImportPreview = { source, filename, rows, counts, errors: parsed.errors, warnings: parsed.warnings };
+  const preview: ImportPreview = { source, filename, rows, counts, errors: parsed.errors, warnings: parsed.warnings, normalizedSummary: parsed.normalizedSummary };
+  // Authenticated, stateless Preview acceptance checks must never stage or apply
+  // personal exports against the shared hosted database.
+  if (new URL(request.url).searchParams.get("dryRun") === "1") return NextResponse.json(preview);
   if (!live?.userId) return NextResponse.json(preview);
   const userId = live.userId;
 
@@ -76,7 +99,7 @@ export async function POST(request: Request) {
     user_id: userId, source, status, original_filename: filename, file_sha256: fileHash,
     total_records: counts.total, matched_records: counts.automaticMatches, ambiguous_records: counts.needsReview,
     skipped_records: 0, failed_records: counts.invalid, duplicate_records: counts.duplicates,
-    duration_ms: Date.now() - started, metadata: { warnings: parsed.warnings },
+    duration_ms: Date.now() - started, metadata: jsonValue({ warnings: parsed.warnings, normalizedSummary: parsed.normalizedSummary }),
   }).select("id").single();
   if (jobError || !job) return NextResponse.json({ error: "Mosaic could not create the import job." }, { status: 500 });
 

@@ -15,6 +15,22 @@ Research was refreshed on 13 September 2026 against public, first-party document
 
 “Fallback” means the field is supported by Mosaic's documented template, not that Mosaic understands an undocumented native file.
 
+### Prepared Serializd normalized JSON
+
+Settings → Your data also accepts **Mosaic Serializd Normalized Export v1** JSON (`schema: mosaic.serializd.normalized-export`, `schema_version: 1`). This is a user-provided interchange contract, not a native Serializd export. Files are bounded to 12 MB and 20,000 total writable records and validated before provider lookup or job creation.
+
+Shows resolve only by exact TMDB TV ID. Season IDs must belong to that show and episode numbers must exist in that exact season. Missing source titles are valid; fuzzy title matching is never used. Dry runs show source totals, unresolved targets, disabled duplicate extras, and previous import provenance. Resolve provider outages by retrying the preview, or explicitly skip unresolved rows.
+
+Show facts remain independent (watched, watchlisted, watching, paused, dropped). Watched seasons create state without inventing episode dates. Canonical events retain their historical `occurred_at`, half-star ratings, review/spoiler metadata, tags, and distinct rewatches. `created_at` and season `date_added` are source provenance, not diary dates. Explicit show favorites are optional; event likes are never favorites. Unsupported season ratings, source lists, profile identity/country, aggregate statistics, and social snapshots stay informational in private import records. Imports never change account identity or watch region.
+
+Same-source stable keys and owner-scoped provenance prevent repeat imports. Undo removes only unchanged rows created by the import; existing data and later edits survive. Portable exports include series facts, season states, TV history, and episode rewatch metadata.
+
+Read-only real-file validation (never writes tracking data):
+
+```bash
+npx tsx scripts/serializd-dry-run.ts /absolute/path/to/serializd_export_normalized.json
+```
+
 ### Why only Letterboxd is native
 
 - [Letterboxd's official FAQ](https://letterboxd.com/about/faq/#exporting-data) documents an account export that bundles the account into a ZIP of CSV files. Mosaic recognizes current watched, ratings, reviews, diary, watchlist, and list CSV concepts while ignoring the deleted-content folder by default.

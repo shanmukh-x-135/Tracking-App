@@ -1,4 +1,5 @@
 import "server-only";
+import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalogMediaSchema, statusMatchesMedia } from "@/lib/persistence/validation";
 import { calculateBookProgress } from "@/lib/persistence/domain";
@@ -61,7 +62,7 @@ export async function upsertMedia(client: Client, media: CatalogMedia): Promise<
 }
 
 export async function readSupabaseState(client: Client, userId: string): Promise<MosaicState> {
-  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult] = await Promise.all([
+  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult, seriesStateResult, tvHistoryResult] = await Promise.all([
     client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
     client.from("library_entries").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("ratings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
@@ -72,12 +73,15 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     client.from("tv_season_states").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("game_playthroughs").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("book_readings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
+    client.from("tv_series_states").select("*").eq("user_id", userId),
+    client.from("tv_history_logs").select("*").eq("user_id", userId).order("occurred_at", { ascending: false }),
   ]);
   // Hosted projects created before watch regions will reject this one optional
   // field until their migration is applied. The rest of the saved state remains
   // readable, and the client keeps the region locally in the meantime.
   if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
   [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
+  for (const result of [seriesStateResult,tvHistoryResult]) if (result.error && !["42P01","PGRST205"].includes(result.error.code)) assertResult(result.error);
   const lists = listsResult.data ?? [];
   const listItemsResult = lists.length
     ? await client.from("list_items").select("*").in("list_id", lists.map(({ id }) => id)).order("position")
@@ -98,6 +102,8 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
   for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of seriesStateResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of tvHistoryResult.data ?? []) mediaIds.add(row.series_media_id);
   const mediaResult = mediaIds.size ? await client.from("media_items").select("*").in("id", [...mediaIds]) : { data: [], error: null };
   assertResult(mediaResult.error);
   const mediaById = new Map((mediaResult.data ?? []).map((row) => [row.id, catalogFromRow(row)]));
@@ -131,11 +137,20 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   state.episodeWatches = (episodeWatchResult.data ?? []).flatMap((row) => {
     const episode = episodesById.get(row.episode_id);
     const series = episode ? mediaById.get(episode.series_media_id) : undefined;
-    return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, rating: episodeRatingsResult.data?.find((rating) => rating.episode_id === episode.id)?.rating }] : [];
+    return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? episodeRatingsResult.data?.find((rating) => rating.episode_id === episode.id)?.rating, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
   });
   state.seasonStates = (seasonStateResult.data ?? []).flatMap((row) => {
     const series = mediaById.get(row.series_media_id);
     return series?.mediaType === "tv" ? [{ id: row.id, series, seasonNumber: row.season_number, state: row.state, provenance: row.provenance, completedOn: row.completed_on ?? undefined, updatedAt: row.updated_at }] : [];
+  });
+  state.seriesStates = (seriesStateResult.data ?? []).flatMap((row) => {
+    const series = mediaById.get(row.series_media_id);
+    const facts = z.record(z.string(),z.boolean().nullable()).safeParse(row.state_facts);
+    return series && facts.success ? [{ id: row.id, series, facts: facts.data, updatedAt: row.updated_at }] : [];
+  });
+  state.tvHistory = (tvHistoryResult.data ?? []).flatMap((row) => {
+    const series = mediaById.get(row.series_media_id);
+    return series ? [{ id: row.id, series, targetType: row.target_type, seasonNumber: row.season_number ?? undefined, occurredAt: row.occurred_at, isRewatch: row.is_rewatch, rating: row.rating ?? undefined, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
   });
   state.gamePlaythroughs = (gameResult.data ?? []).flatMap((row) => {
     const media = mediaById.get(row.media_id);
@@ -346,8 +361,8 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
     const { data: existingWatch, error: existingWatchError } = await client.from("episode_watch_logs").select("id").eq("user_id", userId).eq("episode_id", episode.id).eq("is_rewatch", false).order("created_at", { ascending: false }).limit(1).maybeSingle();
     assertResult(existingWatchError);
     const watchQuery = existingWatch
-      ? client.from("episode_watch_logs").update({ watched_at: mutation.watchedAt }).eq("id", existingWatch.id).eq("user_id", userId)
-      : client.from("episode_watch_logs").insert({ user_id: userId, episode_id: episode.id, watched_at: mutation.watchedAt, is_rewatch: false });
+      ? client.from("episode_watch_logs").update({ watched_at: mutation.watchedAt, ...(mutation.rating !== undefined ? { rating: mutation.rating } : {}) }).eq("id", existingWatch.id).eq("user_id", userId)
+      : client.from("episode_watch_logs").insert({ user_id: userId, episode_id: episode.id, watched_at: mutation.watchedAt, is_rewatch: false, rating: mutation.rating });
     assertResult((await watchQuery).error);
     if (mutation.rating !== undefined) {
       const { error } = await client.from("episode_ratings").upsert({ user_id: userId, episode_id: episode.id, rating: mutation.rating }, { onConflict: "user_id,episode_id" });
@@ -364,7 +379,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
     const { data: episode, error: episodeError } = await client.from("tv_episodes").select("id").eq("series_media_id", mediaId).eq("season_number", mutation.seasonNumber).eq("episode_number", mutation.episodeNumber).maybeSingle();
     assertResult(episodeError);
     if (episode) {
-      const { error: watchError } = await client.from("episode_watch_logs").delete().eq("user_id", userId).eq("episode_id", episode.id);
+      const { error: watchError } = await client.from("episode_watch_logs").delete().eq("user_id", userId).eq("episode_id", episode.id).eq("is_rewatch",false);
       assertResult(watchError);
       const { error: ratingError } = await client.from("episode_ratings").delete().eq("user_id", userId).eq("episode_id", episode.id);
       assertResult(ratingError);

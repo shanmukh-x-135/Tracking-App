@@ -63,11 +63,11 @@ function BookHero({ media, franchise }: { media: CatalogBook; franchise?: Franch
   </section>;
 }
 
-function EpisodeActions({ media, season, episode, watch }: { media: CatalogSeries; season: number; episode: CatalogEpisode; watch?: { rating?: number } }) {
+function EpisodeActions({ media, season, episode, watch }: { media: CatalogSeries; season: number; episode: CatalogEpisode; watch?: { rating?: number; watchedAt?: string } }) {
   const { mutate } = useMosaicState();
   const [rating, setRating] = useState<number | undefined>();
   const selectedRating = rating === undefined ? watch?.rating ?? 0 : rating;
-  const rated = (value: number) => { setRating(value); void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: value }).catch(() => undefined); };
+  const rated = (value: number) => { setRating(value); void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: watch?.watchedAt ?? new Date().toISOString(), rating: value }).catch(() => undefined); };
   return <div className="episode-actions"><RatingInput label="Episode rating" value={selectedRating} onChange={rated}/></div>;
 }
 
@@ -81,6 +81,8 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
   const [episodeError, setEpisodeError] = useState<string>();
   const { state, mutate } = useMosaicState();
   const watched = state.episodeWatches.filter((watch) => mediaKey(watch.series) === mediaKey(media) && watch.seasonNumber === season);
+  const completedSeason = state.seasonStates.find((item) => mediaKey(item.series) === mediaKey(media) && item.seasonNumber === season && item.state === "completed");
+  const watchedCount = completedSeason ? episodes.length : new Set(watched.map((watch) => watch.episodeNumber)).size;
   useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => { setIsLoadingEpisodes(true); setEpisodeError(undefined); setEpisodes([]); });
@@ -98,7 +100,8 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
 
   if (!seasonNumbers.length) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
   return <section className="section">
-    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watched.length} / {episodes.length || "—"} watched</span></div>
+    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watchedCount} / {episodes.length || "—"} watched</span></div>
+    {completedSeason && <p className="muted">Season marked watched{completedSeason.provenance === "imported_state" ? " from imported state" : ""}. Individual watch dates are shown only when an explicit historical log exists.</p>}
     <div className="season-tabs">{seasonNumbers.map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>{number === 0 ? "Specials" : `Season ${number}`}</button>)}</div>
     <div className="episode-list">{isLoadingEpisodes && <p className="episode-state">Loading every episode…</p>}{episodeError && <p className="episode-state form-error" role="alert">{episodeError}</p>}{!isLoadingEpisodes && !episodeError && !episodes.length && <p className="episode-state">No episodes are listed for this season.</p>}{episodes.map((episode) => <article className="episode" key={episode.id}>
       <div className="episode-thumb"><Image src={episode.stillUrl ?? media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div>

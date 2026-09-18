@@ -1,5 +1,6 @@
 import { parseGenericCsv } from "@/lib/imports/generic-parser";
 import { parseLetterboxdExport } from "@/lib/imports/letterboxd-parser";
+import { parseSerializdNormalizedJson } from "@/lib/imports/serializd-normalized-parser";
 import type { ImportParser, ImportSource } from "@/lib/imports/types";
 
 const genericSources = ["generic_movies", "generic_series", "generic_games", "generic_books"] as const;
@@ -47,6 +48,7 @@ function fallbackParser(source: keyof typeof fallbackSources): ImportParser {
 }
 
 const parsers = new Map<ImportSource, ImportParser>([
+  ["serializd_normalized_v1", { source: "serializd_normalized_v1", accepts: (filename, mimeType) => filename.toLowerCase().endsWith(".json") && (!mimeType || ["application/json", "text/json", "application/octet-stream"].includes(mimeType)), parse: parseSerializdNormalizedJson }],
   ["letterboxd", letterboxdParser],
   ...(Object.keys(fallbackSources) as (keyof typeof fallbackSources)[]).map((source) => [source, fallbackParser(source)] as const),
   ...genericSources.map((source) => [source, genericParser(source)] as const),

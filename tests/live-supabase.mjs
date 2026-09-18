@@ -44,7 +44,7 @@ async function signUp(client, label) {
 }
 
 const ownerUser = await signUp(owner, "owner");
-await signUp(stranger, "stranger");
+const strangerUser = await signUp(stranger, "stranger");
 
 const { data: profile, error: profileError } = await stranger
   .from("profiles")
@@ -177,4 +177,57 @@ const watchesAfterUndo = await owner.from("movie_watch_logs").select("id").eq("m
 assert.ifError(watchesAfterUndo.error);
 assert.equal(watchesAfterUndo.data.length, 0, "undo removes an unchanged row created by the import");
 
-console.log("Live Supabase auth, list reorder, transactional import idempotency, safe undo, and owner-scoped RLS checks passed.");
+// The normalized adapter must keep undated state separate from dated rewatches.
+const normalizedMedia = { provider: "tmdb", providerId: `900${Date.now()}`, mediaType: "tv", title: "Synthetic import series", genres: [] };
+const historicalDate = "2020-01-02T03:04:05Z";
+const normalizedPayloads = [
+  { recordKind: "show_state", stateFacts: { watched_any: true, watchlisted: true }, status: "watchlist", isFavorite: false },
+  { recordKind: "season_state", targetType: "season", seasonNumber: 1, tmdbSeasonId: 200, seasonState: "completed", sourceCreatedAt: "2025-01-01T00:00:00Z" },
+  ...[false, true].map((isRewatch) => ({ recordKind: "event", targetType: "episode", seasonNumber: 1, episodeNumber: 1, episodeProviderId: `episode-${suffix}`, episodeTitle: "Synthetic pilot", isLog: true, isRewatch, watchedDate: historicalDate, rating: 4.5, review: "Synthetic spoiler review", containsSpoilers: true, tags: ["test"] })),
+];
+async function normalizedJob() {
+  const result = await owner.from("import_jobs").insert({ user_id: ownerUser.id, source: "serializd_normalized_v1", status: "ready", original_filename: "synthetic.json", file_sha256: "b".repeat(64) }).select("id").single();
+  assert.ifError(result.error);
+  const records = await owner.from("import_records").insert(normalizedPayloads.map((payload, index) => ({ user_id: ownerUser.id, import_job_id: result.data.id, source_record_key: `serializd_normalized_v1:${suffix}:${index}`, media_type: "tv", source_title: "Synthetic import series", normalized_payload: { ...payload, source: "serializd_normalized_v1", mediaType: "tv", providerIdentity: normalizedMedia, sourceMetadata: {} } }))).select("id");
+  assert.ifError(records.error);
+  for (const record of records.data) {
+    const forbidden = await stranger.rpc("apply_import_record", { p_import_record_id: record.id, p_selected_media: normalizedMedia, p_conflict_policy: "keep_mosaic" });
+    assert.ok(forbidden.error);
+    const applied = await owner.rpc("apply_import_record", { p_import_record_id: record.id, p_selected_media: normalizedMedia, p_conflict_policy: "keep_mosaic" });
+    assert.ifError(applied.error);
+  }
+  assert.ifError((await owner.from("import_jobs").update({ status: "completed" }).eq("id", result.data.id)).error);
+  return result.data.id;
+}
+const normalizedJobId = await normalizedJob();
+const seriesItem = await owner.from("media_items").select("id").eq("provider", "tmdb").eq("external_id", normalizedMedia.providerId).single();
+assert.ifError(seriesItem.error);
+const seasonState = await owner.from("tv_season_states").select("*").eq("series_media_id", seriesItem.data.id).single();
+assert.ifError(seasonState.error);
+assert.equal(seasonState.data.completed_on, null, "imported season state must not invent a completion date");
+const importedEpisodes = await owner.from("episode_watch_logs").select("*").eq("user_id", ownerUser.id);
+assert.ifError(importedEpisodes.error);
+assert.equal(importedEpisodes.data.length, 2);
+assert.equal(importedEpisodes.data.filter((row) => row.is_rewatch).length, 1);
+assert.equal(importedEpisodes.data[0].rating, 4.5);
+assert.equal(Date.parse(importedEpisodes.data[0].watched_at), Date.parse(historicalDate));
+const privateStates = await stranger.from("tv_series_states").select("id").eq("series_media_id", seriesItem.data.id);
+assert.ifError(privateStates.error); assert.equal(privateStates.data.length, 0);
+await normalizedJob();
+assert.equal((await owner.from("episode_watch_logs").select("id").eq("user_id", ownerUser.id)).data.length, 2, "cross-job reimport must not duplicate explicit rewatches");
+const editedWatch = importedEpisodes.data[0];
+assert.ifError((await owner.from("episode_watch_logs").update({ review: "Later manual edit" }).eq("id", editedWatch.id)).error);
+const normalizedUndo = await owner.rpc("undo_import_job", { p_import_job_id: normalizedJobId });
+assert.ifError(normalizedUndo.error);
+assert.ok(normalizedUndo.data.preserved > 0);
+const remainingEpisodes = await owner.from("episode_watch_logs").select("id,review").eq("user_id", ownerUser.id);
+assert.ifError(remainingEpisodes.error);
+assert.deepEqual(remainingEpisodes.data, [{ id: editedWatch.id, review: "Later manual edit" }], "undo removes unchanged rows but retains later edits");
+assert.equal((await owner.from("library_entries").select("id").eq("id", library.id)).data.length, 1, "unrelated movie data survives TV undo");
+
+if (process.env.SUPABASE_SERVICE_ROLE_KEY && isLocal) {
+  const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY, options);
+  for (const userId of [ownerUser.id, strangerUser.id]) assert.ifError((await admin.auth.admin.deleteUser(userId)).error);
+  for (const id of [media.id, secondMedia.id, importedMedia.id, seriesItem.data.id]) assert.ifError((await admin.from("media_items").delete().eq("id", id)).error);
+}
+console.log("Live Supabase auth, list reorder, normalized historical imports, cross-job idempotency, edit-safe undo, and owner-scoped RLS checks passed.");

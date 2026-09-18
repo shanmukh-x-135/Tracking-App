@@ -31,7 +31,12 @@ Every data section is present in both `json/` and `csv/`. JSON is the canonical 
 | `book-readings` | Status, pages, progress, rating, and dates | `id`, `mediaId` |
 | `lists` | User-owned lists, including private lists | `id` |
 | `list-items` | Ordered list membership and notes | `id`, `listId`, `mediaId` |
+| `series-states` | Independent imported show facts and provenance | `id`, `series_media_id` |
+| `season-states` | Season state without fabricated episode history | `id`, `series_media_id`, `season_number` |
+| `tv-history` | Historical show/season events, rewatches, review/spoiler/tags | `id`, `series_media_id`, `occurred_at` |
 
 Field names use camel case. Dates are ISO 8601 strings or `null`. Optional provider metadata remains JSON. A consumer should reject unsupported future versions rather than guessing; Mosaic will increment `mosaicExportVersion` for incompatible changes.
+
+The three additive TV sections preserve hosted database row fields (snake case); mock equivalents use `seriesMediaId` and camel-case state fields. Episode watches additionally retain their own half-star rating, review, spoiler flag, tags, and explicit rewatch flag. Existing version-2 sections remain compatible.
 
 In deterministic mock development mode, identifiers are provider-qualified strings and database-only timestamps may be `null`. Hosted exports use persisted UUIDs and timestamps. The section layout and relationships are otherwise the same.

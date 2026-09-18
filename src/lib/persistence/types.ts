@@ -61,17 +61,41 @@ export interface EpisodeWatch {
   episodeTitle?: string;
   watchedAt: string;
   rating?: number;
+  isRewatch?: boolean;
+  review?: string;
+  containsSpoilers?: boolean;
+  tags?: string[];
 }
 
 export interface SeasonState {
   id: string;
   series: CatalogMedia;
   seasonNumber: number;
-  state: "watching" | "completed" | "paused" | "dropped";
+  state: "watchlist" | "watching" | "completed" | "paused" | "dropped";
   provenance: "explicit_episode" | "bulk_season" | "imported_state";
   /** Omitted when a bulk/imported source did not provide a historical date. */
   completedOn?: string;
   updatedAt: string;
+}
+
+export interface SeriesState {
+  id: string;
+  series: CatalogMedia;
+  facts: Record<string, boolean | null>;
+  updatedAt: string;
+}
+
+export interface TvHistoryLog {
+  id: string;
+  series: CatalogMedia;
+  targetType: "show" | "season";
+  seasonNumber?: number;
+  occurredAt: string;
+  isRewatch: boolean;
+  rating?: number;
+  review?: string;
+  containsSpoilers: boolean;
+  tags: string[];
 }
 
 export interface GamePlaythrough {
@@ -105,12 +129,14 @@ export interface MosaicState {
   movieWatches: MovieWatch[];
   episodeWatches: EpisodeWatch[];
   seasonStates: SeasonState[];
+  seriesStates: SeriesState[];
+  tvHistory: TvHistoryLog[];
   gamePlaythroughs: GamePlaythrough[];
   bookReadings: BookReading[];
 }
 
 export const emptyMosaicState = (): MosaicState => ({
-  library: [], ratings: [], reviews: [], lists: [], movieWatches: [], episodeWatches: [], seasonStates: [], gamePlaythroughs: [], bookReadings: [],
+  library: [], ratings: [], reviews: [], lists: [], movieWatches: [], episodeWatches: [], seasonStates: [], seriesStates: [], tvHistory: [], gamePlaythroughs: [], bookReadings: [],
 });
 
 export type SharedMutation =

@@ -25,7 +25,7 @@ export interface TmdbMedia {
   number_of_episodes?: number;
   networks?: Array<{ name: string; logo_path?: string | null }>;
   production_companies?: Array<{ name: string; logo_path?: string | null }>;
-  seasons?: Array<{ season_number?: number }>;
+  seasons?: Array<{ id?: number; season_number?: number }>;
   credits?: { crew?: Array<{ job: string; name: string }> };
 }
 
@@ -78,6 +78,7 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
   return {
     ...base, mediaType, seasonCount: item.number_of_seasons, episodeCount: item.number_of_episodes,
     seasonNumbers: item.seasons?.map((season) => season.season_number).filter((number): number is number => Number.isInteger(number)),
+    seasons: item.seasons?.flatMap((season) => Number.isInteger(season.id) && Number.isInteger(season.season_number) ? [{ providerId: String(season.id), seasonNumber: season.season_number! }] : []),
     network: item.networks?.[0]?.name, networkLogoUrl: image(item.networks?.[0]?.logo_path, "w500"),
   };
 }
@@ -88,10 +89,26 @@ export class TmdbProvider implements CatalogProvider {
 
   private async request<T>(path: string): Promise<T> {
     if (!this.token) throw new ProviderUnavailableError(this.name);
-    return providerJson<T>(this.name, await this.fetcher(`${apiBase}${path}`, {
-      headers: { Authorization: `Bearer ${this.token}`, accept: "application/json" },
-      next: { revalidate: 3600 },
-    }));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await this.fetcher(`${apiBase}${path}`, {
+          headers: { Authorization: `Bearer ${this.token}`, accept: "application/json" },
+          next: { revalidate: 3600 },
+          signal: AbortSignal.timeout(15000),
+        });
+        if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+          await response.body?.cancel();
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          continue;
+        }
+        return await providerJson<T>(this.name, response);
+      } catch (error) {
+        // Invalid IDs and permission failures are not transient.
+        if (error instanceof ProviderUnavailableError || attempt === 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
+    throw new ProviderUnavailableError(this.name);
   }
 
   async search(query: string): Promise<CatalogMedia[]> {

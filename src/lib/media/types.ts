@@ -31,6 +31,7 @@ export interface CatalogSeries extends CatalogMediaBase {
   episodeCount?: number;
   /** Provider season numbers can include season 0 (specials). */
   seasonNumbers?: number[];
+  seasons?: { providerId: string; seasonNumber: number }[];
   network?: string;
   networkLogoUrl?: string;
 }
