@@ -84,9 +84,35 @@ test.afterEach(async ({ page }, testInfo) => {
 
 test.afterAll(async () => {
   if (!admin || !user) return;
-  const deleted = await admin.auth.admin.deleteUser(user.id, true);
-  expect(deleted.error).toBeNull();
-  log("cleanup", "disposable production user and dependent data deleted successfully");
+  const ownedLists = await admin.from("lists").select("id").eq("user_id", user.id);
+  // A fresh disposable session lets global sign-out revoke every browser refresh
+  // token. Keep its auth state separate from the privileged test-only client.
+  const disposable = createClient(supabaseUrl!, serviceRoleKey!, { auth: { autoRefreshToken: false, persistSession: false } });
+  try {
+    const signedIn = await disposable.auth.signInWithPassword({ email: email!, password: testPassword });
+    expect(signedIn.error).toBeNull();
+    const signedOut = await disposable.auth.signOut({ scope: "global" });
+    expect(signedOut.error).toBeNull();
+  } finally {
+    // true is a soft delete: it leaves both the Auth row and dependent app data.
+    const deleted = await admin.auth.admin.deleteUser(user.id, false);
+    expect(deleted.error).toBeNull();
+  }
+  expect(ownedLists.error).toBeNull();
+  const missing = await admin.auth.admin.getUserById(user.id);
+  expect(missing.data.user).toBeNull();
+  expect(missing.error?.status).toBe(404);
+  for (const table of ["profiles", "library_entries", "ratings", "reviews", "lists", "movie_watch_logs", "episode_watch_logs", "episode_ratings", "game_playthroughs", "book_readings", "tv_series_states", "tv_season_states", "tv_history_logs", "import_jobs", "import_records", "import_provenance"]) {
+    const remaining = await admin.from(table).select("*", { count: "exact", head: true }).eq(table === "profiles" ? "id" : "user_id", user.id);
+    expect(remaining.error, `cleanup query: ${table}`).toBeNull();
+    expect(remaining.count, `remaining disposable rows: ${table}`).toBe(0);
+  }
+  for (const list of ownedLists.data ?? []) {
+    const items = await admin.from("list_items").select("*", { count: "exact", head: true }).eq("list_id", list.id);
+    expect(items.error).toBeNull();
+    expect(items.count, "remaining disposable list items").toBe(0);
+  }
+  log("cleanup", `disposable user ${user.id}: sessions revoked, Auth hard-deleted, all owner-scoped data absent`);
 });
 
 test("movie flow persists watch region and a 4.5-star rating", async ({ page }) => {
@@ -137,10 +163,23 @@ test("series flow persists watched episode and a 4.5-star rating", async ({ page
     await page.getByRole("button", { name: "Mark watched S01E01: Episode 1" }).click();
     log(flow, "action submitted: episode watched");
     await watched;
+    // Rating reuses the hosted PostgREST timestamp rather than a fresh date.
+    const before = await page.request.get("/api/me/state");
+    expect(before.status()).toBe(200);
+    const beforeState = await before.json();
+    const historicalWatch = beforeState.episodeWatches[0];
+    expect(historicalWatch.watchedAt).toMatch(/\+00:00$/);
+    const ratedRequest = page.waitForRequest((request) => request.url().endsWith("/api/me/state") && request.method() === "POST");
     const rated = waitForStateWrite(page, flow);
     await chooseHalfRating(page.locator(".episode").first(), 4.5);
     log(flow, "action submitted: episode rated");
     await rated;
+    expect((await ratedRequest).postDataJSON().watchedAt).toBe(historicalWatch.watchedAt);
+    const after = await page.request.get("/api/me/state");
+    expect(after.status()).toBe(200);
+    const ratedWatch = (await after.json()).episodeWatches.find((watch: { id: string }) => watch.id === historicalWatch.id);
+    expect(ratedWatch.rating).toBe(4.5);
+    expect(ratedWatch.watchedAt).toBe(historicalWatch.watchedAt);
   });
   await test.step("reload and assert persistence", async () => {
     await reload(page, flow);

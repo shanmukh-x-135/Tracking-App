@@ -33,6 +33,23 @@ test("normalized v1 preserves null titles, overlapping facts, historical dates a
   assert.equal(result.records[2].mediaType === "tv" && result.records[2].watchedDate, date);
 });
 
+test("normalized timestamp parser preserves explicit UTC and non-UTC offsets", () => {
+  for (const timestamp of [date, "2020-01-02T03:04:05+00:00", "2020-01-02T08:34:05+05:30", "2020-01-01T22:04:05-05:00"]) {
+    const value = fixture();
+    value.generated_at_utc = timestamp;
+    value.events[0].occurred_at = timestamp;
+    const parsed = parse(value);
+    assert.deepEqual(parsed.errors, []);
+    const event = parsed.records[2];
+    assert.equal(event.mediaType === "tv" && event.watchedDate, timestamp);
+    assert.equal(Date.parse(timestamp), Date.parse(date));
+  }
+  for (const timestamp of ["2020-01-02T03:04:05", "2020-02-30T03:04:05+00:00", "2020-01-02T03:04:05+05:60", "invalid"]) {
+    const value = fixture(); value.events[0].occurred_at = timestamp;
+    assert.ok(parse(value).errors.length);
+  }
+});
+
 test("normalized schema rejects wrong versions, invalid ratings, absent IDs and impossible targets", () => {
   const wrongVersion = fixture(); wrongVersion.schema_version = 2;
   assert.ok(parse(wrongVersion).errors.length);
