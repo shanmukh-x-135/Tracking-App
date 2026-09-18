@@ -32,7 +32,9 @@ export async function getCatalogItem(identity: ProviderIdentity, providers = con
 
 export async function getCatalogSeasonEpisodes(identity: ProviderIdentity, seasonNumber: number, providers = configuredCatalogProviders()): Promise<CatalogEpisode[]> {
   if (identity.mediaType !== "tv") return [];
-  const provider = providers.find((candidate) => candidate.name === identity.provider);
+  // Detail routes can render the built-in catalog as a safe fallback when a live
+  // provider is unavailable. Keep its episode endpoint available in that mode too.
+  const provider = identity.provider === "mock" ? mockCatalogProvider : providers.find((candidate) => candidate.name === identity.provider);
   return provider?.getSeasonEpisodes?.(identity.providerId, seasonNumber) ?? [];
 }
 
