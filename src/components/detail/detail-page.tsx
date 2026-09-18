@@ -65,9 +65,10 @@ function BookHero({ media, franchise }: { media: CatalogBook; franchise?: Franch
 
 function EpisodeActions({ media, season, episode, watch }: { media: CatalogSeries; season: number; episode: CatalogEpisode; watch?: { rating?: number } }) {
   const { mutate } = useMosaicState();
-  const [rating, setRating] = useState(watch?.rating ?? 0);
+  const [rating, setRating] = useState<number | undefined>();
+  const selectedRating = rating === undefined ? watch?.rating ?? 0 : rating;
   const rated = (value: number) => { setRating(value); void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString(), rating: value }).catch(() => undefined); };
-  return <div className="episode-actions"><RatingInput label="Episode rating" value={rating} onChange={rated}/></div>;
+  return <div className="episode-actions"><RatingInput label="Episode rating" value={selectedRating} onChange={rated}/></div>;
 }
 
 function SeriesSection({ media }: { media: CatalogSeries }) {
