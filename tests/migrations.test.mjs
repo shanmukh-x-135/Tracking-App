@@ -11,11 +11,12 @@ const listEditor = readFileSync("supabase/migrations/20260913184222_list_editor.
 const restrictedGrants = readFileSync("supabase/migrations/20260914120327_restrict_data_api_grants.sql", "utf8");
 const hostedHardening = readFileSync("supabase/migrations/20260914120455_harden_extensions_and_foreign_keys.sql", "utf8");
 const listWritePolicies = readFileSync("supabase/migrations/20260914122626_split_list_write_policies.sql", "utf8");
-const sql = `${core}\n${tracking}\n${imports}\n${importApplication}\n${importUndo}\n${listEditor}\n${restrictedGrants}\n${hostedHardening}\n${listWritePolicies}`;
+const seasonState = readFileSync("supabase/migrations/20260918160000_tv_season_state.sql", "utf8");
+const sql = `${core}\n${tracking}\n${imports}\n${importApplication}\n${importUndo}\n${listEditor}\n${restrictedGrants}\n${hostedHardening}\n${listWritePolicies}\n${seasonState}`;
 
 const protectedTables = [
   "profiles", "media_items", "library_entries", "ratings", "reviews", "lists", "list_items",
-  "movie_watch_logs", "tv_episodes", "episode_watch_logs", "episode_ratings", "game_playthroughs", "book_readings",
+  "movie_watch_logs", "tv_episodes", "episode_watch_logs", "episode_ratings", "tv_season_states", "game_playthroughs", "book_readings",
   "import_jobs", "import_records", "import_provenance",
 ];
 
@@ -23,6 +24,14 @@ test("every exposed Mosaic table enables row level security", () => {
   for (const table of protectedTables) {
     assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, "i"));
   }
+});
+
+test("season state records provenance without inventing episode history or dates", () => {
+  assert.match(seasonState, /provenance text not null default 'explicit_episode'/i);
+  assert.match(seasonState, /'bulk_season', 'imported_state'/i);
+  assert.match(seasonState, /completed_on date/i);
+  assert.match(seasonState, /unique \(user_id, series_media_id, season_number\)/i);
+  assert.match(seasonState, /tv_season_states_owner_all[\s\S]*?auth\.uid\(\)/i);
 });
 
 test("write policies derive ownership from auth.uid", () => {

@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalogMediaSchema, statusMatchesMedia } from "@/lib/persistence/validation";
 import { calculateBookProgress } from "@/lib/persistence/domain";
+import type { CurrentMediaState } from "@/lib/persistence/current-media-state";
 import { emptyMosaicState, type DomainMutation, type MosaicState, type PersistenceMutation, type SharedMutation } from "@/lib/persistence/types";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { Database, MediaItemRow } from "@/types/database";
@@ -60,7 +61,7 @@ export async function upsertMedia(client: Client, media: CatalogMedia): Promise<
 }
 
 export async function readSupabaseState(client: Client, userId: string): Promise<MosaicState> {
-  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult] = await Promise.all([
+  const [profileResult, libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult] = await Promise.all([
     client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
     client.from("library_entries").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("ratings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
@@ -68,6 +69,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     client.from("lists").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("movie_watch_logs").select("*").eq("user_id", userId).order("watched_at", { ascending: false }),
     client.from("episode_watch_logs").select("*").eq("user_id", userId).order("watched_at", { ascending: false }),
+    client.from("tv_season_states").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("game_playthroughs").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
     client.from("book_readings").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
   ]);
@@ -75,7 +77,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   // field until their migration is applied. The rest of the saved state remains
   // readable, and the client keeps the region locally in the meantime.
   if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
-  [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
+  [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
   const lists = listsResult.data ?? [];
   const listItemsResult = lists.length
     ? await client.from("list_items").select("*").in("list_id", lists.map(({ id }) => id)).order("position")
@@ -95,6 +97,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
   for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
   const mediaResult = mediaIds.size ? await client.from("media_items").select("*").in("id", [...mediaIds]) : { data: [], error: null };
   assertResult(mediaResult.error);
   const mediaById = new Map((mediaResult.data ?? []).map((row) => [row.id, catalogFromRow(row)]));
@@ -130,6 +133,10 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     const series = episode ? mediaById.get(episode.series_media_id) : undefined;
     return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, rating: episodeRatingsResult.data?.find((rating) => rating.episode_id === episode.id)?.rating }] : [];
   });
+  state.seasonStates = (seasonStateResult.data ?? []).flatMap((row) => {
+    const series = mediaById.get(row.series_media_id);
+    return series?.mediaType === "tv" ? [{ id: row.id, series, seasonNumber: row.season_number, state: row.state, provenance: row.provenance, completedOn: row.completed_on ?? undefined, updatedAt: row.updated_at }] : [];
+  });
   state.gamePlaythroughs = (gameResult.data ?? []).flatMap((row) => {
     const media = mediaById.get(row.media_id);
     return media ? [{ id: row.id, media, status: row.status as MosaicState["gamePlaythroughs"][number]["status"], platform: row.platform ?? undefined, playtimeMinutes: row.playtime_minutes, progressPercent: row.progress_percent ?? undefined, rating: row.rating ?? undefined, updatedAt: row.updated_at }] : [];
@@ -139,6 +146,71 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     return media ? [{ id: row.id, media, status: row.status as MosaicState["bookReadings"][number]["status"], currentPage: row.current_page ?? undefined, totalPages: row.total_pages ?? undefined, progressPercent: row.progress_percent ?? undefined, rating: row.rating ?? undefined, updatedAt: row.updated_at }] : [];
   });
   return state;
+}
+
+/**
+ * Read the small card-facing projection without reconstructing private diary,
+ * review, or list history. Historical screens continue to use
+ * `readSupabaseState`, where those records are required.
+ */
+export async function readSupabaseCurrentMediaState(client: Client, userId: string): Promise<{ watchRegion?: string; media: CurrentMediaState[] }> {
+  const [profileResult, libraryResult, ratingsResult, gameResult, bookResult, episodeWatchResult, seasonStateResult] = await Promise.all([
+    client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
+    client.from("library_entries").select("media_id,status,is_favorite,updated_at").eq("user_id", userId),
+    client.from("ratings").select("media_id,rating").eq("user_id", userId),
+    client.from("game_playthroughs").select("media_id,status,progress_percent,updated_at").eq("user_id", userId),
+    client.from("book_readings").select("media_id,status,progress_percent,updated_at").eq("user_id", userId),
+    client.from("episode_watch_logs").select("episode_id,watched_at").eq("user_id", userId),
+    client.from("tv_season_states").select("series_media_id,state,updated_at").eq("user_id", userId),
+  ]);
+  if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
+  [libraryResult, ratingsResult, gameResult, bookResult, episodeWatchResult, seasonStateResult].forEach(({ error }) => assertResult(error));
+
+  const episodeIds = (episodeWatchResult.data ?? []).map(({ episode_id }) => episode_id);
+  const episodesResult = episodeIds.length
+    ? await client.from("tv_episodes").select("id,series_media_id").in("id", episodeIds)
+    : { data: [], error: null };
+  assertResult(episodesResult.error);
+  const mediaIds = new Set<string>();
+  for (const row of libraryResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of ratingsResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
+  const mediaResult = mediaIds.size
+    ? await client.from("media_items").select("id,provider,media_type,external_id").in("id", [...mediaIds])
+    : { data: [], error: null };
+  assertResult(mediaResult.error);
+  const keyByMediaId = new Map((mediaResult.data ?? []).map((row) => [row.id, `${row.provider}:${row.media_type}:${row.external_id}`]));
+  const snapshot = new Map<string, CurrentMediaState>();
+  const ensure = (mediaId: string): CurrentMediaState | undefined => {
+    const key = keyByMediaId.get(mediaId);
+    if (!key) return undefined;
+    const existing = snapshot.get(key);
+    if (existing) return existing;
+    const next = { mediaKey: key, isFavorite: false };
+    snapshot.set(key, next);
+    return next;
+  };
+  for (const row of libraryResult.data ?? []) {
+    const item = ensure(row.media_id);
+    if (item) Object.assign(item, { status: row.status, isFavorite: row.is_favorite, latestOccurredAt: row.updated_at });
+  }
+  for (const row of ratingsResult.data ?? []) { const item = ensure(row.media_id); if (item) item.rating = row.rating; }
+  for (const row of gameResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
+  for (const row of bookResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
+  for (const row of seasonStateResult.data ?? []) { const item = ensure(row.series_media_id); if (item) Object.assign(item, { status: row.state, latestOccurredAt: row.updated_at }); }
+  const episodeById = new Map((episodesResult.data ?? []).map((row) => [row.id, row]));
+  for (const row of episodeWatchResult.data ?? []) {
+    const episode = episodeById.get(row.episode_id);
+    const item = episode && ensure(episode.series_media_id);
+    if (item && (!item.latestOccurredAt || row.watched_at > item.latestOccurredAt)) {
+      item.status ??= "watching";
+      item.latestOccurredAt = row.watched_at;
+    }
+  }
+  return { watchRegion: profileResult.data?.watch_region ?? undefined, media: [...snapshot.values()].sort((first, second) => (second.latestOccurredAt ?? "").localeCompare(first.latestOccurredAt ?? "")) };
 }
 
 export async function applySharedSupabaseMutation(client: Client, userId: string, mutation: SharedMutation): Promise<void> {
@@ -221,6 +293,10 @@ async function saveDerivedSharedState(client: Client, userId: string, mutation: 
     await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.series, status: "watching" });
     return;
   }
+  if (mutation.type === "season.state") {
+    await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.series, status: mutation.state === "completed" ? "completed" : mutation.state });
+    return;
+  }
   const status = mutation.type === "movie.log" || mutation.type === "movie.update" ? "watched" : mutation.status;
   await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.media, status });
   if (mutation.rating !== undefined) await applySharedSupabaseMutation(client, userId, { type: "rating.set", media: mutation.media, value: mutation.rating });
@@ -232,7 +308,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
     assertResult(error);
     return;
   }
-  const media = mutation.type === "episode.log" || mutation.type === "episode.unwatch" ? mutation.series : mutation.media;
+  const media = mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "season.state" ? mutation.series : mutation.media;
   const mediaId = await upsertMedia(client, media);
   if (mutation.type === "movie.log" || mutation.type === "movie.update") {
     if (media.mediaType !== "movie") throw new Error("Movie log requires a movie.");
@@ -277,6 +353,13 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
       const { error } = await client.from("episode_ratings").upsert({ user_id: userId, episode_id: episode.id, rating: mutation.rating }, { onConflict: "user_id,episode_id" });
       assertResult(error);
     }
+  } else if (mutation.type === "season.state") {
+    if (media.mediaType !== "tv") throw new Error("Season state requires a series.");
+    const { error } = await client.from("tv_season_states").upsert({
+      user_id: userId, series_media_id: mediaId, season_number: mutation.seasonNumber, state: mutation.state,
+      provenance: mutation.provenance, completed_on: mutation.completedOn ?? null,
+    }, { onConflict: "user_id,series_media_id,season_number" });
+    assertResult(error);
   } else if (mutation.type === "episode.unwatch") {
     const { data: episode, error: episodeError } = await client.from("tv_episodes").select("id").eq("series_media_id", mediaId).eq("season_number", mutation.seasonNumber).eq("episode_number", mutation.episodeNumber).maybeSingle();
     assertResult(episodeError);
@@ -306,7 +389,7 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
 }
 
 export async function applySupabaseMutation(client: Client, userId: string, mutation: PersistenceMutation): Promise<void> {
-  if (mutation.type === "movie.log" || mutation.type === "movie.update" || mutation.type === "movie.delete" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
+  if (mutation.type === "movie.log" || mutation.type === "movie.update" || mutation.type === "movie.delete" || mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "season.state" || mutation.type === "game.upsert" || mutation.type === "book.upsert") {
     return applyDomainSupabaseMutation(client, userId, mutation);
   }
   return applySharedSupabaseMutation(client, userId, mutation);

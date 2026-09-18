@@ -63,6 +63,17 @@ export interface EpisodeWatch {
   rating?: number;
 }
 
+export interface SeasonState {
+  id: string;
+  series: CatalogMedia;
+  seasonNumber: number;
+  state: "watching" | "completed" | "paused" | "dropped";
+  provenance: "explicit_episode" | "bulk_season" | "imported_state";
+  /** Omitted when a bulk/imported source did not provide a historical date. */
+  completedOn?: string;
+  updatedAt: string;
+}
+
 export interface GamePlaythrough {
   id: string;
   media: CatalogMedia;
@@ -93,12 +104,13 @@ export interface MosaicState {
   lists: UserList[];
   movieWatches: MovieWatch[];
   episodeWatches: EpisodeWatch[];
+  seasonStates: SeasonState[];
   gamePlaythroughs: GamePlaythrough[];
   bookReadings: BookReading[];
 }
 
 export const emptyMosaicState = (): MosaicState => ({
-  library: [], ratings: [], reviews: [], lists: [], movieWatches: [], episodeWatches: [], gamePlaythroughs: [], bookReadings: [],
+  library: [], ratings: [], reviews: [], lists: [], movieWatches: [], episodeWatches: [], seasonStates: [], gamePlaythroughs: [], bookReadings: [],
 });
 
 export type SharedMutation =
@@ -120,6 +132,7 @@ export type DomainMutation =
   | { type: "movie.update"; watchId: string; media: CatalogMedia; watchedAt: string; isRewatch: boolean; rating?: number; review?: string; viewingContext?: MovieViewingContext; streamingService?: string }
   | { type: "movie.delete"; watchId: string }
   | { type: "episode.log"; series: CatalogMedia; seasonNumber: number; episodeNumber: number; episodeTitle?: string; watchedAt: string; rating?: number }
+  | { type: "season.state"; series: CatalogMedia; seasonNumber: number; state: SeasonState["state"]; provenance: SeasonState["provenance"]; completedOn?: string }
   | { type: "episode.unwatch"; series: CatalogMedia; seasonNumber: number; episodeNumber: number }
   | { type: "game.upsert"; media: CatalogMedia; playthroughId?: string; status: GamePlaythrough["status"]; platform?: string; playtimeMinutes: number; progressPercent?: number; rating?: number }
   | { type: "book.upsert"; media: CatalogMedia; readingId?: string; status: BookReading["status"]; currentPage?: number; totalPages?: number; progressPercent?: number; rating?: number };

@@ -19,6 +19,7 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [rating, setRating] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>();
   const { user } = useAuth();
   const { state, mutate } = useMosaicState();
@@ -57,13 +58,14 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
     return () => controller.abort();
   }, [seasonNumber, selected]);
 
-  function reset() { setSelected(undefined); setQuery(""); setResults([]); setEpisodes([]); setRating(0); setSeasonNumber(1); setSaved(false); setError(undefined); }
+  function reset() { setSelected(undefined); setQuery(""); setResults([]); setEpisodes([]); setRating(0); setSeasonNumber(1); setSaved(false); setIsSubmitting(false); setError(undefined); }
   function close(value: boolean) { if (!value) reset(); onOpenChange(value); }
   function choose(media: CatalogMedia) { setSelected(media); setSeasonNumber(media.mediaType === "tv" ? media.seasonNumbers?.find((number) => number > 0) ?? 1 : 1); setRating(state.ratings.find((item) => item.mediaKey === mediaKey(media))?.value ?? 0); setError(undefined); }
 
   async function submit(formData: FormData) {
-    if (!selected) return;
+    if (!selected || isSubmitting) return;
     if (!user) { setError("Sign in to save this update."); return; }
+    setIsSubmitting(true);
     try {
       if (selected.mediaType === "movie") {
         const viewingContext = String(formData.get("viewingContext") || "") || undefined;
@@ -81,6 +83,7 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
       }
       setSaved(true);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Your update could not be saved."); }
+    finally { setIsSubmitting(false); }
   }
 
   const firstUnwatched = episodes.find((episode) => !watchedEpisodes.some((watch) => watch.seasonNumber === episode.seasonNumber && watch.episodeNumber === episode.episodeNumber));
@@ -103,7 +106,7 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
         {selected.mediaType === "book" && <><label className="field">Status<select name="status" defaultValue={activeReading?.status ?? "reading"}><option value="reading">Reading</option><option value="want_to_read">Want to Read</option><option value="paused">Paused</option><option value="finished">Finished</option><option value="dnf">DNF</option></select></label>{selected.pageCount ? <label className="field">Current page<input name="page" type="number" min="0" max={selected.pageCount} defaultValue={activeReading?.currentPage ?? 0}/></label> : <label className="field">Progress (%)<input name="progress" type="number" min="0" max="100" defaultValue={activeReading?.progressPercent ?? 0}/></label>}</>}
         <div className="field full"><RatingInput value={rating} onChange={setRating} ariaPrefix=""/></div>
         {error && <p className="form-error field full" role="alert">{error} {!user && <Link href="/login">Sign in</Link>}</p>}
-        <button className="button accent field full" type="submit">{selected.mediaType === "movie" ? "Log watch" : selected.mediaType === "tv" ? "Log episode" : selected.mediaType === "game" ? activePlaythrough ? "Update playthrough" : "Start playthrough" : activeReading?.status === "finished" ? "Update reading" : "Log progress"}</button>
+        <button className="button accent field full" type="submit" disabled={isSubmitting}>{isSubmitting ? "Saving…" : selected.mediaType === "movie" ? "Log watch" : selected.mediaType === "tv" ? "Log episode" : selected.mediaType === "game" ? activePlaythrough ? "Update playthrough" : "Start playthrough" : activeReading?.status === "finished" ? "Update reading" : "Log progress"}</button>
       </div></form></>}
   </div></Dialog>;
 }
