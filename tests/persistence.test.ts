@@ -56,6 +56,15 @@ test("episode watches update a unique episode and preserve series progress input
   assert.equal(state.episodeWatches.length, 0);
 });
 
+test("bulk season state is idempotent and does not invent individual episode dates", () => {
+  let state = applyMutation(emptyMosaicState(), { type: "season.state", series, seasonNumber: 2, state: "completed", provenance: "bulk_season" }, now);
+  state = applyMutation(state, { type: "season.state", series, seasonNumber: 2, state: "completed", provenance: "bulk_season" }, "2026-09-13T10:00:00.000Z");
+  assert.equal(state.seasonStates.length, 1);
+  assert.equal(state.seasonStates[0].provenance, "bulk_season");
+  assert.equal(state.seasonStates[0].completedOn, undefined);
+  assert.equal(state.episodeWatches.length, 0);
+});
+
 test("game playthrough updates preserve status, platform, playtime, and progress", () => {
   const state = applyMutation(emptyMosaicState(), { type: "game.upsert", media: game, status: "playing", platform: "PC", playtimeMinutes: 150, progressPercent: 25 }, now);
   assert.deepEqual(state.gamePlaythroughs[0], { id: state.gamePlaythroughs[0].id, media: game, status: "playing", platform: "PC", playtimeMinutes: 150, progressPercent: 25, rating: undefined, updatedAt: now });
