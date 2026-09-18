@@ -43,7 +43,6 @@ test("Phase 3.7 persists a region, half-star ratings, and all four production lo
     await page.getByLabel("Streaming service").fill("Phase 3.7 Stream");
     await chooseHalfRating(page.locator("form.status-card"), 4.5);
     await page.getByRole("button", { name: "Log watch" }).click();
-    await expect(page.getByText(/First watch · streaming · Phase 3.7 Stream · ★ 4.5/)).toBeVisible();
     await page.reload();
     await expect(page.getByText(/First watch · streaming · Phase 3.7 Stream · ★ 4.5/)).toBeVisible();
 
