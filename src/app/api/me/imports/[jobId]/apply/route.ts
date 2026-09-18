@@ -4,6 +4,8 @@ import { catalogMediaSchema } from "@/lib/persistence/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
+export const maxDuration = 300;
+
 const requestSchema = z.object({
   conflictPolicy: z.enum(["keep_mosaic", "use_imported", "review"]),
   importFavorites: z.boolean().default(true),

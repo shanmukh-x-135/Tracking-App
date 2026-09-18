@@ -71,6 +71,15 @@ export function parseSerializdNormalizedJson(contents: Uint8Array): ParseResult 
   if (contents.byteLength > 12 * 1024 * 1024) return failed("Import files must be 12 MB or smaller.");
   let raw: unknown;
   try { raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(contents)); } catch { return failed("The file must contain valid UTF-8 JSON."); }
+  const stack: { value: unknown; depth: number }[] = [{ value: raw, depth: 0 }];
+  let visited = 0;
+  while (stack.length) {
+    const entry = stack.pop()!;
+    if (++visited > 250000 || entry.depth > 32) return failed("JSON nesting or record complexity exceeds the safe parsing limit.");
+    if (entry.value && typeof entry.value === "object") {
+      for (const value of Object.values(entry.value)) stack.push({ value, depth: entry.depth + 1 });
+    }
+  }
   const parsed = serializdNormalizedExportV1Schema.safeParse(raw);
   if (!parsed.success) return { ...failed("Invalid normalized Serializd export."), errors: parsed.error.issues.slice(0, 50).map((issue) => ({ row: 0, field: issue.path.join("."), message: issue.message })) };
   const data = parsed.data;

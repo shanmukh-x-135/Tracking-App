@@ -33,7 +33,9 @@ export async function resolveSerializdRecords(records: NormalizedImportRecord[],
           resolvedRecord = { ...resolvedRecord, episodeTitle: episode.title, episodeProviderId: episode.id };
         }
       }
-      return reconcileRecord(resolvedRecord, [media]);
+      // A large export repeats a show's snapshot across many events. Keep its
+      // identity/artwork for reconciliation without duplicating heavy detail.
+      return reconcileRecord(resolvedRecord, [{ ...media, description: undefined, seasons: undefined }]);
     })));
   }
   return rows;

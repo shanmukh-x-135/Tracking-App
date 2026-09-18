@@ -363,7 +363,15 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
     const watchQuery = existingWatch
       ? client.from("episode_watch_logs").update({ watched_at: mutation.watchedAt, ...(mutation.rating !== undefined ? { rating: mutation.rating } : {}) }).eq("id", existingWatch.id).eq("user_id", userId)
       : client.from("episode_watch_logs").insert({ user_id: userId, episode_id: episode.id, watched_at: mutation.watchedAt, is_rewatch: false, rating: mutation.rating });
-    assertResult((await watchQuery).error);
+    let { error: watchError } = await watchQuery;
+    // Keep core episode logging available while an additive migration rolls out.
+    if (watchError && ["42703", "PGRST204"].includes(watchError.code)) {
+      const legacyQuery = existingWatch
+        ? client.from("episode_watch_logs").update({ watched_at: mutation.watchedAt }).eq("id", existingWatch.id).eq("user_id", userId)
+        : client.from("episode_watch_logs").insert({ user_id: userId, episode_id: episode.id, watched_at: mutation.watchedAt, is_rewatch: false });
+      ({ error: watchError } = await legacyQuery);
+    }
+    assertResult(watchError);
     if (mutation.rating !== undefined) {
       const { error } = await client.from("episode_ratings").upsert({ user_id: userId, episode_id: episode.id, rating: mutation.rating }, { onConflict: "user_id,episode_id" });
       assertResult(error);

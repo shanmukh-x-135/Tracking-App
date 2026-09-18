@@ -43,6 +43,9 @@ test("normalized schema rejects wrong versions, invalid ratings, absent IDs and 
   const wrongShow = fixture(); wrongShow.events[0].tmdb_show_id = 999;
   assert.ok(parse(wrongShow).errors.length);
   assert.ok(parseSerializdNormalizedJson(new Uint8Array([255])).errors.length);
+  const nested = fixture();
+  nested.source = Array.from({ length: 40 }).reduce<Record<string, unknown>>((child) => ({ child }), {});
+  assert.match(parse(nested).errors[0].message, /nesting/);
 });
 
 test("exact resolver caches provider requests and refuses inconsistent seasons without title fallback", async () => {
@@ -70,4 +73,28 @@ test("historical rewatches remain distinct and re-import is idempotent without f
   assert.equal(state.episodeWatches.length, 2);
   assert.equal(state.episodeWatches[0].rating, 4.5);
   assert.equal(state.episodeWatches[0].containsSpoilers, true);
+});
+
+test("canonical duplicate groups skip extras but never suppress a separate explicit rewatch", async () => {
+  const value = fixture();
+  const grouped = { ...value.events[0], duplicate_group_id: "synthetic-duplicate" };
+  const extra = { ...grouped, source_record_id: 3, default_import: false };
+  const duplicates = { ...value, events: [grouped, value.events[1], extra], duplicate_groups: [{ duplicate_group_id: "synthetic-duplicate", target: { type: "episode", tmdb_show_id: 100, tmdb_season_id: 200, episode_number: 1 }, canonical_source_record_id: 1, source_record_ids: [1, 3], reason: "Synthetic duplicate" }] };
+  const parsed = parse(duplicates);
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.duplicateCount, 1);
+  const rows = await resolveSerializdRecords(parsed.records, { show: async () => media, episodes: async () => [{ id: "300", seasonNumber: 1, episodeNumber: 1, title: "Synthetic pilot" }] });
+  assert.equal(rows.filter((row) => row.decision === "skipped").length, 1);
+  assert.equal(rows.filter((row) => row.record.mediaType === "tv" && row.record.isRewatch && row.decision === "accepted").length, 1);
+  duplicates.events[2].default_import = true;
+  assert.ok(parse(duplicates).errors.length, "contradictory canonical flags are rejected");
+});
+
+test("provider outages and missing episodes are reviewable, never fuzzy matches", async () => {
+  const parsed = parse(fixture());
+  const outage = await resolveSerializdRecords(parsed.records, { show: async () => { throw new Error("Synthetic provider outage"); }, episodes: async () => [] });
+  assert.ok(outage.every((row) => row.decision === "review" && !row.selected));
+  const missing = await resolveSerializdRecords(parsed.records, { show: async () => media, episodes: async () => [] });
+  assert.equal(missing[2].decision, "review");
+  assert.equal(missing[0].decision, "accepted");
 });
