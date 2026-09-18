@@ -167,6 +167,29 @@ test("episode watches and ratings survive refresh and can be undone", async ({ p
   await expect(page.getByText("0 / 10 watched")).toBeVisible();
 });
 
+test("cached watch region hydrates without losing saved movie or episode state", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await signUp(page, "region-hydration@example.com");
+  await page.goto("/movie/dune-part-two");
+  await page.getByLabel("Watch region").selectOption("IN");
+  await chooseHalfRating(page.locator("form.status-card"), 4.5);
+  await page.getByRole("button", { name: "Log watch" }).click();
+  await expect(page.getByText(/First watch · ★ 4.5/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Watch region")).toHaveValue("IN");
+  await expect(page.getByText(/First watch · ★ 4.5/)).toBeVisible();
+  await page.goto("/series/severance");
+  await page.getByRole("button", { name: "Mark watched S01E01: Episode 1" }).click();
+  await chooseHalfRating(page.locator(".episode").first(), 4.5);
+  await expect(page.locator(".episode").first().getByText("4.5 / 5")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Watch region")).toHaveValue("IN");
+  await expect(page.getByText("1 / 10 watched")).toBeVisible();
+  await expect(page.locator(".episode").first().getByText("4.5 / 5")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("game playthrough details survive refresh", async ({ page }) => {
   await signUp(page, "game@example.com");
   await page.goto("/game/red-dead-redemption-2");

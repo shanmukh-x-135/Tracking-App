@@ -93,4 +93,6 @@ The public Credits page contains the required TMDB notice and provider attributi
 
 Do not use personal production history for migration testing. Use sanitized fixtures and disposable test accounts.
 
+The protected Phase 3.7 browser suite revokes all disposable refresh sessions, hard-deletes its Auth user (not a soft delete), and asserts that owner-scoped tracking/import rows and list items are absent. Cleanup still runs when a flow fails. Privileged cleanup stays in test tooling, never in application routes or RLS policies. Hosted episode-rating verification must reuse the database's explicit-offset timestamp unchanged and preserve the original watch instant.
+
 Provider-backed discovery shelves must remain in deterministic mock mode until TMDB, IGDB, and Google Books search/detail checks all pass in the intended hosted environment. One provider failure is isolated by the catalog aggregator and must not collapse results from the others.
