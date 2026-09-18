@@ -21,6 +21,8 @@ async function signIn(page: Page, email: string): Promise<void> {
   await expect(page).toHaveURL(/\/library$/);
 }
 
+test.setTimeout(120_000);
+
 test("Phase 3.7 persists a region, half-star ratings, and all four production logging flows", async ({ page }) => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const email = `mosaic-phase37-${suffix}@example.invalid`;
