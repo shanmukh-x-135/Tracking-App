@@ -1,87 +1,211 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createClient, type User } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 
 const productionUrl = process.env.E2E_PRODUCTION_URL;
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const testPassword = process.env.MOSAIC_TEST_PASSWORD ?? "Mosaic-phase37-2026";
 
+let admin: SupabaseClient | undefined;
+let email: string | undefined;
+let user: User | undefined;
+let consoleErrors: string[] = [];
+let failedRequests: string[] = [];
+
 test.skip(!productionUrl || !supabaseUrl || !serviceRoleKey, "Production verification requires protected-environment credentials.");
+test.describe.configure({ mode: "serial" });
+test.setTimeout(60_000);
+
+function log(flow: string, message: string): void {
+  console.log(`[Phase 3.7] ${flow}: ${message}`);
+}
 
 async function chooseHalfRating(scope: ReturnType<Page["locator"]>, value: number): Promise<void> {
   const star = Math.ceil(value);
   await scope.getByRole("button", { name: `Rate ${star} stars` }).click({ position: { x: value % 1 === 0.5 ? 4 : 24, y: 14 } });
 }
 
-async function signIn(page: Page, email: string): Promise<void> {
+async function signIn(page: Page, flow: string): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Email").fill(email!);
   await page.getByLabel("Password").fill(testPassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
+  log(flow, "login complete");
 }
 
-test.setTimeout(120_000);
+async function waitForStateWrite(page: Page, flow: string): Promise<void> {
+  const response = await page.waitForResponse(
+    (candidate) => candidate.url().endsWith("/api/me/state") && candidate.request().method() === "POST",
+  );
+  expect(response.status()).toBe(200);
+  log(flow, "API write returned 200");
+}
 
-test("Phase 3.7 persists a region, half-star ratings, and all four production logging flows", async ({ page }) => {
+async function reload(page: Page, flow: string): Promise<void> {
+  log(flow, "reload started");
+  await page.reload();
+  log(flow, "reload complete");
+}
+
+test.beforeAll(async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const email = `mosaic-phase37-${suffix}@example.invalid`;
-  const admin = createClient(supabaseUrl!, serviceRoleKey!, { auth: { autoRefreshToken: false, persistSession: false } });
-  let user: User | undefined;
+  email = `mosaic-phase37-${suffix}@example.invalid`;
+  admin = createClient(supabaseUrl!, serviceRoleKey!, { auth: { autoRefreshToken: false, persistSession: false } });
 
-  try {
-    const created = await admin.auth.admin.createUser({ email, password: testPassword, email_confirm: true, user_metadata: { display_name: "Phase 3.7 verification" } });
-    expect(created.error).toBeNull();
-    if (!created.data.user) throw new Error("The disposable production user was not created.");
-    user = created.data.user;
+  const created = await admin.auth.admin.createUser({
+    email,
+    password: testPassword,
+    email_confirm: true,
+    user_metadata: { display_name: "Phase 3.7 verification" },
+  });
+  expect(created.error).toBeNull();
+  if (!created.data.user) throw new Error("The disposable production user was not created.");
+  user = created.data.user;
+  log("setup", "disposable production user created");
+});
 
-    await signIn(page, email);
+test.beforeEach(({ page }) => {
+  consoleErrors = [];
+  failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("requestfailed", (request) => failedRequests.push(`${request.method()} ${request.url()} (${request.failure()?.errorText ?? "unknown"})`));
+});
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status !== testInfo.expectedStatus) {
+    log(testInfo.title, `FLOW FAILED url=${page.url()} elapsed_ms=${testInfo.duration}`);
+    log(testInfo.title, `console_errors=${consoleErrors.length ? consoleErrors.join(" | ") : "none"}`);
+    log(testInfo.title, `failed_network_requests=${failedRequests.length ? failedRequests.join(" | ") : "none"}`);
+  }
+});
+
+test.afterAll(async () => {
+  if (!admin || !user) return;
+  const deleted = await admin.auth.admin.deleteUser(user.id, true);
+  expect(deleted.error).toBeNull();
+  log("cleanup", "disposable production user and dependent data deleted successfully");
+});
+
+test("movie flow persists watch region and a 4.5-star rating", async ({ page }) => {
+  const flow = "movie";
+  const startedAt = Date.now();
+  log(flow, "FLOW START");
+
+  await test.step("sign in", () => signIn(page, flow));
+  await test.step("save and verify account watch region", async () => {
     await page.goto("/movie/dune-part-two");
+    const savedRegion = waitForStateWrite(page, flow);
     await page.getByLabel("Watch region").selectOption("IN");
-    await page.reload();
+    log(flow, "action submitted: watch region");
+    await savedRegion;
+    await reload(page, flow);
     await expect(page.getByLabel("Watch region")).toHaveValue("IN");
+    log(flow, "watch-region account persistence assertion passed");
+  });
+  await test.step("save movie watch context and half-star rating", async () => {
     await page.getByLabel("Viewing context").selectOption("streaming");
     await page.getByLabel("Streaming service").fill("Phase 3.7 Stream");
     await chooseHalfRating(page.locator("form.status-card"), 4.5);
-    const savedMovie = page.waitForResponse((response) => response.url().endsWith("/api/me/state") && response.request().method() === "POST");
+    const saved = waitForStateWrite(page, flow);
     await page.getByRole("button", { name: "Log watch" }).click();
-    expect((await savedMovie).status()).toBe(200);
-    await page.reload();
+    log(flow, "action submitted");
+    await saved;
+  });
+  await test.step("reload and assert persistence", async () => {
+    await reload(page, flow);
+    await expect(page.getByLabel("Watch region")).toHaveValue("IN");
     await expect(page.getByText(/First watch · streaming · Phase 3.7 Stream · ★ 4.5/)).toBeVisible();
+    log(flow, "persistence assertion passed");
+  });
 
+  log(flow, `FLOW END duration_ms=${Date.now() - startedAt}`);
+});
+
+test("series flow persists watched episode and a 4.5-star rating", async ({ page }) => {
+  const flow = "series";
+  const startedAt = Date.now();
+  log(flow, "FLOW START");
+
+  await test.step("sign in", () => signIn(page, flow));
+  await test.step("save episode watch and half-star rating", async () => {
     await page.goto("/series/severance");
     await page.getByRole("button", { name: "Season 1" }).click();
+    const watched = waitForStateWrite(page, flow);
     await page.getByRole("button", { name: "Mark watched S01E01: Episode 1" }).click();
+    log(flow, "action submitted: episode watched");
+    await watched;
+    const rated = waitForStateWrite(page, flow);
     await chooseHalfRating(page.locator(".episode").first(), 4.5);
-    await page.reload();
+    log(flow, "action submitted: episode rated");
+    await rated;
+  });
+  await test.step("reload and assert persistence", async () => {
+    await reload(page, flow);
     await page.getByRole("button", { name: "Season 1" }).click();
     await expect(page.getByText("1 / 10 watched")).toBeVisible();
     await expect(page.getByRole("button", { name: "Undo watched S01E01: Episode 1" })).toBeVisible();
+    await expect(page.locator(".episode").first().getByText("4.5 / 5")).toBeVisible();
+    log(flow, "persistence assertion passed");
+  });
 
+  log(flow, `FLOW END duration_ms=${Date.now() - startedAt}`);
+});
+
+test("game flow persists playthrough fields and a 4.5-star rating", async ({ page }) => {
+  const flow = "game";
+  const startedAt = Date.now();
+  log(flow, "FLOW START");
+
+  await test.step("sign in", () => signIn(page, flow));
+  await test.step("save playthrough with a half-star rating", async () => {
     await page.goto("/game/red-dead-redemption-2");
     await page.locator('select[name="status"]').selectOption("playing");
     await page.locator('select[name="platform"]').selectOption("PC");
     await page.getByLabel("Playtime (hours)").fill("12.5");
     await page.getByLabel("Progress (%)").fill("42");
     await chooseHalfRating(page.locator("form.status-card"), 4.5);
+    const saved = waitForStateWrite(page, flow);
     await page.getByRole("button", { name: "Save playthrough" }).click();
-    await page.reload();
+    log(flow, "action submitted");
+    await saved;
+  });
+  await test.step("reload and assert persistence", async () => {
+    await reload(page, flow);
     await expect(page.getByLabel("Playtime (hours)")).toHaveValue("12.5");
     await expect(page.getByLabel("Progress (%)")).toHaveValue("42");
+    await expect(page.locator("form.status-card").getByText("4.5 / 5")).toBeVisible();
+    log(flow, "persistence assertion passed");
+  });
 
+  log(flow, `FLOW END duration_ms=${Date.now() - startedAt}`);
+});
+
+test("book flow persists reading progress and a 4.5-star rating", async ({ page }) => {
+  const flow = "book";
+  const startedAt = Date.now();
+  log(flow, "FLOW START");
+
+  await test.step("sign in", () => signIn(page, flow));
+  await test.step("save reading progress with a half-star rating", async () => {
     await page.goto("/book/dune");
     await page.locator('select[name="status"]').selectOption("reading");
     await page.getByLabel("Current page").fill("151");
     await chooseHalfRating(page.locator("form.status-card"), 4.5);
+    const saved = waitForStateWrite(page, flow);
     await page.getByRole("button", { name: "Save reading progress" }).click();
-    await page.reload();
+    log(flow, "action submitted");
+    await saved;
+  });
+  await test.step("reload and assert persistence", async () => {
+    await reload(page, flow);
     await expect(page.getByLabel("Current page")).toHaveValue("151");
     await expect(page.getByRole("heading", { name: "25% complete" })).toBeVisible();
-  } finally {
-    if (user) {
-      const deleted = await admin.auth.admin.deleteUser(user.id, true);
-      expect(deleted.error).toBeNull();
-    }
-  }
+    await expect(page.locator("form.status-card").getByText("4.5 / 5")).toBeVisible();
+    log(flow, "persistence assertion passed");
+  });
+
+  log(flow, `FLOW END duration_ms=${Date.now() - startedAt}`);
 });
