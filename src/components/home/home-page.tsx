@@ -27,11 +27,7 @@ export function HomePage({ initialDiscovery = [] }: { initialDiscovery?: Catalog
     return () => controller.abort();
   }, []);
 
-  const movies = discovery.filter((item) => item.mediaType === "movie");
-  const series = discovery.filter((item) => item.mediaType === "tv");
-  const games = discovery.filter((item) => item.mediaType === "game");
-  const books = discovery.filter((item) => item.mediaType === "book");
-  const featured = movies[0] ?? discovery[0];
+  const featured = discovery[0];
   const continueItems = useMemo(() => deriveContinue(state), [state]);
   const recent = useMemo(() => projectActivity(state).slice(0, 6), [state]);
   const saved = state.library.filter((item) => ["watchlist", "backlog", "want_to_read"].includes(item.status)).map((item) => item.media);
@@ -42,10 +38,7 @@ export function HomePage({ initialDiscovery = [] }: { initialDiscovery?: Catalog
       {user && continueItems.length > 0 && <section className="section" style={{ marginTop: 8 }}><div className="section-head"><div><span className="eyebrow">In progress</span><h2>Continue your stories</h2></div><Link className="text-link" href="/library">Open library →</Link></div><div className="continue-grid">{continueItems.map((item) => <article className="continue-card" key={`${item.kind}-${mediaKey(item.media)}`}><Image src={item.media.backdropUrl ?? item.media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width:820px) 100vw, 33vw"/><div className="continue-body"><span className="type-badge">{item.media.mediaType === "tv" ? "Series" : item.media.mediaType}</span><h3>{item.media.title}</h3><span className="muted" style={{ fontSize: 12 }}>{item.label}</span><div className="progress-track"><div className="progress-bar" style={{ width: `${item.progress}%` }}/></div><div className="progress-meta"><span>{item.detail}</span><span>{item.progress}%</span></div><Link className="button compact" href={mediaHref(item.media)}>{item.kind === "book" ? "Update progress" : item.kind === "game" ? "Update playthrough" : "Log episode"}</Link></div></article>)}</div></section>}
       {user && recent.length > 0 && <section className="section"><div className="section-head"><div><span className="eyebrow">Your story</span><h2>Recently logged</h2></div><Link className="text-link" href="/activity">View activity →</Link></div><div className="recent-log-grid">{recent.map((item) => <Link className="recent-log-card" href={mediaHref(item.media)} key={item.eventId}><span className="recent-log-art"><Image src={item.media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></span><span><small>{item.mediaType === "tv" ? "Series" : item.mediaType}</small><strong>{item.media.title}</strong><em>{activityLabel(item)}{item.rating ? ` · ★ ${item.rating}` : item.detail ? ` · ${item.detail}` : ""}</em><time>{item.occurredAt.slice(0, 10)}</time></span></Link>)}</div></section>}
       {user && saved.length > 0 && <section className="section"><div className="section-head"><div><span className="eyebrow">Saved for later</span><h2>Watchlist, backlog & reading list</h2></div><Link className="text-link" href="/library">Open library →</Link></div><MediaShelf items={saved} showType/></section>}
-      <section className="section"><div className="section-head"><div><span className="eyebrow">Provider discovery</span><h2>Trending movies</h2></div><Link className="text-link" href="/discover?type=movie">Explore movies →</Link></div>{movies.length ? <MediaShelf items={movies}/> : <p className="muted">Movie discovery is temporarily unavailable.</p>}</section>
-      <section className="section"><div className="section-head"><h2>Trending series</h2><Link className="text-link" href="/discover?type=tv">Explore series →</Link></div>{series.length ? <MediaShelf items={series}/> : <p className="muted">Series discovery is temporarily unavailable.</p>}</section>
-      <section className="section"><div className="section-head"><h2>Games worth getting lost in</h2><Link className="text-link" href="/discover?type=game">Explore games →</Link></div>{games.length ? <MediaShelf items={games}/> : <p className="muted">Game discovery is temporarily unavailable.</p>}</section>
-      <section className="section"><div className="section-head"><h2>Book discovery</h2><Link className="text-link" href="/discover?type=book">Explore books →</Link></div>{books.length ? <MediaShelf items={books}/> : <p className="muted">Book discovery is temporarily unavailable.</p>}</section>
+      <section className="section"><div className="section-head"><div><span className="eyebrow">A fresh discovery</span><h2>Worth a closer look</h2></div><Link className="text-link" href="/discover">Browse themes & filters →</Link></div>{discovery.length ? <MediaShelf items={discovery} showType/> : <p className="muted">Discovery is temporarily unavailable. Try again shortly.</p>}</section>
     </div>
   </>;
 }

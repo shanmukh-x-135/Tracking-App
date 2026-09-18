@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { deriveCurrentMediaState } from "@/lib/persistence/current-media-state";
-import { readSupabaseState } from "@/lib/persistence/supabase-state";
+import { readSupabaseCurrentMediaState } from "@/lib/persistence/supabase-state";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -13,8 +12,7 @@ export async function GET() {
   const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : undefined;
   if (!userId) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   try {
-    const state = await readSupabaseState(client, userId);
-    return NextResponse.json({ watchRegion: state.watchRegion, media: deriveCurrentMediaState(state) });
+    return NextResponse.json(await readSupabaseCurrentMediaState(client, userId));
   } catch {
     return NextResponse.json({ error: "Your current media state could not be loaded." }, { status: 500 });
   }

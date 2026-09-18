@@ -1,11 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const domains = [
-  ["Trending movies", /\/movie\/mock(?:%3A|:)+movie/i],
-  ["Trending series", /\/series\/mock(?:%3A|:)+tv/i],
-  ["Games worth getting lost in", /\/game\/mock(?:%3A|:)+game/i],
-  ["Book discovery", /\/book\/mock(?:%3A|:)+book/i],
-] as const;
 const viewports = [1440, 1280, 768, 390] as const;
 
 async function clickCardAndVerifyRoute(page: Page, card: ReturnType<Page["getByRole"]>, expectedRoute: RegExp): Promise<void> {
@@ -28,11 +22,9 @@ test("Home media cards navigate across all four domains without an overlay inter
     });
     expect(posterReceivesClicks).toBe(true);
 
-    for (const [heading, expectedRoute] of domains) {
-      const section = page.getByRole("heading", { name: heading }).locator("xpath=ancestor::section");
-      await clickCardAndVerifyRoute(page, section.getByRole("link", { name: /^View / }).first(), expectedRoute);
-      await page.goBack();
-    }
+    const section = page.getByRole("heading", { name: "Worth a closer look" }).locator("xpath=ancestor::section");
+    await clickCardAndVerifyRoute(page, section.getByRole("link", { name: /^View / }).first(), /\/(movie|series|game|book)\/mock(?:%3A|:)+/i);
+    await page.goBack();
   }
 
   await page.locator(".media-card .poster-link").first().focus();

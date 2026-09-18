@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalogMediaSchema, statusMatchesMedia } from "@/lib/persistence/validation";
 import { calculateBookProgress } from "@/lib/persistence/domain";
+import type { CurrentMediaState } from "@/lib/persistence/current-media-state";
 import { emptyMosaicState, type DomainMutation, type MosaicState, type PersistenceMutation, type SharedMutation } from "@/lib/persistence/types";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { Database, MediaItemRow } from "@/types/database";
@@ -145,6 +146,71 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     return media ? [{ id: row.id, media, status: row.status as MosaicState["bookReadings"][number]["status"], currentPage: row.current_page ?? undefined, totalPages: row.total_pages ?? undefined, progressPercent: row.progress_percent ?? undefined, rating: row.rating ?? undefined, updatedAt: row.updated_at }] : [];
   });
   return state;
+}
+
+/**
+ * Read the small card-facing projection without reconstructing private diary,
+ * review, or list history. Historical screens continue to use
+ * `readSupabaseState`, where those records are required.
+ */
+export async function readSupabaseCurrentMediaState(client: Client, userId: string): Promise<{ watchRegion?: string; media: CurrentMediaState[] }> {
+  const [profileResult, libraryResult, ratingsResult, gameResult, bookResult, episodeWatchResult, seasonStateResult] = await Promise.all([
+    client.from("profiles").select("watch_region").eq("id", userId).maybeSingle(),
+    client.from("library_entries").select("media_id,status,is_favorite,updated_at").eq("user_id", userId),
+    client.from("ratings").select("media_id,rating").eq("user_id", userId),
+    client.from("game_playthroughs").select("media_id,status,progress_percent,updated_at").eq("user_id", userId),
+    client.from("book_readings").select("media_id,status,progress_percent,updated_at").eq("user_id", userId),
+    client.from("episode_watch_logs").select("episode_id,watched_at").eq("user_id", userId),
+    client.from("tv_season_states").select("series_media_id,state,updated_at").eq("user_id", userId),
+  ]);
+  if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
+  [libraryResult, ratingsResult, gameResult, bookResult, episodeWatchResult, seasonStateResult].forEach(({ error }) => assertResult(error));
+
+  const episodeIds = (episodeWatchResult.data ?? []).map(({ episode_id }) => episode_id);
+  const episodesResult = episodeIds.length
+    ? await client.from("tv_episodes").select("id,series_media_id").in("id", episodeIds)
+    : { data: [], error: null };
+  assertResult(episodesResult.error);
+  const mediaIds = new Set<string>();
+  for (const row of libraryResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of ratingsResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of episodesResult.data ?? []) mediaIds.add(row.series_media_id);
+  const mediaResult = mediaIds.size
+    ? await client.from("media_items").select("id,provider,media_type,external_id").in("id", [...mediaIds])
+    : { data: [], error: null };
+  assertResult(mediaResult.error);
+  const keyByMediaId = new Map((mediaResult.data ?? []).map((row) => [row.id, `${row.provider}:${row.media_type}:${row.external_id}`]));
+  const snapshot = new Map<string, CurrentMediaState>();
+  const ensure = (mediaId: string): CurrentMediaState | undefined => {
+    const key = keyByMediaId.get(mediaId);
+    if (!key) return undefined;
+    const existing = snapshot.get(key);
+    if (existing) return existing;
+    const next = { mediaKey: key, isFavorite: false };
+    snapshot.set(key, next);
+    return next;
+  };
+  for (const row of libraryResult.data ?? []) {
+    const item = ensure(row.media_id);
+    if (item) Object.assign(item, { status: row.status, isFavorite: row.is_favorite, latestOccurredAt: row.updated_at });
+  }
+  for (const row of ratingsResult.data ?? []) { const item = ensure(row.media_id); if (item) item.rating = row.rating; }
+  for (const row of gameResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
+  for (const row of bookResult.data ?? []) { const item = ensure(row.media_id); if (item) Object.assign(item, { status: row.status, progressPercent: row.progress_percent ?? undefined, latestOccurredAt: row.updated_at }); }
+  for (const row of seasonStateResult.data ?? []) { const item = ensure(row.series_media_id); if (item) Object.assign(item, { status: row.state, latestOccurredAt: row.updated_at }); }
+  const episodeById = new Map((episodesResult.data ?? []).map((row) => [row.id, row]));
+  for (const row of episodeWatchResult.data ?? []) {
+    const episode = episodeById.get(row.episode_id);
+    const item = episode && ensure(episode.series_media_id);
+    if (item && (!item.latestOccurredAt || row.watched_at > item.latestOccurredAt)) {
+      item.status ??= "watching";
+      item.latestOccurredAt = row.watched_at;
+    }
+  }
+  return { watchRegion: profileResult.data?.watch_region ?? undefined, media: [...snapshot.values()].sort((first, second) => (second.latestOccurredAt ?? "").localeCompare(first.latestOccurredAt ?? "")) };
 }
 
 export async function applySharedSupabaseMutation(client: Client, userId: string, mutation: SharedMutation): Promise<void> {
