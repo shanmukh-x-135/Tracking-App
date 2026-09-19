@@ -1,4 +1,5 @@
+import { DiscoverPage } from "@/components/explore/discover-page";
 import { Suspense } from "react";
-import { CollectionPage } from "@/components/explore/collection-page";
+import { discoverCatalog } from "@/lib/media/catalog";
 export const metadata={title:"Discover"};
-export default function Page(){return <Suspense><CollectionPage mode="discover"/></Suspense>}
+export default async function Page(){const discovery = await discoverCatalog(); return <Suspense><DiscoverPage initialSections={discovery.sections}/></Suspense>}
