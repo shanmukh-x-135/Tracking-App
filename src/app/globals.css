@@ -29,7 +29,7 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--background); color-scheme: dark; scroll-behavior: smooth; }
+html { background: var(--background); color-scheme: dark; scroll-behavior: auto; }
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -796,6 +796,7 @@ body { background: radial-gradient(ellipse 80% 30% at 50% -8%, rgba(113, 148, 18
 .discover-heading p { margin:0; color:var(--foreground-secondary); line-height:1.65; }
 .discover-current-type { margin:28px 0 -26px; color:var(--foreground-secondary); font-size:15px; font-weight:750; }
 .discover-filter-bar,.library-filter-bar { display:flex; width:max-content; max-width:100%; padding:6px; gap:3px; overflow-x:auto; border-radius:16px; }
+.discover-filter-bar { width:100%; flex-wrap:wrap; overflow-x:visible; }
 .discover-filter-bar button,.library-filter-bar button { min-height:36px; border:0; border-radius:11px; padding:0 14px; color:var(--foreground-secondary); background:transparent; font-size:12px; font-weight:750; white-space:nowrap; cursor:pointer; }
 .discover-filter-bar button.active,.library-filter-bar button.active { color:#fff; background:rgba(255,255,255,.13); box-shadow:inset 0 1px rgba(255,255,255,.16); }
 .discover-module { position:relative; margin-top:72px; }
@@ -845,7 +846,7 @@ body { background: radial-gradient(ellipse 80% 30% at 50% -8%, rgba(113, 148, 18
 .smart-module { padding:34px; border:1px solid rgba(255,255,255,.09); border-radius:26px; background:linear-gradient(110deg,rgba(105,73,142,.15),rgba(14,17,26,.4) 58%); }
 
 @media (max-width:820px) {
-  .discover-bridge-page { padding:28px 16px 56px; }
+  .discover-bridge-page { padding:28px 16px calc(124px + env(safe-area-inset-bottom)); }
   .discover-spotlight { min-height:590px; padding:72px 20px 44px; border-radius:24px; }
   .spotlight-image img { object-position:62% center; opacity:.42; }
   .spotlight-art::after { background:linear-gradient(0deg,#100a19 3%,rgba(16,10,25,.54) 70%,rgba(16,10,25,.16)); }
