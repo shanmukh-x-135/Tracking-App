@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { projectActivity } from "../src/lib/activity/projection";
 import { deriveContinue } from "../src/lib/home/continue";
-import { deriveAnalytics } from "../src/lib/analytics/derive";
+import { deriveAnalytics, deriveTvMetrics } from "../src/lib/analytics/derive";
 import { deriveCurrentMediaState } from "../src/lib/persistence/current-media-state";
 import { emptyMosaicState } from "../src/lib/persistence/types";
 import type { CatalogBook, CatalogGame, CatalogMovie, CatalogSeries } from "../src/lib/media/types";
@@ -61,4 +61,22 @@ test("analytics remain rebuildable and never become a source of truth", () => {
   assert.deepEqual(analytics.movie, { watches: 2, rewatches: 1, uniqueMovies: 1 });
   assert.deepEqual(analytics.game, { completedPlaythroughs: 1, playtimeMinutes: 120 });
   assert.deepEqual(analytics.monthlyActivity, [{ month: "2026-02", count: 3 }]);
+});
+
+test("TV metrics keep unique episodes, explicit logs, rewatches, and bulk season state distinct", () => {
+  const state = emptyMosaicState();
+  state.episodeWatches = [
+    { id: "first", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-01T00:00:00.000Z" },
+    { id: "rewatch", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-02T00:00:00.000Z", isRewatch: true },
+    { id: "second", series, seasonNumber: 1, episodeNumber: 2, watchedAt: "2026-02-03T00:00:00.000Z" },
+  ];
+  state.seasonStates = [{ id: "bulk", series, seasonNumber: 2, state: "completed", provenance: "imported_state", updatedAt: "2026-02-04T00:00:00.000Z" }];
+
+  assert.deepEqual(deriveTvMetrics(state), {
+    uniqueEpisodesWatched: 2,
+    episodeWatchLogs: 3,
+    episodeRewatches: 1,
+    completedSeasons: 1,
+    showsInProgress: 1,
+  });
 });

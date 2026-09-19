@@ -53,5 +53,5 @@ test("a card Quick Log action opens its dialog without navigating through the ca
   await page.goto("/");
   await page.getByRole("button", { name: "Log Dune: Part Two" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/home$/);
 });

@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MediaCard, MediaShelf, MediaShelfSkeleton } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
-import { findTheme, themeQuery, themesForMediaType } from "@/lib/media/themes";
+import { findTheme, themesForMediaType } from "@/lib/media/themes";
 import type { CatalogDiscoverySection, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import type { LibraryStatus } from "@/lib/persistence/types";
 import type { MediaType } from "@/types/media";
@@ -52,10 +52,10 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
 
   useEffect(() => {
     if (mode !== "discover" || !theme) { queueMicrotask(() => setThemeItems(undefined)); return; }
-    const query = themeQuery(theme, type);
-    if (!query) { queueMicrotask(() => setThemeItems([])); return; }
     const controller = new AbortController();
-    void fetch(`/api/catalog/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+    const params = new URLSearchParams({ theme: theme.id });
+    if (type) params.set("type", type);
+    void fetch(`/api/catalog/themes?${params}`, { signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<CatalogSearchResult> : { items: [] })
       .then((result) => setThemeItems(result.items.filter((item) => !type || item.mediaType === type)))
       .catch(() => { if (!controller.signal.aborted) setThemeItems([]); });
@@ -100,7 +100,7 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
     {mode === "discover" && discoveryMessage && <p className="search-notice" role="status">{discoveryMessage}</p>}
     {mode === "library" && !user && !isLoading ? <div className="empty-state"><h2>Your library travels with you</h2><p>Sign in to save movies, series, games, and books across sessions.</p><Link className="button primary" href="/login">Sign in</Link></div>
       : mode === "library" && !isLoading && !libraryItems.length ? <div className="empty-state"><h2>No {typeLabel} here yet</h2><p>Add something you want to watch, play, or read.</p><Link className="button primary" href="/discover">Discover stories</Link></div>
-      : mode === "discover" && theme ? <section className="discover-section"><div className="section-head"><div><span className="eyebrow">Filtered provider search</span><h2>{theme.label}</h2></div></div>{themeItems === undefined ? <MediaShelfSkeleton/> : themeItems.length ? <MediaShelf items={themeItems} showType={!type}/> : <div className="empty-state"><h2>No reliable {theme.label.toLowerCase()} results here yet</h2><p>Try another domain or theme. Mosaic only shows real provider search results.</p></div>}</section>
+      : mode === "discover" && theme ? <section className="discover-section"><div className="section-head"><div><span className="eyebrow">Mosaic-curated theme · provider-backed results</span><h2>{theme.label}</h2></div></div>{themeItems === undefined ? <MediaShelfSkeleton/> : themeItems.length ? <MediaShelf items={themeItems} showType={!type}/> : <div className="empty-state"><h2>No reliable {theme.label.toLowerCase()} results here yet</h2><p>Try another domain or theme. Mosaic only shows real provider results that match this curated mapping.</p></div>}</section>
       : mode === "discover" && !discoverySections.length ? discoveryMessage ? <div className="empty-state"><h2>Discovery is unavailable</h2><p>{discoveryMessage}</p></div> : <section className="discover-section"><div className="section-head"><div><span className="eyebrow">Loading</span><h2>Finding stories for you</h2></div></div><MediaShelfSkeleton/></section>
       : mode === "discover" ? <div className="discover-sections">{discoverySections.map((section) => <section className="discover-section" key={section.id}><div className="section-head"><div><span className="eyebrow">{section.mediaType === "tv" ? "Series" : section.mediaType}</span><h2>{section.label}</h2></div></div>{section.items.length ? <MediaShelf items={section.items} showType={!type}/> : <p className="muted">{section.error ?? "No stories are available in this section right now."}</p>}</section>)}</div>
       : <motion.div layout className="media-grid"><AnimatePresence mode="popLayout">{libraryItems.map((media, index) => <motion.div layout key={`${media.provider}:${media.mediaType}:${media.providerId}`} initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .98 }} transition={motionTokens.fast}><MediaCard media={media} showType={!type} priority={index < 6}/></motion.div>)}</AnimatePresence></motion.div>}

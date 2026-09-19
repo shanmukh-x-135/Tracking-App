@@ -21,6 +21,13 @@ export function calculateBookProgress(currentPage?: number, totalPages?: number,
   return Math.min(100, Math.max(0, Math.round(currentPage / totalPages * 100)));
 }
 
+/** A finished reading is complete even when the form omitted a final page value. */
+export function normalizeBookReading(status: BookReading["status"], currentPage?: number, totalPages?: number, progressPercent?: number): Pick<BookReading, "currentPage" | "totalPages" | "progressPercent"> {
+  const completedPage = status === "finished" && totalPages ? totalPages : currentPage;
+  const completedPercent = status === "finished" && !totalPages ? 100 : progressPercent;
+  return { currentPage: completedPage, totalPages, progressPercent: calculateBookProgress(completedPage, totalPages, completedPercent) };
+}
+
 export function applyMutation(state: MosaicState, mutation: PersistenceMutation, now = new Date().toISOString()): MosaicState {
   const next = structuredClone(state);
   const key = "media" in mutation ? mediaKey(mutation.media) : mutation.type === "episode.log" || mutation.type === "episode.unwatch" || mutation.type === "season.state" ? mediaKey(mutation.series) : undefined;
@@ -137,7 +144,8 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
     }
     case "book.upsert": {
       next.bookReadings = next.bookReadings.filter(({ id }) => id !== mutation.readingId);
-      const reading: BookReading = { id: mutation.readingId ?? crypto.randomUUID(), media: mutation.media, status: mutation.status, currentPage: mutation.currentPage, totalPages: mutation.totalPages, progressPercent: calculateBookProgress(mutation.currentPage, mutation.totalPages, mutation.progressPercent), rating: mutation.rating, updatedAt: now };
+      const progress = normalizeBookReading(mutation.status, mutation.currentPage, mutation.totalPages, mutation.progressPercent);
+      const reading: BookReading = { id: mutation.readingId ?? crypto.randomUUID(), media: mutation.media, status: mutation.status, ...progress, rating: mutation.rating, updatedAt: now };
       next.bookReadings.unshift(reading);
       ensureLibrary(mutation.media, mutation.status);
       ensureRating(mutation.media, mutation.rating);

@@ -2,12 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getAuthGateway } from "@/lib/auth/gateway";
-import type { AuthUser } from "@/lib/auth/types";
+import type { AuthUser, ProfileUpdate } from "@/lib/auth/types";
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   refresh(): Promise<void>;
+  updateProfile(profile: ProfileUpdate): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -23,6 +24,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, [gateway]);
 
+  const updateProfile = useCallback(async (profile: ProfileUpdate) => {
+    const nextUser = await gateway.updateProfile(profile);
+    setUser(nextUser);
+  }, [gateway]);
+
   useEffect(() => {
     let isActive = true;
     void gateway.getUser().then((nextUser) => {
@@ -36,8 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isLoading,
     refresh,
+    updateProfile,
     async signOut() { await gateway.signOut(); setUser(null); },
-  }), [gateway, isLoading, refresh, user]);
+  }), [gateway, isLoading, refresh, updateProfile, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

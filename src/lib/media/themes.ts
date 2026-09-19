@@ -1,11 +1,14 @@
+import type { CatalogMedia } from "@/lib/media/types";
 import type { MediaType } from "@/types/media";
 
 export type ThemeId = "time-loop" | "slow-burn" | "found-family" | "cyberpunk" | "cosmic-horror" | "heist" | "courtroom" | "political-intrigue" | "workplace" | "medical" | "prison" | "coming-of-age" | "based-on-a-book" | "mystery" | "survival";
 
 export interface ThemeRule {
-  /** Provider-compatible text seed. Provider adapters may upgrade this to native keyword/genre IDs later. */
-  query: string;
+  /** Broad provider searches used to assemble a candidate set, never the label itself. */
+  searchTerms: readonly string[];
   providerSignals: readonly string[];
+  /** Genre/description concepts used to rank those provider-returned candidates. */
+  concepts: readonly string[];
 }
 
 export interface MediaTheme {
@@ -19,22 +22,28 @@ export interface MediaTheme {
  * providers for each theme; it never claims that every returned item has an
  * authoritative cross-provider theme label.
  */
+const standardSignals = ["tmdb.keyword", "tmdb.genre"] as const;
+const bookSignals = ["googlebooks.subject"] as const;
+const gameSignals = ["igdb.theme", "igdb.genre", "igdb.keyword"] as const;
+const r = (searchTerms: readonly string[], providerSignals: readonly string[], concepts: readonly string[]): ThemeRule => ({ searchTerms, providerSignals, concepts });
+
+/** Curated semantic mappings over real provider candidates, not fake provider labels. */
 export const mediaThemes: readonly MediaTheme[] = [
-  { id: "time-loop", label: "Time Loop", rules: { movie: { query: "time loop", providerSignals: ["tmdb.keyword"] }, tv: { query: "time loop", providerSignals: ["tmdb.keyword"] }, game: { query: "time loop", providerSignals: ["igdb.theme", "igdb.keyword"] }, book: { query: "time loop", providerSignals: ["googlebooks.subject"] } } },
-  { id: "slow-burn", label: "Slow Burn", rules: { movie: { query: "slow burn", providerSignals: ["tmdb.keyword"] }, tv: { query: "slow burn", providerSignals: ["tmdb.keyword"] }, book: { query: "slow burn", providerSignals: ["googlebooks.subject"] } } },
-  { id: "found-family", label: "Found Family", rules: { movie: { query: "found family", providerSignals: ["tmdb.keyword"] }, tv: { query: "found family", providerSignals: ["tmdb.keyword"] }, game: { query: "found family", providerSignals: ["igdb.keyword"] }, book: { query: "found family", providerSignals: ["googlebooks.subject"] } } },
-  { id: "cyberpunk", label: "Cyberpunk", rules: { movie: { query: "cyberpunk", providerSignals: ["tmdb.keyword", "tmdb.genre"] }, tv: { query: "cyberpunk", providerSignals: ["tmdb.keyword", "tmdb.genre"] }, game: { query: "cyberpunk", providerSignals: ["igdb.theme", "igdb.genre"] }, book: { query: "cyberpunk", providerSignals: ["googlebooks.subject"] } } },
-  { id: "cosmic-horror", label: "Cosmic Horror", rules: { movie: { query: "cosmic horror", providerSignals: ["tmdb.keyword"] }, tv: { query: "cosmic horror", providerSignals: ["tmdb.keyword"] }, game: { query: "cosmic horror", providerSignals: ["igdb.theme", "igdb.keyword"] }, book: { query: "cosmic horror", providerSignals: ["googlebooks.subject"] } } },
-  { id: "heist", label: "Heist", rules: { movie: { query: "heist", providerSignals: ["tmdb.keyword"] }, tv: { query: "heist", providerSignals: ["tmdb.keyword"] }, game: { query: "heist", providerSignals: ["igdb.theme", "igdb.keyword"] }, book: { query: "heist", providerSignals: ["googlebooks.subject"] } } },
-  { id: "courtroom", label: "Courtroom", rules: { movie: { query: "courtroom", providerSignals: ["tmdb.keyword"] }, tv: { query: "courtroom", providerSignals: ["tmdb.keyword"] }, book: { query: "courtroom", providerSignals: ["googlebooks.subject"] } } },
-  { id: "political-intrigue", label: "Political Intrigue", rules: { movie: { query: "political intrigue", providerSignals: ["tmdb.keyword"] }, tv: { query: "political intrigue", providerSignals: ["tmdb.keyword"] }, game: { query: "political intrigue", providerSignals: ["igdb.theme", "igdb.keyword"] }, book: { query: "political intrigue", providerSignals: ["googlebooks.subject"] } } },
-  { id: "workplace", label: "Workplace", rules: { movie: { query: "workplace", providerSignals: ["tmdb.keyword"] }, tv: { query: "workplace", providerSignals: ["tmdb.keyword"] }, game: { query: "workplace", providerSignals: ["igdb.keyword"] }, book: { query: "workplace", providerSignals: ["googlebooks.subject"] } } },
-  { id: "medical", label: "Medical", rules: { movie: { query: "medical", providerSignals: ["tmdb.keyword"] }, tv: { query: "medical", providerSignals: ["tmdb.keyword"] }, game: { query: "medical", providerSignals: ["igdb.theme"] }, book: { query: "medical", providerSignals: ["googlebooks.subject"] } } },
-  { id: "prison", label: "Prison", rules: { movie: { query: "prison", providerSignals: ["tmdb.keyword"] }, tv: { query: "prison", providerSignals: ["tmdb.keyword"] }, game: { query: "prison", providerSignals: ["igdb.theme"] }, book: { query: "prison", providerSignals: ["googlebooks.subject"] } } },
-  { id: "coming-of-age", label: "Coming of Age", rules: { movie: { query: "coming of age", providerSignals: ["tmdb.keyword"] }, tv: { query: "coming of age", providerSignals: ["tmdb.keyword"] }, game: { query: "coming of age", providerSignals: ["igdb.theme"] }, book: { query: "coming of age", providerSignals: ["googlebooks.subject"] } } },
-  { id: "based-on-a-book", label: "Based on a Book", rules: { movie: { query: "based on a book", providerSignals: ["tmdb.keyword"] }, tv: { query: "based on a book", providerSignals: ["tmdb.keyword"] } } },
-  { id: "mystery", label: "Mystery", rules: { movie: { query: "mystery", providerSignals: ["tmdb.genre"] }, tv: { query: "mystery", providerSignals: ["tmdb.genre"] }, game: { query: "mystery", providerSignals: ["igdb.genre"] }, book: { query: "mystery", providerSignals: ["googlebooks.subject"] } } },
-  { id: "survival", label: "Survival", rules: { movie: { query: "survival", providerSignals: ["tmdb.keyword"] }, tv: { query: "survival", providerSignals: ["tmdb.keyword"] }, game: { query: "survival", providerSignals: ["igdb.theme", "igdb.keyword"] }, book: { query: "survival", providerSignals: ["googlebooks.subject"] } } },
+  { id: "time-loop", label: "Time Loop", rules: { movie: r(["time travel", "science fiction"], standardSignals, ["time", "travel", "science fiction"]), tv: r(["time travel", "science fiction"], standardSignals, ["time", "travel", "science fiction"]), game: r(["science fiction", "puzzle"], gameSignals, ["time", "science fiction", "puzzle"]), book: r(["time travel", "science fiction"], bookSignals, ["time", "travel", "science fiction"]) } },
+  { id: "slow-burn", label: "Slow Burn", rules: { movie: r(["psychological drama", "character study"], standardSignals, ["drama", "psychological", "character"]), tv: r(["psychological drama", "character drama"], standardSignals, ["drama", "psychological", "character"]), book: r(["literary fiction", "psychological fiction"], bookSignals, ["literary", "psychological", "character"]) } },
+  { id: "found-family", label: "Found Family", rules: { movie: r(["ensemble adventure", "family drama"], standardSignals, ["family", "friendship", "ensemble"]), tv: r(["ensemble drama", "family adventure"], standardSignals, ["family", "friendship", "ensemble"]), game: r(["party adventure", "role playing"], gameSignals, ["family", "friendship", "party"]), book: r(["family fiction", "friendship fiction"], bookSignals, ["family", "friendship"]) } },
+  { id: "cyberpunk", label: "Cyberpunk", rules: { movie: r(["dystopian science fiction", "future technology"], standardSignals, ["dystopian", "technology", "science fiction"]), tv: r(["dystopian science fiction", "future technology"], standardSignals, ["dystopian", "technology", "science fiction"]), game: r(["science fiction", "futuristic action"], gameSignals, ["dystopian", "technology", "science fiction"]), book: r(["dystopian fiction", "technology fiction"], bookSignals, ["dystopian", "technology", "science fiction"]) } },
+  { id: "cosmic-horror", label: "Cosmic Horror", rules: { movie: r(["supernatural horror", "science fiction horror"], standardSignals, ["horror", "supernatural", "cosmic"]), tv: r(["supernatural horror", "science fiction horror"], standardSignals, ["horror", "supernatural", "cosmic"]), game: r(["survival horror", "science fiction"], gameSignals, ["horror", "supernatural", "cosmic"]), book: r(["supernatural horror", "weird fiction"], bookSignals, ["horror", "supernatural", "cosmic"]) } },
+  { id: "heist", label: "Heist", rules: { movie: r(["crime thriller", "robbery"], standardSignals, ["crime", "robbery", "thief"]), tv: r(["crime thriller", "robbery"], standardSignals, ["crime", "robbery", "thief"]), game: r(["crime action", "stealth"], gameSignals, ["crime", "robbery", "stealth"]), book: r(["crime fiction", "thriller fiction"], bookSignals, ["crime", "robbery", "thief"]) } },
+  { id: "courtroom", label: "Courtroom", rules: { movie: r(["legal drama", "crime drama"], standardSignals, ["legal", "court", "trial"]), tv: r(["legal drama", "crime drama"], standardSignals, ["legal", "court", "trial"]), book: r(["legal fiction", "crime fiction"], bookSignals, ["legal", "court", "trial"]) } },
+  { id: "political-intrigue", label: "Political Intrigue", rules: { movie: r(["political drama", "government thriller"], standardSignals, ["political", "government", "power"]), tv: r(["political drama", "government thriller"], standardSignals, ["political", "government", "power"]), game: r(["strategy", "government"], gameSignals, ["political", "government", "power"]), book: r(["political fiction", "government fiction"], bookSignals, ["political", "government", "power"]) } },
+  { id: "workplace", label: "Workplace", rules: { movie: r(["office comedy", "work drama"], standardSignals, ["office", "work", "career"]), tv: r(["office comedy", "work drama"], standardSignals, ["office", "work", "career"]), game: r(["business simulation", "office"], gameSignals, ["office", "work", "career"]), book: r(["workplace fiction", "office fiction"], bookSignals, ["office", "work", "career"]) } },
+  { id: "medical", label: "Medical", rules: { movie: r(["hospital drama", "doctor"], standardSignals, ["medical", "hospital", "doctor"]), tv: r(["hospital drama", "doctor"], standardSignals, ["medical", "hospital", "doctor"]), game: r(["medical simulation", "hospital"], gameSignals, ["medical", "hospital", "doctor"]), book: r(["medical fiction", "hospital fiction"], bookSignals, ["medical", "hospital", "doctor"]) } },
+  { id: "prison", label: "Prison", rules: { movie: r(["crime drama", "incarceration"], standardSignals, ["prison", "inmate", "incarceration"]), tv: r(["crime drama", "incarceration"], standardSignals, ["prison", "inmate", "incarceration"]), game: r(["prison escape", "stealth"], gameSignals, ["prison", "inmate", "escape"]), book: r(["prison fiction", "crime fiction"], bookSignals, ["prison", "inmate", "incarceration"]) } },
+  { id: "coming-of-age", label: "Coming of Age", rules: { movie: r(["teen drama", "youth drama"], standardSignals, ["teen", "youth", "adolescent"]), tv: r(["teen drama", "youth drama"], standardSignals, ["teen", "youth", "adolescent"]), game: r(["teen adventure", "youth"], gameSignals, ["teen", "youth", "adolescent"]), book: r(["young adult fiction", "teen fiction"], bookSignals, ["teen", "youth", "adolescent"]) } },
+  { id: "based-on-a-book", label: "Based on a Book", rules: { movie: r(["literary adaptation", "novel adaptation"], standardSignals, ["based on", "novel", "adaptation"]), tv: r(["literary adaptation", "novel adaptation"], standardSignals, ["based on", "novel", "adaptation"]) } },
+  { id: "mystery", label: "Mystery", rules: { movie: r(["crime thriller", "detective"], standardSignals, ["mystery", "detective", "crime"]), tv: r(["crime thriller", "detective"], standardSignals, ["mystery", "detective", "crime"]), game: r(["detective adventure", "puzzle"], gameSignals, ["mystery", "detective", "puzzle"]), book: r(["mystery fiction", "detective fiction"], bookSignals, ["mystery", "detective", "crime"]) } },
+  { id: "survival", label: "Survival", rules: { movie: r(["wilderness thriller", "disaster drama"], standardSignals, ["survival", "wilderness", "disaster"]), tv: r(["wilderness thriller", "disaster drama"], standardSignals, ["survival", "wilderness", "disaster"]), game: r(["survival adventure", "wilderness"], gameSignals, ["survival", "wilderness", "disaster"]), book: r(["survival fiction", "wilderness fiction"], bookSignals, ["survival", "wilderness", "disaster"]) } },
 ];
 
 export function findTheme(value: string | null): MediaTheme | undefined {
@@ -45,7 +54,17 @@ export function themesForMediaType(mediaType: MediaType | null): readonly MediaT
   return mediaThemes.filter((theme) => mediaType ? theme.rules[mediaType] : Object.keys(theme.rules).length > 0);
 }
 
-export function themeQuery(theme: MediaTheme, mediaType: MediaType | null): string | undefined {
-  if (mediaType) return theme.rules[mediaType]?.query;
-  return theme.rules.movie?.query ?? theme.rules.tv?.query ?? theme.rules.game?.query ?? theme.rules.book?.query;
+export function themeRule(theme: MediaTheme, mediaType: MediaType | null): ThemeRule | undefined {
+  if (mediaType) return theme.rules[mediaType];
+  return theme.rules.movie ?? theme.rules.tv ?? theme.rules.game ?? theme.rules.book;
+}
+
+export function themeSearchTerms(theme: MediaTheme, mediaType: MediaType | null): readonly string[] {
+  return themeRule(theme, mediaType)?.searchTerms ?? [];
+}
+
+/** Scores only provider-returned metadata; Mosaic never invents theme labels. */
+export function scoreThemeMatch(item: CatalogMedia, rule: ThemeRule): number {
+  const searchable = `${item.title} ${item.genres.join(" ")} ${item.description ?? ""}`.toLowerCase();
+  return rule.concepts.reduce((score, concept) => score + (searchable.includes(concept.toLowerCase()) ? 1 : 0), 0);
 }

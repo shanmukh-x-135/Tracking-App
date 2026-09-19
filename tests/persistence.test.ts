@@ -78,6 +78,15 @@ test("book progress derives safely from pages", () => {
   assert.equal(state.bookReadings[0].progressPercent, 30);
 });
 
+test("finishing a book completes page-based and percentage-based progress", () => {
+  const paged = applyMutation(emptyMosaicState(), { type: "book.upsert", media: book, status: "finished", currentPage: 120, totalPages: 400 }, now);
+  assert.equal(paged.bookReadings[0].currentPage, 400);
+  assert.equal(paged.bookReadings[0].progressPercent, 100);
+  const unpagedBook = { ...book, providerId: "unpaged", pageCount: undefined };
+  const unpaged = applyMutation(emptyMosaicState(), { type: "book.upsert", media: unpagedBook, status: "finished", progressPercent: 42 }, now);
+  assert.equal(unpaged.bookReadings[0].progressPercent, 100);
+});
+
 test("cross-media lists retain deterministic insertion order", () => {
   let state = applyMutation(emptyMosaicState(), { type: "list.create", title: "Everything", description: "Mixed media", visibility: "private" }, now);
   const listId = state.lists[0].id;

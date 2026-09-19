@@ -31,7 +31,7 @@ async function signIn(page: Page, flow: string): Promise<void> {
   await page.getByLabel("Email").fill(email!);
   await page.getByLabel("Password").fill(testPassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/home$/);
   log(flow, "login complete");
 }
 
