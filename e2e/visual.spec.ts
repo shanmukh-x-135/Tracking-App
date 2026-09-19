@@ -59,14 +59,16 @@ test("search and media-specific log interactions work", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Log", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByLabel("Search media to log").fill("Dune: Part Two");
+  await page.getByRole("button", { name: "Movies" }).click();
+  await page.getByLabel("Search movies to log").fill("Dune: Part Two");
   await page.getByRole("button", { name: /Dune: Part Two/ }).click();
   await expect(page.getByText("Watched date")).toBeVisible();
   await page.screenshot({ path: "artifacts/mobile-log.png", fullPage: true });
   await page.keyboard.press("Escape");
-  for (const [query, resultName, role, control] of [["Severance", /Severance.*series/i, "combobox", "Season"], ["Red Dead Redemption 2", /Red Dead Redemption 2.*game/i, "combobox", "Platform"], ["Dune", /^Dune.*book/i, "spinbutton", "Current page"]] as const) {
+  for (const [category, query, resultName, role, control] of [["Series", "Severance", /Severance/i, "combobox", "Season"], ["Games", "Red Dead Redemption 2", /Red Dead Redemption 2/i, "combobox", "Platform"], ["Books", "Dune", /^Dune/i, "spinbutton", "Current page"]] as const) {
     await page.getByRole("button", { name: "Log", exact: true }).click();
-    await page.getByLabel("Search media to log").fill(query);
+    await page.getByRole("button", { name: category }).click();
+    await page.getByLabel(`Search ${category.toLowerCase()} to log`).fill(query);
     await page.getByRole("button", { name: resultName }).click();
     await expect(page.getByRole(role, { name: control, exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
@@ -151,12 +153,12 @@ test("mock authentication supports sign up, refresh, and sign out", async ({ pag
   await page.getByLabel("Password").fill("storykeeper");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/home$/);
   await page.reload();
   await expect(page.getByRole("link", { name: "Your profile" })).toContainText("S");
 
   await page.goto("/profile");
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 });

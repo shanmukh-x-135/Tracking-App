@@ -32,18 +32,19 @@ export function MediaCard({ media, showType = false, priority = false }: { media
   const { state, mutate } = useMosaicState();
   const router = useRouter();
   const isSaved = state.library.some((entry) => mediaKey(entry.media) === mediaKey(catalogMedia));
+  const signIn = () => router.push(`/login?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
 
   async function save(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (!user) { router.push("/login"); return; }
+    if (!user) { signIn(); return; }
     await mutate({ type: "library.upsert", media: catalogMedia, status: defaultLibraryStatus(catalogMedia) });
   }
 
   function openQuickLog(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (!user) { router.push("/login"); return; }
+    if (!user) { signIn(); return; }
     window.dispatchEvent(new CustomEvent<CatalogMedia>("mosaic:quick-log", { detail: catalogMedia }));
   }
 

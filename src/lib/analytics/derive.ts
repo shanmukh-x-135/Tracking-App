@@ -6,10 +6,50 @@ export interface MosaicAnalytics {
   mediaMix: { movie: number; tv: number; game: number; book: number };
   ratingDistribution: { value: number; count: number }[];
   movie: { watches: number; rewatches: number; uniqueMovies: number };
-  tv: { episodesWatched: number; showsProgressed: number };
+  tv: {
+    /** Distinct episode identities with an explicit watch log. Rewatches do not inflate this. */
+    uniqueEpisodesWatched: number;
+    /** All explicit episode diary events, including rewatches. */
+    episodeWatchLogs: number;
+    episodeRewatches: number;
+    /** Bulk/imported season state is intentionally separate from dated episode history. */
+    completedSeasons: number;
+    showsInProgress: number;
+  };
   game: { completedPlaythroughs: number; playtimeMinutes: number };
   book: { finished: number; pagesRead: number };
   monthlyActivity: { month: string; count: number }[];
+}
+
+export interface TvMetrics {
+  uniqueEpisodesWatched: number;
+  episodeWatchLogs: number;
+  episodeRewatches: number;
+  completedSeasons: number;
+  showsInProgress: number;
+}
+
+/**
+ * TV imports can contain a mixture of dated episode diary entries and bulk
+ * season state. Keep those concepts separate: a rewatch is another history
+ * event, while bulk completion never invents episode-level history.
+ */
+export function deriveTvMetrics(state: MosaicState): TvMetrics {
+  const episodeIdentity = (watch: MosaicState["episodeWatches"][number]) => `${watch.series.provider}:${watch.series.providerId}:${watch.seasonNumber}:${watch.episodeNumber}`;
+  const watchedSeries = new Set(state.episodeWatches.map((watch) => `${watch.series.provider}:${watch.series.providerId}`));
+  const inProgressSeries = new Set(
+    state.library
+      .filter(({ media, status }) => media.mediaType === "tv" && status === "watching")
+      .map(({ media }) => `${media.provider}:${media.providerId}`),
+  );
+  for (const series of watchedSeries) inProgressSeries.add(series);
+  return {
+    uniqueEpisodesWatched: new Set(state.episodeWatches.map(episodeIdentity)).size,
+    episodeWatchLogs: state.episodeWatches.length,
+    episodeRewatches: state.episodeWatches.filter(({ isRewatch }) => isRewatch).length,
+    completedSeasons: state.seasonStates.filter(({ state: status }) => status === "completed").length,
+    showsInProgress: inProgressSeries.size,
+  };
 }
 
 /** Rebuildable analytics derived only from normalized current/history state. */
@@ -22,10 +62,10 @@ export function deriveAnalytics(state: MosaicState, generatedAt = new Date().toI
   }
   return {
     generatedAt,
-    mediaMix: { movie: state.movieWatches.length, tv: state.episodeWatches.length, game: state.gamePlaythroughs.length, book: state.bookReadings.length },
+    mediaMix: { movie: state.movieWatches.length, tv: deriveTvMetrics(state).uniqueEpisodesWatched, game: state.gamePlaythroughs.length, book: state.bookReadings.length },
     ratingDistribution: [1, 2, 3, 4, 5].map((value) => ({ value, count: state.ratings.filter((rating) => Math.round(rating.value) === value).length })),
     movie: { watches: state.movieWatches.length, rewatches: state.movieWatches.filter(({ isRewatch }) => isRewatch).length, uniqueMovies: new Set(state.movieWatches.map(({ media }) => `${media.provider}:${media.providerId}`)).size },
-    tv: { episodesWatched: state.episodeWatches.length, showsProgressed: new Set(state.episodeWatches.map(({ series }) => `${series.provider}:${series.providerId}`)).size },
+    tv: deriveTvMetrics(state),
     game: { completedPlaythroughs: state.gamePlaythroughs.filter(({ status }) => status === "completed").length, playtimeMinutes: state.gamePlaythroughs.reduce((total, item) => total + item.playtimeMinutes, 0) },
     book: { finished: state.bookReadings.filter(({ status }) => status === "finished").length, pagesRead: state.bookReadings.reduce((total, item) => total + (item.currentPage ?? 0), 0) },
     monthlyActivity: [...months.entries()].sort(([first], [second]) => first.localeCompare(second)).map(([month, count]) => ({ month, count })),

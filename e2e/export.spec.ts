@@ -10,7 +10,7 @@ test("data export requires authentication and downloads a versioned archive", as
   await page.getByLabel("Email").fill("export@example.com");
   await page.getByLabel("Password").fill("storykeeper");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/home$/);
   await page.goto("/movie/dune-part-two");
   await page.getByRole("button", { name: "Watchlist" }).click();
 

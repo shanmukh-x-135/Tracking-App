@@ -22,7 +22,7 @@ export const mockCatalogProvider: CatalogProvider = {
   async search(query) {
     const normalizedQuery = query.trim().toLowerCase();
     return allMedia
-      .filter((item) => `${item.title} ${item.creators.join(" ")}`.toLowerCase().includes(normalizedQuery))
+      .filter((item) => `${item.title} ${item.creators.join(" ")} ${item.genres.join(" ")} ${item.description}`.toLowerCase().includes(normalizedQuery))
       .map(normalizeMock)
       .slice(0, 20);
   },

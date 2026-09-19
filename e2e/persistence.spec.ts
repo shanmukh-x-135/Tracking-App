@@ -6,7 +6,7 @@ async function signUp(page: Page, email = "reader@example.com") {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("storykeeper");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/home$/);
 }
 
 async function chooseHalfRating(scope: ReturnType<Page["locator"]>, value: number) {
@@ -86,7 +86,8 @@ test("library, rating, review, and cross-media list survive refresh", async ({ p
   await page.getByLabel("Email").fill("reader@example.com");
   await page.getByLabel("Password").fill("storykeeper");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/library$/);
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/library");
   await expect(page.getByRole("link", { name: "View Dune: Part Two" })).toBeVisible();
 });
 
@@ -102,7 +103,8 @@ test("Quick Log writes persistent domain state", async ({ page }) => {
   await signUp(page, "quicklog@example.com");
   await page.goto("/");
   await page.getByRole("button", { name: "Log", exact: true }).click();
-  await page.getByLabel("Search media to log").fill("Dune: Part Two");
+  await page.getByRole("button", { name: "Movies" }).click();
+  await page.getByLabel("Search movies to log").fill("Dune: Part Two");
   await page.getByRole("button", { name: /Dune: Part Two/ }).click();
   await page.getByRole("button", { name: "5 stars" }).click({ position: { x: 24, y: 14 } });
   await page.getByLabel("Review (optional)").fill("Logged from the unified flow.");
@@ -204,7 +206,7 @@ test("game playthrough details survive refresh", async ({ page }) => {
   await expect(page.getByLabel("Progress (%)")).toHaveValue("42");
 });
 
-test("book reading progress and rating survive refresh", async ({ page }) => {
+test("book reading statuses, progress, completion and rating survive refresh", async ({ page }) => {
   await signUp(page, "book@example.com");
   await page.goto("/book/dune");
   await page.locator('select[name="status"]').selectOption("reading");
@@ -214,4 +216,13 @@ test("book reading progress and rating survive refresh", async ({ page }) => {
   await page.reload();
   await expect(page.getByLabel("Current page")).toHaveValue("151");
   await expect(page.getByRole("heading", { name: "25% complete" })).toBeVisible();
+  await page.locator('select[name="status"]').selectOption("paused");
+  await page.getByRole("button", { name: "Save reading progress" }).click();
+  await expect(page.locator('select[name="status"]')).toHaveValue("paused");
+  await page.locator('select[name="status"]').selectOption("finished");
+  await page.getByRole("button", { name: "Save reading progress" }).click();
+  await page.reload();
+  await expect(page.locator('select[name="status"]')).toHaveValue("finished");
+  await expect(page.getByLabel("Current page")).toHaveValue("604");
+  await expect(page.getByRole("heading", { name: "100% complete" })).toBeVisible();
 });

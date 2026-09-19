@@ -2,8 +2,8 @@ import "server-only";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { catalogMediaSchema, statusMatchesMedia } from "@/lib/persistence/validation";
-import { calculateBookProgress } from "@/lib/persistence/domain";
-import { fetchRowsInDatabaseChunks } from "@/lib/persistence/database-query-chunks";
+import { normalizeBookReading } from "@/lib/persistence/domain";
+import { fetchOptionalRowsInDatabaseChunks, fetchRowsInDatabaseChunks } from "@/lib/persistence/database-query-chunks";
 import type { CurrentMediaState } from "@/lib/persistence/current-media-state";
 import { emptyMosaicState, type DomainMutation, type MosaicState, type PersistenceMutation, type SharedMutation } from "@/lib/persistence/types";
 import type { CatalogMedia } from "@/lib/media/types";
@@ -30,6 +30,21 @@ export function catalogFromRow(row: MediaItemRow): CatalogMedia | null {
 
 function assertResult(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
+}
+
+type OptionalResult<Row> = { data: Row[] | null; error: { code?: string; message: string } | null };
+
+function optionalRows<Row>(source: string, result: OptionalResult<Row>): Row[] {
+  if (!result.error) return result.data ?? [];
+  // These projections enrich personal history but are not required to load a
+  // library, current media state, or another media domain. Keep the account
+  // usable while preserving an actionable server-side diagnostic.
+  console.warn("Mosaic optional state projection was unavailable.", { source, code: result.error.code, message: result.error.message });
+  return [];
+}
+
+function reportOptionalProjection(source: string, error: unknown): void {
+  console.warn("Mosaic optional state projection was unavailable.", { source, message: error instanceof Error ? error.message : "Unknown error" });
 }
 
 export async function upsertMedia(client: Client, media: CatalogMedia): Promise<string> {
@@ -77,34 +92,36 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     client.from("tv_series_states").select("*").eq("user_id", userId),
     client.from("tv_history_logs").select("*").eq("user_id", userId).order("occurred_at", { ascending: false }),
   ]);
-  // Hosted projects created before watch regions will reject this one optional
-  // field until their migration is applied. The rest of the saved state remains
-  // readable, and the client keeps the region locally in the meantime.
-  if (profileResult.error?.code !== "42703") assertResult(profileResult.error);
-  [libraryResult, ratingsResult, reviewsResult, listsResult, movieResult, episodeWatchResult, seasonStateResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
-  for (const result of [seriesStateResult,tvHistoryResult]) if (result.error && !["42P01","PGRST205"].includes(result.error.code)) assertResult(result.error);
-  const lists = listsResult.data ?? [];
-  const listItems = await fetchRowsInDatabaseChunks(
-    lists.map(({ id }) => id),
+  // Core domain rows stay fail-fast. These are the data users are actively
+  // tracking and a partial write/read would be misleading. Ancillary profile,
+  // list, review, and imported-TV projections degrade independently below.
+  [libraryResult, ratingsResult, movieResult, episodeWatchResult, gameResult, bookResult].forEach(({ error }) => assertResult(error));
+  if (profileResult.error && profileResult.error.code !== "42703") console.warn("Mosaic optional state projection was unavailable.", { source: "profiles.watch_region", code: profileResult.error.code, message: profileResult.error.message });
+  const reviews = optionalRows("reviews", reviewsResult);
+  const lists = optionalRows("lists", listsResult);
+  const seasonStates = optionalRows("tv_season_states", seasonStateResult);
+  const seriesStates = optionalRows("tv_series_states", seriesStateResult);
+  const tvHistory = optionalRows("tv_history_logs", tvHistoryResult);
+  const listItems = await fetchOptionalRowsInDatabaseChunks(lists.map(({ id }) => id),
     (ids) => client.from("list_items").select("*").in("list_id", ids).order("position"),
-  );
+    (error) => reportOptionalProjection("list_items", error));
   const episodeIds = (episodeWatchResult.data ?? []).map(({ episode_id }) => episode_id);
   const [episodes, episodeRatings] = await Promise.all([
-    fetchRowsInDatabaseChunks(episodeIds, (ids) => client.from("tv_episodes").select("*").in("id", ids)),
-    fetchRowsInDatabaseChunks(episodeIds, (ids) => client.from("episode_ratings").select("*").eq("user_id", userId).in("episode_id", ids)),
+    fetchOptionalRowsInDatabaseChunks(episodeIds, (ids) => client.from("tv_episodes").select("*").in("id", ids), (error) => reportOptionalProjection("tv_episodes", error)),
+    fetchOptionalRowsInDatabaseChunks(episodeIds, (ids) => client.from("episode_ratings").select("*").eq("user_id", userId).in("episode_id", ids), (error) => reportOptionalProjection("episode_ratings", error)),
   ]);
   const mediaIds = new Set<string>();
   for (const row of libraryResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of ratingsResult.data ?? []) mediaIds.add(row.media_id);
-  for (const row of reviewsResult.data ?? []) mediaIds.add(row.media_id);
+  for (const row of reviews) mediaIds.add(row.media_id);
   for (const row of listItems) mediaIds.add(row.media_id);
   for (const row of movieResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of gameResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of bookResult.data ?? []) mediaIds.add(row.media_id);
   for (const row of episodes) mediaIds.add(row.series_media_id);
-  for (const row of seasonStateResult.data ?? []) mediaIds.add(row.series_media_id);
-  for (const row of seriesStateResult.data ?? []) mediaIds.add(row.series_media_id);
-  for (const row of tvHistoryResult.data ?? []) mediaIds.add(row.series_media_id);
+  for (const row of seasonStates) mediaIds.add(row.series_media_id);
+  for (const row of seriesStates) mediaIds.add(row.series_media_id);
+  for (const row of tvHistory) mediaIds.add(row.series_media_id);
   const mediaRows = await fetchRowsInDatabaseChunks([...mediaIds], (ids) => client.from("media_items").select("*").in("id", ids));
   const mediaById = new Map(mediaRows.map((row) => [row.id, catalogFromRow(row)]));
   const state = emptyMosaicState();
@@ -117,7 +134,7 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     const media = mediaById.get(row.media_id);
     return media ? [{ mediaKey: `${media.provider}:${media.mediaType}:${media.providerId}`, value: row.rating, updatedAt: row.updated_at }] : [];
   });
-  state.reviews = (reviewsResult.data ?? []).flatMap((row) => {
+  state.reviews = reviews.flatMap((row) => {
     const media = mediaById.get(row.media_id);
     return media ? [{ id: row.id, media, body: row.body, containsSpoilers: row.contains_spoilers, rating: ratingsResult.data?.find((rating) => rating.id === row.rating_id)?.rating, updatedAt: row.updated_at }] : [];
   });
@@ -139,16 +156,16 @@ export async function readSupabaseState(client: Client, userId: string): Promise
     const series = episode ? mediaById.get(episode.series_media_id) : undefined;
     return episode && series ? [{ id: row.id, series, seasonNumber: episode.season_number, episodeNumber: episode.episode_number, episodeTitle: episode.title, watchedAt: row.watched_at, isRewatch: row.is_rewatch, rating: row.rating ?? episodeRatings.find((rating) => rating.episode_id === episode.id)?.rating, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
   });
-  state.seasonStates = (seasonStateResult.data ?? []).flatMap((row) => {
+  state.seasonStates = seasonStates.flatMap((row) => {
     const series = mediaById.get(row.series_media_id);
     return series?.mediaType === "tv" ? [{ id: row.id, series, seasonNumber: row.season_number, state: row.state, provenance: row.provenance, completedOn: row.completed_on ?? undefined, updatedAt: row.updated_at }] : [];
   });
-  state.seriesStates = (seriesStateResult.data ?? []).flatMap((row) => {
+  state.seriesStates = seriesStates.flatMap((row) => {
     const series = mediaById.get(row.series_media_id);
     const facts = z.record(z.string(),z.boolean().nullable()).safeParse(row.state_facts);
     return series && facts.success ? [{ id: row.id, series, facts: facts.data, updatedAt: row.updated_at }] : [];
   });
-  state.tvHistory = (tvHistoryResult.data ?? []).flatMap((row) => {
+  state.tvHistory = tvHistory.flatMap((row) => {
     const series = mediaById.get(row.series_media_id);
     return series ? [{ id: row.id, series, targetType: row.target_type, seasonNumber: row.season_number ?? undefined, occurredAt: row.occurred_at, isRewatch: row.is_rewatch, rating: row.rating ?? undefined, review: row.review ?? undefined, containsSpoilers: row.contains_spoilers, tags: Array.isArray(row.tags) ? row.tags.filter((tag): tag is string => typeof tag === "string") : [] }] : [];
   });
@@ -395,8 +412,8 @@ async function applyDomainSupabaseMutation(client: Client, userId: string, mutat
     assertResult((await query).error);
   } else {
     if (media.mediaType !== "book") throw new Error("Reading update requires a book.");
-    const progress = calculateBookProgress(mutation.currentPage, mutation.totalPages, mutation.progressPercent);
-    const values = { user_id: userId, media_id: mediaId, status: mutation.status, current_page: mutation.currentPage ?? null, total_pages: mutation.totalPages ?? null, progress_percent: progress ?? null, rating: mutation.rating ?? null, finished_at: mutation.status === "finished" ? new Date().toISOString().slice(0, 10) : null };
+    const progress = normalizeBookReading(mutation.status, mutation.currentPage, mutation.totalPages, mutation.progressPercent);
+    const values = { user_id: userId, media_id: mediaId, status: mutation.status, current_page: progress.currentPage ?? null, total_pages: progress.totalPages ?? null, progress_percent: progress.progressPercent ?? null, rating: mutation.rating ?? null, finished_at: mutation.status === "finished" ? new Date().toISOString().slice(0, 10) : null };
     const query = mutation.readingId
       ? client.from("book_readings").update(values).eq("id", mutation.readingId).eq("user_id", userId)
       : client.from("book_readings").insert({ ...values, started_at: mutation.status === "want_to_read" ? null : new Date().toISOString().slice(0, 10) });

@@ -3,7 +3,7 @@ import { isLiveMode } from "@/lib/config/env";
 import { createClient } from "@/lib/supabase/server";
 
 function safePath(value: string | null): string {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/library";
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/home";
 }
 
 export async function GET(request: NextRequest) {

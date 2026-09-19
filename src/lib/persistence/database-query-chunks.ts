@@ -25,3 +25,13 @@ export async function fetchRowsInDatabaseChunks<Row>(
   results.forEach(({ error }) => assertQueryResult(error));
   return results.flatMap(({ data }) => data ?? []);
 }
+
+/** Optional historical projections cannot make a whole account unreadable. */
+export async function fetchOptionalRowsInDatabaseChunks<Row>(
+  values: readonly string[],
+  fetchChunk: (chunk: string[]) => PromiseLike<QueryResult<Row>>,
+  report: (cause: unknown) => void,
+): Promise<Row[]> {
+  try { return await fetchRowsInDatabaseChunks(values, fetchChunk); }
+  catch (cause) { report(cause); return []; }
+}

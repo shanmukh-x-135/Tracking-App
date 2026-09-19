@@ -5,13 +5,18 @@ import { getPublicEnvironment } from "@/lib/config/env";
 import { users } from "@/data/media";
 import { createClient } from "@/lib/supabase/server";
 import type { CatalogProfile } from "@/lib/media/types";
+import type { MediaType } from "@/types/media";
 
 const querySchema = z.string().trim().min(2).max(100);
+const mediaTypeSchema = z.enum(["movie", "tv", "game", "book"]);
 
 export async function GET(request: Request) {
   const parsed = querySchema.safeParse(new URL(request.url).searchParams.get("q"));
   if (!parsed.success) return NextResponse.json({ error: "Enter at least two characters." }, { status: 400 });
   const result = await searchCatalog(parsed.data);
+  const requestedType = mediaTypeSchema.safeParse(new URL(request.url).searchParams.get("type"));
+  const mediaType: MediaType | undefined = requestedType.success ? requestedType.data : undefined;
+  if (mediaType) result.items = result.items.filter((item) => item.mediaType === mediaType);
   let profiles: CatalogProfile[];
   if (getPublicEnvironment().dataMode === "mock") {
     const query = parsed.data.toLowerCase();

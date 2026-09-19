@@ -14,6 +14,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const { refresh } = useAuth();
   const isSignup = mode === "signup";
+  const returnTo = typeof window === "undefined" ? "/home" : safeReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
 
   async function finishAuthentication(action: () => Promise<{ user?: unknown; message?: string }>) {
     setError(undefined);
@@ -24,7 +25,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
       if (result.message) setMessage(result.message);
       if (result.user) {
         await refresh();
-        router.replace("/library");
+        router.replace(returnTo);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Authentication could not be completed.");
@@ -43,14 +44,14 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
 
   async function signInWithGoogle() {
     await finishAuthentication(async () => {
-      await getAuthGateway().signInWithGoogle();
+      await getAuthGateway().signInWithGoogle(returnTo);
       return { user: await getAuthGateway().getUser() ?? undefined };
     });
   }
 
   return <main className="auth-page">
     <div className="auth-art"><div className="auth-art-copy">
-      <Link href="/" className="brand"><span className="brand-mark"/>Mosaic</Link>
+      <Link href="/home" className="brand"><span className="brand-mark"/>Mosaic</Link>
       <blockquote>“Every story you carry,<br/>all in one place.”</blockquote>
       <p>Movies · Series · Games · Books</p>
     </div></div>
@@ -68,7 +69,11 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
       </form>
       <div className="auth-divider"><span>or</span></div>
       <button className="button auth-submit" onClick={() => void signInWithGoogle()} disabled={isSubmitting}>Continue with Google</button>
-      <p className="auth-switch">{isSignup ? "Already have an account?" : "New to Mosaic?"} <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create one"}</Link></p>
+      <p className="auth-switch">{isSignup ? "Already have an account?" : "New to Mosaic?"} <Link href={`${isSignup ? "/login" : "/signup"}?returnTo=${encodeURIComponent(returnTo)}`}>{isSignup ? "Sign in" : "Create one"}</Link></p>
     </div></section>
   </main>;
+}
+
+function safeReturnTo(value: string | null): string {
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/home";
 }

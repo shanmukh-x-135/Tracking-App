@@ -1,9 +1,3 @@
-import { HomePage } from "@/components/home/home-page";
-import { discoverCatalog } from "@/lib/media/catalog";
+import { redirect } from "next/navigation";
 
-export const revalidate = 3600;
-
-export default async function Page() {
-  const discovery = await discoverCatalog();
-  return <HomePage initialDiscovery={discovery.items}/>;
-}
+export default function Page() { redirect("/home"); }

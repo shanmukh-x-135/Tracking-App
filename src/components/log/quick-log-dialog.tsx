@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Check, Search } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, Clapperboard, Gamepad2, Search, Tv } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
@@ -11,9 +11,18 @@ import { RatingInput } from "@/components/ui/rating-input";
 import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
 import type { CatalogEpisode, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
+import type { MediaType } from "@/types/media";
+
+const quickLogCategories: { type: MediaType; label: string; placeholder: string; icon: typeof Clapperboard }[] = [
+  { type: "movie", label: "Movies", placeholder: "Search movies…", icon: Clapperboard },
+  { type: "tv", label: "Series", placeholder: "Search series…", icon: Tv },
+  { type: "game", label: "Games", placeholder: "Search games…", icon: Gamepad2 },
+  { type: "book", label: "Books", placeholder: "Search books…", icon: BookOpen },
+];
 
 export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boolean; onOpenChange(open: boolean): void; initialMedia?: CatalogMedia }) {
   const [selected, setSelected] = useState<CatalogMedia>();
+  const [category, setCategory] = useState<MediaType>();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogMedia[]>([]);
   const [episodes, setEpisodes] = useState<CatalogEpisode[]>([]);
@@ -32,14 +41,14 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
   const watchedEpisodes = selected?.mediaType === "tv" ? state.episodeWatches.filter((item) => mediaKey(item.series) === selectedKey) : [];
 
   useEffect(() => {
-    if (!open || query.trim().length < 2) { queueMicrotask(() => setResults([])); return; }
+    if (!open || !category || query.trim().length < 2) { queueMicrotask(() => setResults([])); return; }
     const controller = new AbortController();
-    const timer = window.setTimeout(() => void fetch(`/api/catalog/search?q=${encodeURIComponent(query.trim())}`, { signal: controller.signal })
+    const timer = window.setTimeout(() => void fetch(`/api/catalog/search?q=${encodeURIComponent(query.trim())}&type=${category}`, { signal: controller.signal })
       .then(async (response) => { if (!response.ok) throw new Error("Search is temporarily unavailable."); return response.json() as Promise<CatalogSearchResult>; })
       .then((result) => setResults(result.items.slice(0, 12)))
       .catch(() => { if (!controller.signal.aborted) setResults([]); }), 250);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [open, query]);
+  }, [category, open, query]);
 
   useEffect(() => {
     if (open && initialMedia) queueMicrotask(() => choose(initialMedia));
@@ -59,9 +68,9 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
     return () => controller.abort();
   }, [seasonNumber, selected]);
 
-  function reset() { setSelected(undefined); setQuery(""); setResults([]); setEpisodes([]); setRating(0); setSeasonNumber(1); setSaved(false); setIsSubmitting(false); setError(undefined); }
+  function reset() { setSelected(undefined); setCategory(undefined); setQuery(""); setResults([]); setEpisodes([]); setRating(0); setSeasonNumber(1); setSaved(false); setIsSubmitting(false); setError(undefined); }
   function close(value: boolean) { if (!value) reset(); onOpenChange(value); }
-  function choose(media: CatalogMedia) { setSelected(media); setSeasonNumber(media.mediaType === "tv" ? media.seasonNumbers?.find((number) => number > 0) ?? 1 : 1); setRating(state.ratings.find((item) => item.mediaKey === mediaKey(media))?.value ?? 0); setError(undefined); }
+  function choose(media: CatalogMedia) { setSelected(media); setCategory(media.mediaType); setSeasonNumber(media.mediaType === "tv" ? media.seasonNumbers?.find((number) => number > 0) ?? 1 : 1); setRating(state.ratings.find((item) => item.mediaKey === mediaKey(media))?.value ?? 0); setError(undefined); }
 
   async function submit(formData: FormData) {
     if (!selected || isSubmitting) return;
@@ -89,6 +98,7 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
 
   const firstUnwatched = episodes.find((episode) => !watchedEpisodes.some((watch) => watch.seasonNumber === episode.seasonNumber && watch.episodeNumber === episode.episodeNumber));
   const typeLabel = selected?.mediaType === "tv" ? "Series" : selected?.mediaType;
+  const selectedCategory = quickLogCategories.find((item) => item.type === category);
   const contextLine = selected?.mediaType === "book"
     ? selected.authors.filter(Boolean).join(", ")
     : selected?.mediaType === "game"
@@ -96,10 +106,10 @@ export function QuickLogDialog({ open, onOpenChange, initialMedia }: { open: boo
       : selected?.releaseYear ? String(selected.releaseYear) : undefined;
   return <Dialog open={open} onOpenChange={close} title="Quick log"><div className="dialog-body quick-log-dialog">
     {selected && <button className="icon-button quick-log-back" onClick={() => { setSelected(undefined); setSaved(false); }} aria-label="Back to media selection"><ArrowLeft size={18}/></button>}
-    <span className="eyebrow">Quick log</span><h2 className="dialog-title">{saved ? "Added to your story" : selected ? `Log ${typeLabel?.toLowerCase()}` : "What are you logging?"}</h2>
+    <span className="eyebrow">Quick log</span><h2 className="dialog-title">{saved ? "Added to your story" : selected ? `Log ${typeLabel?.toLowerCase()}` : category ? `Find a ${selectedCategory?.label.toLowerCase()}` : "What are you logging?"}</h2>
     <AnimatePresence mode="wait">{saved ? <motion.div key="saved" className="quick-log-success" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={motionTokens.normal}><Check size={44}/><p>Your update is saved across your Library and Activity.</p><button className="button primary" onClick={() => close(false)}>Done</button></motion.div>
-      : !selected ? <motion.div key="picker" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={motionTokens.normal}><label className="quick-log-search"><Search size={18}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search movies, series, games, books…" aria-label="Search media to log"/></label>
-        {query.trim().length >= 2 ? <div className="quick-log-results">{results.map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>{media.mediaType === "tv" ? "Series" : media.mediaType} {media.releaseYear ? `· ${media.releaseYear}` : ""}</small></span></button>)}{!results.length && <p className="muted">Keep typing to search every provider.</p>}</div> : <>{choices.length > 0 && <div className="quick-log-results">{choices.map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>From your library</small></span></button>)}</div>}<p className="muted">Search any title for a domain-aware update.</p></>}</motion.div>
+      : !selected ? <motion.div key={category ?? "category"} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={motionTokens.normal}>{!category ? <div className="quick-log-categories" role="group" aria-label="Choose what to log">{quickLogCategories.map(({ type, label, icon: Icon }) => <button key={type} type="button" onClick={() => setCategory(type)}><Icon size={20}/><span>{label}</span></button>)}</div> : <><button type="button" className="text-link quick-log-change-category" onClick={() => { setCategory(undefined); setQuery(""); setResults([]); }}>Change category</button><label className="quick-log-search"><Search size={18}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={selectedCategory?.placeholder} aria-label={`Search ${selectedCategory?.label.toLowerCase()} to log`}/></label>
+        {query.trim().length >= 2 ? <div className="quick-log-results">{results.map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>{media.releaseYear ? `${media.releaseYear}` : selectedCategory?.label}</small></span></button>)}{!results.length && <p className="muted">No {selectedCategory?.label.toLowerCase()} matched that search.</p>}</div> : <>{choices.filter((media) => media.mediaType === category).length > 0 && <div className="quick-log-results">{choices.filter((media) => media.mediaType === category).map((media) => <button key={mediaKey(media)} onClick={() => choose(media)}><span className="quick-log-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="42px"/></span><span><strong>{media.title}</strong><small>From your library</small></span></button>)}</div>}<p className="muted">Search within {selectedCategory?.label.toLowerCase()} for a domain-aware update.</p></>}</>}</motion.div>
       : <motion.div key={mediaKey(selected)} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={motionTokens.normal}><div className="quick-log-media"><span className="quick-log-art"><Image src={selected.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></span><span><strong>{selected.title}</strong><small>{[typeLabel, contextLine].filter(Boolean).join(" · ")}</small></span></div><form action={submit}><div className="form-grid quick-log-fields">
         {selected.mediaType === "movie" && <><label className="field">Watched date<input name="watchedAt" type="date" defaultValue={today}/></label><label className="field">Viewing context<select name="viewingContext" defaultValue=""><option value="">Not specified</option><option value="theater">Theater</option><option value="streaming">Streaming</option><option value="television">TV / Broadcast</option><option value="physical">Blu-ray / DVD</option><option value="digital">Digital purchase/rental</option><option value="other">Other</option></select></label><label className="field full">Streaming service <input name="streamingService" placeholder="Optional, for streaming watches"/></label><label className="check-field"><input name="rewatch" type="checkbox" defaultChecked={state.movieWatches.some((watch) => mediaKey(watch.media) === selectedKey)}/> Rewatch</label><label className="check-field"><input name="favourite" type="checkbox" defaultChecked={state.library.find((item) => mediaKey(item.media) === selectedKey)?.isFavorite}/> Favourite</label><label className="field full">Review (optional)<textarea name="review" placeholder="Write a few thoughts…"/></label></>}
         {selected.mediaType === "tv" && <><label className="field">Season<select value={seasonNumber} onChange={(event) => setSeasonNumber(Number(event.target.value))}>{(selected.seasonNumbers?.filter((number) => number > 0) ?? [1]).map((number) => <option key={number} value={number}>Season {number}</option>)}</select></label><label className="field">Episode<select name="episode" defaultValue={firstUnwatched?.episodeNumber}>{episodes.map((episode) => <option key={episode.id} value={episode.episodeNumber}>E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</option>)}</select>{!episodes.length && <small>Loading available episodes…</small>}</label></>}

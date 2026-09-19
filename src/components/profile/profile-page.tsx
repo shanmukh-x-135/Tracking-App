@@ -10,9 +10,12 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { activityLabel, projectActivity } from "@/lib/activity/projection";
 import { deriveContinue } from "@/lib/home/continue";
+import { deriveTvMetrics } from "@/lib/analytics/derive";
 import { mediaKey } from "@/lib/persistence/domain";
 import type { CatalogMedia } from "@/lib/media/types";
 import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
+import { ProfileEditor } from "@/components/profile/profile-editor";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 type ProfileTab = "overview" | "library" | "history" | "reviews" | "lists" | "stats";
 const tabs: [ProfileTab, string][] = [["overview", "Overview"], ["library", "Library"], ["history", "Diary / History"], ["reviews", "Reviews"], ["lists", "Lists"], ["stats", "Stats"]];
@@ -47,10 +50,12 @@ function FavouriteShelf({ title, items }: { title: string; items: CatalogMedia[]
 }
 
 export function ProfilePage() {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const { state } = useMosaicState();
   const [tab, chooseTab] = useProfileTab();
+  const [isEditing, setIsEditing] = useState(false);
   const activity = useMemo(() => projectActivity(state), [state]);
+  const tvMetrics = useMemo(() => deriveTvMetrics(state), [state]);
   const continueItems = useMemo(() => deriveContinue(state), [state]);
   const favourites = useMemo(() => state.library.filter(({ isFavorite }) => isFavorite).map(({ media }) => media), [state.library]);
   const favouritesByType = useMemo(() => ({
@@ -65,19 +70,19 @@ export function ProfilePage() {
   const gamingHours = state.gamePlaythroughs.reduce((sum, playthrough) => sum + playthrough.playtimeMinutes, 0) / 60;
   const ratingDistribution = [1, 2, 3, 4, 5].map((value) => ({ value, count: state.ratings.filter((rating) => Math.round(rating.value) === value).length }));
   const largestRatingBucket = Math.max(...ratingDistribution.map(({ count }) => count), 1);
-  const loggedByMedium = [{ label: "Movies", count: state.movieWatches.length }, { label: "Series", count: state.episodeWatches.length }, { label: "Games", count: state.gamePlaythroughs.length }, { label: "Books", count: state.bookReadings.length }];
+  const loggedByMedium = [{ label: "Movies", count: state.movieWatches.length }, { label: "Episode logs", count: tvMetrics.episodeWatchLogs }, { label: "Games", count: state.gamePlaythroughs.length }, { label: "Books", count: state.bookReadings.length }];
   const largestMediumBucket = Math.max(...loggedByMedium.map(({ count }) => count), 1);
 
   if (!user) return <div className="page"><div className="page-narrow"><div className="empty-state"><h1>Your Mosaic profile is waiting</h1><p>Sign in to see your personal history, reviews, lists, and media milestones.</p><Link className="button primary" href="/login">Sign in</Link></div></div></div>;
 
-  const primaryStats = [[state.movieWatches.length, "Movies watched"], [state.episodeWatches.length, "Episodes watched"], [state.gamePlaythroughs.filter(({ status }) => status === "completed").length, "Games completed"], [state.bookReadings.filter(({ status }) => status === "finished").length, "Books read"]] as const;
-  const secondaryStats = [[state.movieWatches.filter(({ isRewatch }) => isRewatch).length, "Rewatches"], [readingPages, "Pages logged"], [`${Math.round(gamingHours * 10) / 10}h`, "Gaming time"], [averageRating ? `★ ${averageRating.toFixed(1)}` : "—", "Average rating"]] as const;
+  const primaryStats = [[state.movieWatches.length, "Movies watched"], [tvMetrics.uniqueEpisodesWatched, "Unique episodes watched"], [state.gamePlaythroughs.filter(({ status }) => status === "completed").length, "Games completed"], [state.bookReadings.filter(({ status }) => status === "finished").length, "Books read"]] as const;
+  const secondaryStats = [[state.movieWatches.filter(({ isRewatch }) => isRewatch).length + tvMetrics.episodeRewatches, "Rewatch logs"], [readingPages, "Pages logged"], [`${Math.round(gamingHours * 10) / 10}h`, "Gaming time"], [averageRating ? `★ ${averageRating.toFixed(1)}` : "—", "Average rating"]] as const;
 
   return <div className="page"><div className="page-narrow">
     <header className="profile-header profile-header-personal">
-      {user.avatarUrl ? <Image className="avatar" src={user.avatarUrl} alt={user.displayName} width={96} height={96}/> : <span className="avatar avatar-fallback profile-avatar">{user.displayName.slice(0, 1).toUpperCase()}</span>}
-      <div><span className="eyebrow">Your Mosaic</span><h1>{user.displayName}</h1><span className="muted">{user.email}</span><p>One identity for everything you watch, play, and read.</p></div>
-      <AccountActions/>
+      <UserAvatar className="avatar profile-avatar" name={user.displayName} avatarUrl={user.avatarUrl} size={96}/>
+      <div><span className="eyebrow">Your Mosaic</span><h1>{user.displayName}</h1><span className="muted">{user.username ? `@${user.username} · ` : ""}{user.email}</span><p>{user.bio || "One identity for everything you watch, play, and read."}</p></div>
+      <AccountActions onEdit={() => setIsEditing(true)}/>
     </header>
     <nav className="filter-bar glass profile-tabs" aria-label="Profile sections">{tabs.map(([value, label]) => <button key={value} className={`filter-button ${tab === value ? "active" : ""}`} aria-current={tab === value ? "page" : undefined} onClick={() => chooseTab(value)}>{label}</button>)}</nav>
     <AnimatePresence mode="wait"><motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={motionTokens.normal}>{tab === "overview" && <>
@@ -93,5 +98,6 @@ export function ProfilePage() {
     {tab === "stats" && <><section className="section"><div className="section-head"><div><span className="eyebrow">All time</span><h2>Tracking snapshot</h2></div></div><div className="profile-secondary-stats">{secondaryStats.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section><section className="section"><div className="profile-insights"><div className="profile-insight"><h3>Rating distribution</h3>{state.ratings.length ? <div className="insight-bars" aria-label="Rating distribution">{ratingDistribution.map(({ value, count }) => <div className="insight-bar" key={value}><span>{value}★</span><i><motion.b animate={{ width: `${(count / largestRatingBucket) * 100}%` }} transition={motionTokens.slow}/></i><strong>{count}</strong></div>)}</div> : <p className="muted">Rate a story to see your taste take shape.</p>}</div><div className="profile-insight"><h3>Logged by medium</h3>{loggedByMedium.some(({ count }) => count) ? <div className="insight-bars" aria-label="Logged by medium">{loggedByMedium.map(({ label, count }) => <div className="insight-bar" key={label}><span>{label}</span><i><motion.b animate={{ width: `${(count / largestMediumBucket) * 100}%` }} transition={motionTokens.slow}/></i><strong>{count}</strong></div>)}</div> : <p className="muted">Your real logs will appear here.</p>}</div></div></section></>}
     </motion.div></AnimatePresence>
     <div className="profile-shortcuts"><Link href="/activity"><Clock3 size={16}/>Activity</Link><Link href="/library"><BookOpen size={16}/>Library</Link><Link href="/lists"><List size={16}/>Lists</Link><Link href="/settings/data"><Settings size={16}/>Your data</Link></div>
+    <ProfileEditor user={user} open={isEditing} onOpenChange={setIsEditing} onSave={updateProfile}/>
   </div></div>;
 }
