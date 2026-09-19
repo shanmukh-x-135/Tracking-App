@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import { useId, useState } from "react";
+import { motion, motionTokens } from "@/components/motion/motion";
 
 interface RatingInputProps {
   value?: number;
@@ -33,7 +34,7 @@ export function RatingInput({ value = 0, onChange, label = "Your rating", ariaPr
           if (event.key === "ArrowLeft" || event.key === "ArrowDown") { event.preventDefault(); onChange(Math.max(0.5, (value || 1) - 0.5)); }
           if (event.key === "Escape") { event.preventDefault(); onChange(0); }
         }}>
-          <Star size={24}/><span className="rating-star-fill" style={{ width: `${fill * 100}%` }}><Star size={24} fill="currentColor"/></span>
+          <Star size={24}/><motion.span className="rating-star-fill" animate={{ width: `${fill * 100}%` }} transition={motionTokens.fast}><Star size={24} fill="currentColor"/></motion.span>
         </button>;
       })}
     </div>

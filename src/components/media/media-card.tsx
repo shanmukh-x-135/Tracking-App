@@ -11,6 +11,7 @@ import { normalizeMock } from "@/lib/media/providers/mock";
 import type { CatalogMedia } from "@/lib/media/types";
 import { defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
 import type { Media } from "@/types/media";
+import { motion, motionTokens, useReducedMotion } from "@/components/motion/motion";
 
 type CardMedia = Media | CatalogMedia;
 
@@ -48,9 +49,14 @@ export function MediaCard({ media, showType = false, priority = false }: { media
 
   const isBook = media.mediaType === "book";
   const author = media.mediaType === "book" ? media.authors.join(", ") : undefined;
-  return <article className={`media-card ${isBook ? "book-card" : ""}`}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={`View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}><button aria-label={isSaved ? `${media.title} is in your library` : `Add ${media.title} to library`} onClick={(event) => void save(event)}>{isSaved ? <BookmarkCheck size={15}/> : <Plus size={15}/>}</button><button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div></div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></article>;
+  const reducedMotion = useReducedMotion();
+  return <motion.article layout className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={`View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}><button aria-label={isSaved ? `${media.title} is in your library` : `Add ${media.title} to library`} onClick={(event) => void save(event)}>{isSaved ? <BookmarkCheck size={15}/> : <Plus size={15}/>}</button><button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div></div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
 }
 
 export function MediaShelf({ items, showType = false }: { items: CardMedia[]; showType?: boolean }) {
   return <div className="shelf">{items.map((media) => <MediaCard key={isCatalogMedia(media) ? mediaKey(media) : media.id} media={media} showType={showType}/>)}</div>;
+}
+
+export function MediaShelfSkeleton({ count = 6 }: { count?: number }) {
+  return <div className="shelf shelf-skeleton" aria-busy="true" aria-label="Loading stories">{Array.from({ length: count }, (_, index) => <div className="media-card" key={index}><div className="poster-wrap skeleton-block"/><div className="skeleton-copy"><span/><i/></div></div>)}</div>;
 }

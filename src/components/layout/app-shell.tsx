@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { QuickLogDialog } from "@/components/log/quick-log-dialog";
 import { SearchDialog } from "@/components/search/search-dialog";
+import { MosaicMotion, PageTransition } from "@/components/motion/motion";
 import type { CatalogMedia } from "@/lib/media/types";
 
 declare global {
@@ -59,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === "/login" || pathname === "/signup") return <>{children}</>;
   const active = (href: string) => href === "/" ? pathname === href : pathname.startsWith(href.split("?")[0]);
 
-  return <>
+  return <MosaicMotion>
     <header className="desktop-nav glass">
       <Link href="/" className="brand"><span className="brand-mark"/>Mosaic</Link>
       <nav className="desktop-links" aria-label="Main navigation">{links.map((link) => <Link key={link.label} href={link.href} className={`nav-link ${active(link.href) ? "active" : ""}`}>{link.label}</Link>)}</nav>
@@ -70,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {!isLoading && (user ? <Link href="/profile" aria-label="Your profile">{user.avatarUrl ? <Image className="avatar" src={user.avatarUrl} width={38} height={38} alt={user.displayName}/> : <span className="avatar avatar-fallback">{user.displayName.slice(0, 1).toUpperCase()}</span>}</Link> : <Link className="button" href="/login"><LogIn size={15}/>Sign in</Link>)}
       </div>
     </header>
-    <main className="app-main">{children}</main>
+    <main className="app-main"><PageTransition routeKey={pathname}>{children}</PageTransition></main>
     <footer className="app-footer"><span>Track every story in one place.</span><Link href="/credits">Data sources & credits</Link></footer>
     <nav className="mobile-nav glass" aria-label="Mobile navigation">
       <Link className={`mobile-link ${pathname === "/" ? "active" : ""}`} href="/"><Home size={19}/>Home</Link>
@@ -81,5 +82,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </nav>
     <SearchDialog open={searchOpen} onOpenChange={setSearchOpen}/>
     <QuickLogDialog open={logOpen} onOpenChange={(value) => { setLogOpen(value); if (!value) setLogMedia(undefined); }} initialMedia={logMedia}/>
-  </>;
+  </MosaicMotion>;
 }
