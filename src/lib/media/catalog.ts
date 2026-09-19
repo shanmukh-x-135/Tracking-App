@@ -71,6 +71,17 @@ export async function discoverCatalog(providers = configuredCatalogProviders()):
   return { items: [...new Map(items.map((item) => [`${item.provider}:${item.mediaType}:${item.providerId}`, item])).values()], failures, sections };
 }
 
+/** Uses native TMDB `with_genres` semantics instead of a text search. */
+export async function discoverTmdbGenre(mediaType: "movie" | "tv", genreId: number, providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
+  const provider = providers.find((candidate) => candidate.name === "tmdb");
+  if (!provider?.discoverByGenre) return { items: [], failures: [{ provider: "tmdb", message: "Provider genre discovery is unavailable." }] };
+  try {
+    return { items: await provider.discoverByGenre(mediaType, genreId), failures: [] };
+  } catch {
+    return { items: [], failures: [{ provider: "tmdb", message: "Provider genre discovery is temporarily unavailable." }] };
+  }
+}
+
 export async function relatedCatalog(media: CatalogMedia, providers = configuredCatalogProviders()): Promise<CatalogSearchResult> {
   const provider = providers.find((candidate) => candidate.name === media.provider);
   if (!provider?.related) return { items: [], failures: [] };

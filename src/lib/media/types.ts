@@ -90,6 +90,8 @@ export interface CatalogProvider {
   getById(providerId: string, mediaType?: MediaType): Promise<CatalogMedia | null>;
   getSeasonEpisodes?(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
   discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
+  /** Provider-native genre discovery. Only implemented where the provider has stable IDs. */
+  discoverByGenre?(mediaType: "movie" | "tv", genreId: number): Promise<CatalogMedia[]>;
   discoverSections?(): Promise<CatalogDiscoverySection[]>;
   related?(media: CatalogMedia): Promise<CatalogMedia[]>;
   getWatchAvailability?(providerId: string, mediaType: "movie" | "tv", country: string): Promise<WatchAvailability | null>;

@@ -1,4 +1,3 @@
-import { Suspense } from "react";
-import { CollectionPage } from "@/components/explore/collection-page";
+import { LibraryPage } from "@/components/explore/library-page";
 export const metadata={title:"Library"};
-export default function Page(){return <Suspense><CollectionPage mode="library"/></Suspense>}
+export default function Page(){return <LibraryPage/>}

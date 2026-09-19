@@ -11,6 +11,16 @@ test("theme registry exposes deterministic semantic provider-backed mappings", (
   assert.equal(findTheme("made-up-theme"), undefined);
 });
 
+test("Slow Burn never becomes a literal title search", () => {
+  const slowBurn = findTheme("slow-burn");
+  assert.ok(slowBurn);
+  for (const mediaType of ["movie", "tv", "book"] as const) {
+    const terms = themeSearchTerms(slowBurn, mediaType);
+    assert.ok(terms.length > 0);
+    assert.ok(!terms.some((term) => term.toLowerCase() === "slow burn"));
+  }
+});
+
 test("theme registry defers unsupported domain combinations", () => {
   const basedOnBook = findTheme("based-on-a-book");
   assert.ok(basedOnBook);

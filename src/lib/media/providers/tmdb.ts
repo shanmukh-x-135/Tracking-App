@@ -43,6 +43,15 @@ interface TmdbSeason { episodes?: TmdbSeasonEpisode[] }
 interface TmdbWatchProvider { provider_id?: number; provider_name?: string; logo_path?: string | null }
 interface TmdbWatchResults { results?: Record<string, { link?: string; flatrate?: TmdbWatchProvider[]; free?: TmdbWatchProvider[]; ads?: TmdbWatchProvider[]; rent?: TmdbWatchProvider[]; buy?: TmdbWatchProvider[] }> }
 
+export const tmdbGenres: ReadonlyArray<{ id: number; name: string }> = [
+  { id: 28, name: "Action" }, { id: 12, name: "Adventure" }, { id: 16, name: "Animation" },
+  { id: 35, name: "Comedy" }, { id: 80, name: "Crime" }, { id: 99, name: "Documentary" },
+  { id: 18, name: "Drama" }, { id: 10751, name: "Family" }, { id: 14, name: "Fantasy" },
+  { id: 36, name: "History" }, { id: 27, name: "Horror" }, { id: 10402, name: "Music" },
+  { id: 9648, name: "Mystery" }, { id: 10749, name: "Romance" }, { id: 878, name: "Science Fiction" },
+  { id: 53, name: "Thriller" }, { id: 10752, name: "War" }, { id: 37, name: "Western" },
+];
+
 const genreNames: Record<number, string> = {
   12: "Adventure", 14: "Fantasy", 16: "Animation", 18: "Drama", 27: "Horror",
   28: "Action", 35: "Comedy", 36: "History", 53: "Thriller", 80: "Crime",
@@ -161,6 +170,12 @@ export class TmdbProvider implements CatalogProvider {
     if (mediaType !== "movie" && mediaType !== "tv") return [];
     const data = await this.request<{ results?: TmdbMedia[] }>(`/trending/${mediaType}/week?language=en-US`);
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
+  }
+
+  async discoverByGenre(mediaType: "movie" | "tv", genreId: number): Promise<CatalogMedia[]> {
+    if (!tmdbGenres.some((genre) => genre.id === genreId)) return [];
+    const data = await this.request<{ results?: TmdbMedia[] }>(`/discover/${mediaType}?with_genres=${genreId}&include_adult=false&include_video=false&language=en-US&sort_by=popularity.desc&page=1`);
+    return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 18);
   }
 
   async discoverSections(): Promise<CatalogDiscoverySection[]> {

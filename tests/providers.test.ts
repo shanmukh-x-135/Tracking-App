@@ -3,7 +3,7 @@ import test from "node:test";
 import { createProviderKey, isProviderKey, parseProviderKey } from "../src/lib/media/identity";
 import { GoogleBooksProvider, normalizeGoogleBook } from "../src/lib/media/providers/google-books";
 import { IgdbProvider, normalizeIgdb } from "../src/lib/media/providers/igdb";
-import { normalizeTmdb, TmdbProvider } from "../src/lib/media/providers/tmdb";
+import { normalizeTmdb, tmdbGenres, TmdbProvider } from "../src/lib/media/providers/tmdb";
 import { mockCatalogProvider } from "../src/lib/media/providers/mock";
 import { aggregateProviderSearch } from "../src/lib/media/search";
 import { franchises } from "../src/lib/media/franchises";
@@ -78,6 +78,19 @@ test("TMDB search considers a second page and ranks punctuation variants first",
   });
   const results = await provider.search("Dune Part Two");
   assert.deepEqual(results.map(({ title }) => title), ["Dune: Part Two", "Dune Messiah"]);
+});
+
+test("TMDB provider genre discovery uses a stable numeric with_genres filter", async () => {
+  let endpoint = "";
+  const provider = new TmdbProvider("token", async (input) => {
+    endpoint = String(input);
+    return new Response(JSON.stringify({ results: [{ id: 1, title: "Genre result", genre_ids: [28] }] }), { status: 200 });
+  });
+  const items = await provider.discoverByGenre("movie", 28);
+  assert.match(endpoint, /\/discover\/movie\?with_genres=28/);
+  assert.deepEqual(items.map(({ title }) => title), ["Genre result"]);
+  assert.ok(tmdbGenres.some((genre) => genre.id === 28 && genre.name === "Action"));
+  assert.deepEqual(await provider.discoverByGenre("movie", 123_456), []);
 });
 
 test("mock discovery and seasons remain deterministic for local UX checks", async () => {
