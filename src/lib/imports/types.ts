@@ -45,7 +45,7 @@ export interface MovieImportRecord extends ImportRecordBase {
 
 export interface SeriesImportRecord extends ImportRecordBase {
   mediaType: "tv";
-  status?: "watchlist" | "watching" | "completed" | "paused" | "dropped";
+  status?: "watchlist" | "watched" | "watching" | "completed" | "paused" | "dropped";
   recordKind?: "show_state" | "season_state" | "event";
   targetType?: "show" | "season" | "episode";
   tmdbSeasonId?: number;

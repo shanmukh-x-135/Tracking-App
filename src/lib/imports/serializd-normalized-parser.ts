@@ -87,7 +87,9 @@ export function parseSerializdNormalizedJson(contents: Uint8Array): ParseResult 
   const base = (showId: number, sourceTitle: string | null, key: string, original: unknown): SeriesImportRecord => ({ source: "serializd_normalized_v1", sourceRecordKey: `serializd_normalized_v1:${key}`, mediaType: "tv", title: sourceTitle ?? `TMDB show ${showId}`, providerIdentity: { provider: "tmdb", mediaType: "tv", providerId: String(showId) }, sourceMetadata: { original: JSON.stringify(original) } });
   const records: SeriesImportRecord[] = data.shows.map((item) => ({
     ...base(item.tmdb_id, item.title, `show:${item.tmdb_id}`, item), recordKind: "show_state", stateFacts: item.status,
-    status: item.status.currently_watching ? "watching" : item.status.paused ? "paused" : item.status.dropped ? "dropped" : item.status.finished ? "completed" : item.status.watchlisted ? "watchlist" : item.status.watched_any ? "watching" : undefined,
+    // Serializd's watched_any is historical evidence, not a resumable state.
+    // Only its explicit current-state flags may place a show in Continue.
+    status: item.status.currently_watching ? "watching" : item.status.paused ? "paused" : item.status.dropped ? "dropped" : item.status.finished ? "completed" : item.status.watchlisted ? "watchlist" : item.status.watched_any ? "watched" : undefined,
     isFavorite: item.favorite || favoriteIds.has(item.tmdb_id),
   }));
   for (const item of data.season_states) records.push({ ...base(item.tmdb_show_id, item.show_title, `season:${item.tmdb_show_id}:${item.tmdb_season_id}:${item.state}:${item.date_added ?? "undated"}`, item), recordKind: "season_state", targetType: "season", tmdbSeasonId: item.tmdb_season_id, seasonNumber: item.season_number ?? undefined, seasonState: item.state === "watched" ? "completed" : "watchlist", sourceCreatedAt: item.date_added ?? undefined });

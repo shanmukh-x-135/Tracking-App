@@ -9,6 +9,14 @@ import type { CatalogMedia } from "@/lib/media/types";
 import { defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
 import { RatingInput } from "@/components/ui/rating-input";
 
+const seriesStatuses = [
+  ["watchlist", "Watchlist"],
+  ["watching", "Watching"],
+  ["paused", "Paused"],
+  ["completed", "Completed"],
+  ["dropped", "Dropped"],
+] as const;
+
 declare global {
   interface Window { __mosaicQuickLogContext?: CatalogMedia }
 }
@@ -25,6 +33,7 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
   const rating = state.ratings.find((item) => item.mediaKey === key)?.value;
   const review = state.reviews.find((item) => mediaKey(item.media) === key);
   const isMovie = media.mediaType === "movie";
+  const isSeries = media.mediaType === "tv";
   const isWatchlisted = entry?.status === "watchlist";
 
   // Keep the global Quick Log aware of the current detail route. This is cleared
@@ -53,6 +62,7 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
     <div className="actions">
       <button className="button accent" onClick={openQuickLog}><Plus size={16}/>Log</button>
       {isMovie ? <button className={`button ${isWatchlisted ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate(isWatchlisted ? { type: "library.remove", media } : { type: "library.upsert", media, status: "watchlist" }), isWatchlisted ? "Removed from your watchlist." : "Added to your watchlist.")}>{isWatchlisted ? <Check size={16}/> : <Plus size={16}/>} {isWatchlisted ? "Watchlisted" : "Watchlist"}</button> : <button className={`button ${entry ? "accent" : ""}`} onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media) }), "Library updated.")}>{entry ? <Check size={16}/> : <Plus size={16}/>} {entry ? "In library" : "Add to library"}</button>}
+      {isSeries && <label className="series-status-control">Series status<select aria-label="Series tracking status" value={entry?.status ?? "watchlist"} onChange={(event) => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: event.target.value as typeof seriesStatuses[number][0] }), "Series status updated.")}>{seriesStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
       <button className="button" onClick={() => setShowReview((value) => !value)}><Star size={16}/>{review ? "Edit review" : "Review"}</button>
       <button className="button" onClick={() => setShowLists((value) => !value)}><ListPlus size={16}/>Add to list</button>
       <button className={`icon-button glass ${entry?.isFavorite ? "active" : ""}`} aria-label="Favourite" onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media), isFavorite: !entry?.isFavorite }), "Favourite updated.")}><Heart size={17} fill={entry?.isFavorite ? "currentColor" : "none"}/></button>
