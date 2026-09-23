@@ -11,7 +11,12 @@ export function normalizeMock(item: Media): CatalogMedia {
   };
   switch (item.mediaType) {
     case "movie": return { ...base, mediaType: "movie", releaseDate: item.releaseDate, runtimeMinutes: item.runtime, director: item.director };
-    case "tv": return { ...base, mediaType: "tv", seasonCount: item.seasons, episodeCount: item.episodeCount, seasonNumbers: Array.from({ length: item.seasons }, (_, index) => index + 1), network: item.network };
+    case "tv": {
+      const baseCount = Math.floor(item.episodeCount / item.seasons);
+      const extra = item.episodeCount % item.seasons;
+      const seasonEpisodeCounts = Object.fromEntries(Array.from({ length: item.seasons }, (_, index) => [index + 1, baseCount + (index < extra ? 1 : 0)]));
+      return { ...base, mediaType: "tv", seasonCount: item.seasons, episodeCount: item.episodeCount, eligibleEpisodeCount: item.episodeCount, eligibleEpisodeCounts: seasonEpisodeCounts, seasonEpisodeCounts, seasonNumbers: Array.from({ length: item.seasons }, (_, index) => index + 1), network: item.network };
+    }
     case "game": return { ...base, mediaType: "game", releaseDate: item.releaseDate, platforms: item.platforms, developer: item.developer, publisher: item.publisher };
     case "book": return { ...base, mediaType: "book", releaseDate: item.publicationDate, authors: item.authors, pageCount: item.pageCount, isbn: item.isbn };
   }

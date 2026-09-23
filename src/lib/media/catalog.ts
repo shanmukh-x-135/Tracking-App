@@ -26,6 +26,7 @@ export async function searchCatalog(query: string, providers = configuredCatalog
 }
 
 export async function getCatalogItem(identity: ProviderIdentity, providers = configuredCatalogProviders()): Promise<CatalogMedia | null> {
+  if (identity.provider === "mock") return mockCatalogProvider.getById(identity.providerId, identity.mediaType);
   const provider = providers.find((candidate) => candidate.name === identity.provider);
   return provider?.getById(identity.providerId, identity.mediaType) ?? null;
 }
@@ -36,6 +37,18 @@ export async function getCatalogSeasonEpisodes(identity: ProviderIdentity, seaso
   // provider is unavailable. Keep its episode endpoint available in that mode too.
   const provider = identity.provider === "mock" ? mockCatalogProvider : providers.find((candidate) => candidate.name === identity.provider);
   return provider?.getSeasonEpisodes?.(identity.providerId, seasonNumber) ?? [];
+}
+
+/** Fetch season data with bounded fan-out; provider fetches are cached independently. */
+export async function getCatalogEpisodeRatings(identity: ProviderIdentity, seasonNumbers: number[], providers = configuredCatalogProviders()): Promise<CatalogEpisode[][]> {
+  const uniqueSeasons = [...new Set(seasonNumbers)].filter((season) => Number.isInteger(season) && season >= 0).sort((first, second) => first - second);
+  const results: CatalogEpisode[][] = [];
+  for (let index = 0; index < uniqueSeasons.length; index += 4) {
+    const batch = uniqueSeasons.slice(index, index + 4);
+    const loaded = await Promise.all(batch.map((season) => getCatalogSeasonEpisodes(identity, season, providers).catch(() => [])));
+    results.push(...loaded);
+  }
+  return results;
 }
 
 export async function getWatchAvailability(identity: ProviderIdentity, country: string, providers = configuredCatalogProviders()): Promise<WatchAvailability | null> {
