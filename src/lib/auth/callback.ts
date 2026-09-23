@@ -16,16 +16,6 @@ export async function handleOAuthCallback(request: NextRequest, dependencies: Ca
   const safeNext = safeReturnPath(url.searchParams.get("next"));
   const redirect = (path: string): NextResponse => {
     const location = new URL(path, siteOrigin);
-    // Temporary production trace: deliberately excludes callback query values,
-    // OAuth codes, tokens, cookies, and all account information.
-    console.info("oauth_callback.host_trace", JSON.stringify({
-      request_host: url.host,
-      forwarded_host: request.headers.get("x-forwarded-host") ?? "unavailable",
-      canonical_host: new URL(siteOrigin).host,
-      safe_next: safeNext,
-      redirect_host: location.host,
-      redirect_path: location.pathname,
-    }));
     return NextResponse.redirect(location);
   };
   if (!dependencies.isLive) return redirect(safeNext);
