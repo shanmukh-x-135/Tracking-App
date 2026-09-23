@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { createOAuthCallbackUrl } from "@/lib/auth/return-path";
 import type { AuthGateway, AuthResult, AuthUser, ProfileUpdate } from "@/lib/auth/types";
 
 function normalizeUser(user: User): AuthUser {
@@ -41,7 +42,7 @@ export const supabaseAuthGateway: AuthGateway = {
   async signInWithGoogle(returnTo) {
     const { error } = await createClient().auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnTo ?? "/home")}` },
+      options: { redirectTo: createOAuthCallbackUrl(window.location.origin, returnTo ?? null) },
     });
     if (error) throw new Error(error.message);
   },

@@ -30,10 +30,13 @@ Create separate Supabase projects for staging and production when practical. In 
 3. Set the Auth Site URL to `https://mosaic-eight-theta.vercel.app`.
 4. Allow the following application redirects in Supabase Auth:
    - `http://localhost:3000/auth/callback`
-   - `https://mosaic-cb5sa7dlr-shanmukh-s-projects3.vercel.app/auth/callback`
-   - `https://mosaic-4hks2e5je-shanmukh-s-projects3.vercel.app/auth/callback`
-   - `https://mosaic-git-chore-live-bringup-shanmukh-s-projects3.vercel.app/auth/callback`
    - `https://mosaic-eight-theta.vercel.app/auth/callback`
+   - `https://*-shanmukh-s-projects3.vercel.app/**` for Vercel preview deployments
+
+   The Google sign-in flow sends the active browser origin to Supabase as
+   `<origin>/auth/callback?next=/home`. An unlisted preview origin is rejected
+   by Supabase and falls back to the Site URL (its root), so keep the production
+   callback exact and retain the preview wildcard while previews use OAuth.
 5. Configure Google OAuth in Supabase and add `https://wyvhemuzxrqvgflqwfjd.supabase.co/auth/v1/callback` as an authorized redirect URI in the Google OAuth client. Supabase redirects back to the Mosaic `/auth/callback` route after provider authentication.
 6. Review password strength, leaked-password protection, rate limits, CAPTCHA, custom SMTP, backups, and point-in-time recovery before inviting real users.
 

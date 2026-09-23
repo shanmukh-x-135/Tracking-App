@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getAuthGateway } from "@/lib/auth/gateway";
+import { safeReturnPath } from "@/lib/auth/return-path";
 
 export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -14,7 +15,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const { refresh } = useAuth();
   const isSignup = mode === "signup";
-  const returnTo = typeof window === "undefined" ? "/home" : safeReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
+  const returnTo = typeof window === "undefined" ? "/home" : safeReturnPath(new URLSearchParams(window.location.search).get("returnTo"));
 
   async function finishAuthentication(action: () => Promise<{ user?: unknown; message?: string }>) {
     setError(undefined);
@@ -72,8 +73,4 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
       <p className="auth-switch">{isSignup ? "Already have an account?" : "New to Mosaic?"} <Link href={`${isSignup ? "/login" : "/signup"}?returnTo=${encodeURIComponent(returnTo)}`}>{isSignup ? "Sign in" : "Create one"}</Link></p>
     </div></section>
   </main>;
-}
-
-function safeReturnTo(value: string | null): string {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/home";
 }
