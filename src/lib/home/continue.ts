@@ -1,6 +1,7 @@
 import type { CatalogMedia } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
 import type { MosaicState } from "@/lib/persistence/types";
+import { deriveSeriesProgress } from "@/lib/tv/series-progress";
 
 export type ContinueKind = "series" | "game" | "book";
 
@@ -19,19 +20,41 @@ function bookProgress(currentPage?: number, totalPages?: number, percentage?: nu
 }
 
 /** Returns only meaningful unfinished personal states; movies intentionally do not appear. */
-export function deriveContinue(state: MosaicState): ContinueItem[] {
+export function deriveContinue(state: MosaicState, options: { limit?: number } = {}): ContinueItem[] {
   const latestEpisodeBySeries = new Map<string, typeof state.episodeWatches[number]>();
+  const latestSeasonStateBySeries = new Map<string, typeof state.seasonStates[number]>();
   for (const watch of state.episodeWatches) {
+    if (watch.series.mediaType !== "tv") continue;
     const key = mediaKey(watch.series);
     const current = latestEpisodeBySeries.get(key);
     if (!current || watch.watchedAt > current.watchedAt) latestEpisodeBySeries.set(key, watch);
   }
-  const series = [...latestEpisodeBySeries.values()].map((watch): ContinueItem => ({
-    kind: "series", media: watch.series,
-    label: `Next: S${String(watch.seasonNumber).padStart(2, "0")}E${String(watch.episodeNumber + 1).padStart(2, "0")}`,
-    detail: watch.episodeTitle ? `After ${watch.episodeTitle}` : "Continue watching",
-    progress: 0, occurredAt: watch.watchedAt,
-  }));
+  for (const seasonState of state.seasonStates) {
+    if (seasonState.series.mediaType !== "tv") continue;
+    const key = mediaKey(seasonState.series);
+    const current = latestSeasonStateBySeries.get(key);
+    if (!current || seasonState.updatedAt > current.updatedAt) latestSeasonStateBySeries.set(key, seasonState);
+  }
+  const seriesByKey = new Map<string, { media: Extract<CatalogMedia, { mediaType: "tv" }>; occurredAt: string; latestWatch?: typeof state.episodeWatches[number] }>();
+  for (const watch of latestEpisodeBySeries.values()) {
+    if (watch.series.mediaType === "tv") seriesByKey.set(mediaKey(watch.series), { media: watch.series, occurredAt: watch.watchedAt, latestWatch: watch });
+  }
+  for (const seasonState of latestSeasonStateBySeries.values()) {
+    const key = mediaKey(seasonState.series);
+    const current = seriesByKey.get(key);
+    if (seasonState.series.mediaType === "tv" && (!current || seasonState.updatedAt > current.occurredAt)) seriesByKey.set(key, { media: seasonState.series, occurredAt: seasonState.updatedAt, latestWatch: current?.latestWatch });
+  }
+  const series = [...seriesByKey.values()].flatMap(({ media, occurredAt, latestWatch }): ContinueItem[] => {
+    const progress = deriveSeriesProgress(state, media);
+    if (progress.eligibleEpisodes !== undefined && progress.progress >= 100) return [];
+    const label = progress.nextEpisode
+      ? `Next · S${String(progress.nextEpisode.seasonNumber).padStart(2, "0")}E${String(progress.nextEpisode.episodeNumber).padStart(2, "0")}`
+      : "Continue watching";
+    const detail = progress.eligibleEpisodes !== undefined
+      ? `${progress.watchedEpisodes} of ${progress.eligibleEpisodes} released episodes`
+      : latestWatch?.episodeTitle ? `After ${latestWatch.episodeTitle}` : "Episode total unavailable";
+    return [{ kind: "series", media, label, detail, progress: progress.progress, occurredAt }];
+  });
   const games = state.gamePlaythroughs.filter((item) => item.status === "playing" || item.status === "paused").map((item): ContinueItem => ({
     kind: "game", media: item.media,
     label: item.platform ? `Playing on ${item.platform}` : item.status === "paused" ? "Paused" : "Playing",
@@ -43,5 +66,6 @@ export function deriveContinue(state: MosaicState): ContinueItem[] {
     detail: item.status === "paused" ? "Resume when you are ready" : "Update progress",
     progress: bookProgress(item.currentPage, item.totalPages, item.progressPercent), occurredAt: item.updatedAt,
   }));
-  return [...series, ...games, ...books].sort((first, second) => second.occurredAt.localeCompare(first.occurredAt));
+  const ranked = [...series, ...games, ...books].sort((first, second) => second.occurredAt.localeCompare(first.occurredAt) || first.kind.localeCompare(second.kind) || first.media.title.localeCompare(second.media.title) || mediaKey(first.media).localeCompare(mediaKey(second.media)));
+  return options.limit === undefined ? ranked : ranked.slice(0, options.limit);
 }

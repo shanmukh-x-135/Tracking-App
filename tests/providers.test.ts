@@ -45,10 +45,23 @@ test("TMDB normalizes movies and series without inventing missing metadata", () 
 
 test("TMDB season adapter returns every supplied episode in episode order", async () => {
   const provider = new TmdbProvider("token", async () => new Response(JSON.stringify({ episodes: [
-    { id: 30, episode_number: 3, name: "Third" }, { id: 10, episode_number: 1, name: "First" }, { id: 20, episode_number: 2, name: "Second" },
+    { id: 30, episode_number: 3, name: "Third" }, { id: 10, episode_number: 1, name: "First", vote_average: 8.4, vote_count: 42 }, { id: 20, episode_number: 2, name: "Second" },
   ] }), { status: 200 }));
   const episodes = await provider.getSeasonEpisodes("123", 2);
   assert.deepEqual(episodes.map(({ episodeNumber, title }) => [episodeNumber, title]), [[1, "First"], [2, "Second"], [3, "Third"]]);
+  assert.deepEqual(episodes.map(({ publicRating, publicRatingCount }) => [publicRating, publicRatingCount]), [[8.4, 42], [undefined, undefined], [undefined, undefined]]);
+});
+
+test("TMDB series normalization excludes future seasons from eligible progress", () => {
+  const series = normalizeTmdb({ id: 9, media_type: "tv", name: "Uneven", number_of_episodes: 20, seasons: [
+    { season_number: 0, episode_count: 2 }, { season_number: 1, episode_count: 3, air_date: "2024-01-01" }, { season_number: 2, episode_count: 7, air_date: "2025-01-01" }, { season_number: 3, episode_count: 8, air_date: "2099-01-01" },
+  ], last_episode_to_air: { season_number: 2, episode_number: 4 } });
+  assert.equal(series?.mediaType, "tv");
+  if (series?.mediaType === "tv") {
+    assert.deepEqual(series.seasonEpisodeCounts, { 0: 2, 1: 3, 2: 7, 3: 8 });
+    assert.deepEqual(series.eligibleEpisodeCounts, { 1: 3, 2: 4 });
+    assert.equal(series.eligibleEpisodeCount, 7);
+  }
 });
 
 test("TMDB watch providers normalize groups and preserve only the returned watch-options URL", async () => {

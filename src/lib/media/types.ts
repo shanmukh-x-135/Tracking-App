@@ -31,6 +31,12 @@ export interface CatalogSeries extends CatalogMediaBase {
   episodeCount?: number;
   /** Provider season numbers can include season 0 (specials). */
   seasonNumbers?: number[];
+  /** Episode totals by provider season number. Season 0 is specials. */
+  seasonEpisodeCounts?: Record<number, number>;
+  /** Released non-special episode totals by season; absent means the provider did not expose air state. */
+  eligibleEpisodeCounts?: Record<number, number>;
+  /** Released, non-special episodes known by the provider at normalization time. */
+  eligibleEpisodeCount?: number;
   seasons?: { providerId: string; seasonNumber: number }[];
   network?: string;
   networkLogoUrl?: string;
@@ -46,6 +52,9 @@ export interface CatalogEpisode {
   stillUrl?: string;
   airDate?: string;
   runtimeMinutes?: number;
+  /** Public provider rating, normalized to the provider's ten-point scale. */
+  publicRating?: number;
+  publicRatingCount?: number;
 }
 
 export type WatchProviderKind = "flatrate" | "free" | "ads" | "rent" | "buy";

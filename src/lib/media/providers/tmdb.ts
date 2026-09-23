@@ -25,7 +25,8 @@ export interface TmdbMedia {
   number_of_episodes?: number;
   networks?: Array<{ name: string; logo_path?: string | null }>;
   production_companies?: Array<{ name: string; logo_path?: string | null }>;
-  seasons?: Array<{ id?: number; season_number?: number }>;
+  seasons?: Array<{ id?: number; season_number?: number; episode_count?: number; air_date?: string | null }>;
+  last_episode_to_air?: { season_number?: number; episode_number?: number; air_date?: string | null };
   credits?: { crew?: Array<{ job: string; name: string }> };
 }
 
@@ -37,6 +38,8 @@ interface TmdbSeasonEpisode {
   still_path?: string | null;
   air_date?: string;
   runtime?: number | null;
+  vote_average?: number;
+  vote_count?: number;
 }
 
 interface TmdbSeason { episodes?: TmdbSeasonEpisode[] }
@@ -84,9 +87,27 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
     studio: item.production_companies?.[0]?.name,
     studioLogoUrl: image(item.production_companies?.[0]?.logo_path, "w500"),
   };
+  const seasonEpisodeCounts = Object.fromEntries((item.seasons ?? []).flatMap((season) => Number.isInteger(season.season_number) && Number.isInteger(season.episode_count) && (season.episode_count ?? 0) >= 0 ? [[season.season_number!, season.episode_count!]] : []));
+  const lastAired = item.last_episode_to_air;
+  const today = new Date().toISOString().slice(0, 10);
+  const eligibleEpisodeCounts = Object.fromEntries(Object.entries(seasonEpisodeCounts).flatMap(([season, count]) => {
+    const seasonNumber = Number(season);
+    if (seasonNumber === 0) return [];
+    if (lastAired && Number.isInteger(lastAired.season_number)) {
+      if (seasonNumber < lastAired.season_number!) return [[seasonNumber, count]];
+      if (seasonNumber === lastAired.season_number) return [[seasonNumber, Math.min(count, Math.max(0, lastAired.episode_number ?? 0))]];
+      return [];
+    }
+    const seasonDetail = item.seasons?.find((candidate) => candidate.season_number === seasonNumber);
+    return !seasonDetail?.air_date || seasonDetail.air_date <= today ? [[seasonNumber, count]] : [];
+  }));
+  const eligibleEpisodeCount = Object.values(eligibleEpisodeCounts).reduce((total, count) => total + count, 0);
   return {
     ...base, mediaType, seasonCount: item.number_of_seasons, episodeCount: item.number_of_episodes,
     seasonNumbers: item.seasons?.map((season) => season.season_number).filter((number): number is number => Number.isInteger(number)),
+    seasonEpisodeCounts: Object.keys(seasonEpisodeCounts).length ? seasonEpisodeCounts : undefined,
+    eligibleEpisodeCounts: Object.keys(seasonEpisodeCounts).length ? eligibleEpisodeCounts : undefined,
+    eligibleEpisodeCount: Object.keys(seasonEpisodeCounts).length ? eligibleEpisodeCount : undefined,
     seasons: item.seasons?.flatMap((season) => Number.isInteger(season.id) && Number.isInteger(season.season_number) ? [{ providerId: String(season.id), seasonNumber: season.season_number! }] : []),
     network: item.networks?.[0]?.name, networkLogoUrl: image(item.networks?.[0]?.logo_path, "w500"),
   };
@@ -153,6 +174,8 @@ export class TmdbProvider implements CatalogProvider {
         overview: episode.overview?.trim() || undefined,
         stillUrl: image(episode.still_path, "w500"), airDate: episode.air_date || undefined,
         runtimeMinutes: episode.runtime ?? undefined,
+        publicRating: episode.vote_average && episode.vote_average > 0 ? episode.vote_average : undefined,
+        publicRatingCount: episode.vote_count && episode.vote_count > 0 ? episode.vote_count : undefined,
       }));
   }
 

@@ -8,7 +8,7 @@ import { emptyMosaicState } from "../src/lib/persistence/types";
 import type { CatalogBook, CatalogGame, CatalogMovie, CatalogSeries } from "../src/lib/media/types";
 
 const movie: CatalogMovie = { provider: "mock", providerId: "movie", mediaType: "movie", title: "Movie", genres: [] };
-const series: CatalogSeries = { provider: "mock", providerId: "series", mediaType: "tv", title: "Series", genres: [] };
+const series: CatalogSeries = { provider: "mock", providerId: "series", mediaType: "tv", title: "Series", genres: [], episodeCount: 10, eligibleEpisodeCount: 8, seasonEpisodeCounts: { 1: 3, 2: 5, 3: 2 } };
 const game: CatalogGame = { provider: "mock", providerId: "game", mediaType: "game", title: "Game", genres: [], platforms: ["PC"] };
 const book: CatalogBook = { provider: "mock", providerId: "book", mediaType: "book", title: "Book", genres: [], authors: [], pageCount: 400 };
 
@@ -50,7 +50,40 @@ test("Continue only includes unfinished series, games, and books", () => {
   const items = deriveContinue(state);
   assert.deepEqual(items.map(({ kind }) => kind), ["game", "series", "book"]);
   assert.equal(items.some(({ media }) => media.mediaType === "movie"), false);
-  assert.equal(items.find(({ kind }) => kind === "series")?.label, "Next: S01E04");
+  const continuedSeries = items.find(({ kind }) => kind === "series");
+  assert.equal(continuedSeries?.label, "Next · S02E01");
+  assert.equal(continuedSeries?.progress, 13);
+  assert.equal(continuedSeries?.detail, "1 of 8 released episodes");
+});
+
+test("series continuation counts unique released episodes and imported completed seasons without inventing logs", () => {
+  const state = emptyMosaicState();
+  state.episodeWatches = [
+    { id: "first", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-01-04T00:00:00.000Z" },
+    { id: "rewatch", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-01-05T00:00:00.000Z", isRewatch: true },
+  ];
+  state.seasonStates = [{ id: "import", series, seasonNumber: 2, state: "completed", provenance: "imported_state", updatedAt: "2026-01-03T00:00:00.000Z" }];
+  const item = deriveContinue(state).find(({ kind }) => kind === "series");
+  assert.equal(item?.progress, 75);
+  assert.equal(item?.label, "Next · S01E02");
+  assert.equal(item?.detail, "6 of 8 released episodes");
+  assert.equal(projectActivity(state).filter(({ eventType }) => eventType === "episode_watch").length, 2);
+});
+
+test("future episode logs do not advance released-series progress", () => {
+  const state = emptyMosaicState();
+  const airingSeries: CatalogSeries = { ...series, eligibleEpisodeCount: 4, eligibleEpisodeCounts: { 1: 3, 2: 1 } };
+  state.episodeWatches = [{ id: "future", series: airingSeries, seasonNumber: 2, episodeNumber: 5, watchedAt: "2026-01-04T00:00:00.000Z" }];
+  const item = deriveContinue(state).find(({ kind }) => kind === "series");
+  assert.equal(item?.progress, 0);
+  assert.equal(item?.label, "Next · S01E01");
+});
+
+test("Home continuation can be capped while Library retains the complete active set", () => {
+  const state = emptyMosaicState();
+  state.gamePlaythroughs = Array.from({ length: 9 }, (_, index) => ({ id: String(index), media: { ...game, providerId: `game-${index}`, title: `Game ${index}` }, status: "playing" as const, playtimeMinutes: 0, updatedAt: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z` }));
+  assert.equal(deriveContinue(state, { limit: 8 }).length, 8);
+  assert.equal(deriveContinue(state).length, 9);
 });
 
 test("analytics remain rebuildable and never become a source of truth", () => {

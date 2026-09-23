@@ -12,6 +12,7 @@ import { mediaKey } from "@/lib/persistence/domain";
 import { franchiseForMedia, type FranchiseDefinition } from "@/lib/media/franchises";
 import { bookSynopsis, normalizeBookCategories, shouldCollapseBookSynopsis } from "@/lib/media/book-presentation";
 import { WatchProviders } from "@/components/detail/watch-providers";
+import { EpisodeRatingsMap } from "@/components/detail/episode-ratings-map";
 import { RatingInput } from "@/components/ui/rating-input";
 import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
 
@@ -210,7 +211,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "movie" && <WatchProviders media={media}/>}
-      {media.mediaType === "tv" && <><SeriesSection media={media}/><WatchProviders media={media}/></>}
+      {media.mediaType === "tv" && <><EpisodeRatingsMap media={media}/><SeriesSection media={media}/><WatchProviders media={media}/></>}
       {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
       {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related titles are available from this provider right now."}</p>}</section>}
     </div><aside>
