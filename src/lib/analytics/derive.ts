@@ -1,5 +1,9 @@
 import { projectActivity } from "@/lib/activity/projection";
+import { deriveCurrentMedia } from "@/lib/current-media/projection";
+import { deriveSeriesCurrentStatus } from "@/lib/current-media/projection";
+import { mediaKey } from "@/lib/persistence/domain";
 import type { MosaicState } from "@/lib/persistence/types";
+import type { CatalogSeries } from "@/lib/media/types";
 
 export interface MosaicAnalytics {
   generatedAt: string;
@@ -27,6 +31,7 @@ export interface TvMetrics {
   episodeRewatches: number;
   completedSeasons: number;
   showsInProgress: number;
+  seriesStatuses: { watching: number; paused: number; completed: number; dropped: number; watchlist: number };
 }
 
 /**
@@ -36,19 +41,22 @@ export interface TvMetrics {
  */
 export function deriveTvMetrics(state: MosaicState): TvMetrics {
   const episodeIdentity = (watch: MosaicState["episodeWatches"][number]) => `${watch.series.provider}:${watch.series.providerId}:${watch.seasonNumber}:${watch.episodeNumber}`;
-  const watchedSeries = new Set(state.episodeWatches.map((watch) => `${watch.series.provider}:${watch.series.providerId}`));
-  const inProgressSeries = new Set(
-    state.library
-      .filter(({ media, status }) => media.mediaType === "tv" && status === "watching")
-      .map(({ media }) => `${media.provider}:${media.providerId}`),
-  );
-  for (const series of watchedSeries) inProgressSeries.add(series);
+  const inProgressSeries = deriveCurrentMedia(state).filter(({ kind }) => kind === "series");
+  const series = new Map<string, CatalogSeries>();
+  for (const item of state.library) if (item.media.mediaType === "tv") series.set(mediaKey(item.media), item.media);
+  for (const item of state.seriesStates) if (item.series.mediaType === "tv") series.set(mediaKey(item.series), item.series);
+  const seriesStatuses = { watching: 0, paused: 0, completed: 0, dropped: 0, watchlist: 0 };
+  for (const item of series.values()) {
+    const status = deriveSeriesCurrentStatus(state, item).status;
+    if (status && status in seriesStatuses) seriesStatuses[status as keyof typeof seriesStatuses] += 1;
+  }
   return {
     uniqueEpisodesWatched: new Set(state.episodeWatches.map(episodeIdentity)).size,
     episodeWatchLogs: state.episodeWatches.length,
     episodeRewatches: state.episodeWatches.filter(({ isRewatch }) => isRewatch).length,
     completedSeasons: state.seasonStates.filter(({ state: status }) => status === "completed").length,
-    showsInProgress: inProgressSeries.size,
+    showsInProgress: inProgressSeries.length,
+    seriesStatuses,
   };
 }
 

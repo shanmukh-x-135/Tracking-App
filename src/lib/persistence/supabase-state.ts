@@ -316,7 +316,13 @@ export async function applySharedSupabaseMutation(client: Client, userId: string
 async function saveDerivedSharedState(client: Client, userId: string, mutation: DomainMutation): Promise<void> {
   if (mutation.type === "episode.unwatch" || mutation.type === "movie.delete") return;
   if (mutation.type === "episode.log") {
-    await applySharedSupabaseMutation(client, userId, { type: "library.upsert", media: mutation.series, status: "watching" });
+    const mediaId = await upsertMedia(client, mutation.series);
+    const { data: existing, error } = await client.from("library_entries").select("status,is_favorite").eq("user_id", userId).eq("media_id", mediaId).maybeSingle();
+    assertResult(error);
+    if (!existing || !["paused", "dropped", "completed"].includes(existing.status)) {
+      const { error: upsertError } = await client.from("library_entries").upsert({ user_id: userId, media_id: mediaId, status: "watching", is_favorite: existing?.is_favorite ?? false }, { onConflict: "user_id,media_id" });
+      assertResult(upsertError);
+    }
     return;
   }
   if (mutation.type === "season.state") {

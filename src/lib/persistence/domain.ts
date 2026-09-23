@@ -36,6 +36,15 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
     if (existing) { existing.status = status; existing.updatedAt = now; }
     else next.library.unshift({ media, status, isFavorite: false, updatedAt: now });
   };
+  const promoteSeriesToWatching = (media: CatalogMedia) => {
+    const existing = next.library.find((entry) => mediaKey(entry.media) === mediaKey(media));
+    if (!existing) { next.library.unshift({ media, status: "watching", isFavorite: false, updatedAt: now }); return; }
+    // A real episode log resumes neutral states, but must never silently undo
+    // an explicit paused, dropped, or completed state (including imports).
+    if (["paused", "dropped", "completed"].includes(existing.status)) return;
+    existing.status = "watching";
+    existing.updatedAt = now;
+  };
   const ensureRating = (media: CatalogMedia, value?: number) => {
     if (value === undefined) return;
     const ratingKey = mediaKey(media);
@@ -124,7 +133,7 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       const existing = next.episodeWatches.find((watch) => !watch.isRewatch && mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber);
       next.episodeWatches = next.episodeWatches.filter((watch) => watch.isRewatch || !(mediaKey(watch.series) === key && watch.seasonNumber === mutation.seasonNumber && watch.episodeNumber === mutation.episodeNumber));
       next.episodeWatches.unshift({ ...existing, id: existing?.id ?? crypto.randomUUID(), series: mutation.series, seasonNumber: mutation.seasonNumber, episodeNumber: mutation.episodeNumber, episodeTitle: mutation.episodeTitle, watchedAt: mutation.watchedAt, rating: mutation.rating });
-      ensureLibrary(mutation.series, "watching");
+      promoteSeriesToWatching(mutation.series);
       break;
     }
     case "season.state":

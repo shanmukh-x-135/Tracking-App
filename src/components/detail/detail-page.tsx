@@ -15,6 +15,8 @@ import { WatchProviders } from "@/components/detail/watch-providers";
 import { EpisodeRatingsMap } from "@/components/detail/episode-ratings-map";
 import { RatingInput } from "@/components/ui/rating-input";
 import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
+import { deriveSeriesCurrentStatus } from "@/lib/current-media/projection";
+import { deriveSeriesProgress } from "@/lib/tv/series-progress";
 
 type Fact = [label: string, value: string | number | undefined];
 
@@ -87,6 +89,8 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
   const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
   const [episodeError, setEpisodeError] = useState<string>();
   const { state, mutate } = useMosaicState();
+  const seriesProgress = deriveSeriesProgress(state, media);
+  const currentStatus = deriveSeriesCurrentStatus(state, media).status ?? "watchlist";
   const watched = state.episodeWatches.filter((watch) => mediaKey(watch.series) === mediaKey(media) && watch.seasonNumber === season);
   const completedSeason = state.seasonStates.find((item) => mediaKey(item.series) === mediaKey(media) && item.seasonNumber === season && item.state === "completed");
   const watchedCount = completedSeason ? episodes.length : new Set(watched.map((watch) => watch.episodeNumber)).size;
@@ -107,7 +111,8 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
 
   if (!seasonNumbers.length) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
   return <section className="section">
-    <div className="section-head"><div><span className="eyebrow">Episode tracking</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watchedCount} / {episodes.length || "—"} watched</span></div>
+    <div className="section-head"><div><span className="eyebrow">Series tracking · {currentStatus}</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watchedCount} / {episodes.length || "—"} watched</span></div>
+    {seriesProgress.eligibleEpisodes === undefined ? <p className="muted">Series progress is unavailable until the provider supplies released episode totals.</p> : <TrackingProgress value={seriesProgress.progress} label={`${seriesProgress.watchedEpisodes} / ${seriesProgress.eligibleEpisodes} released episodes`}/>}
     {completedSeason && <p className="muted">Season marked watched{completedSeason.provenance === "imported_state" ? " from imported state" : ""}. Individual watch dates are shown only when an explicit historical log exists.</p>}
     <div className="season-tabs">{seasonNumbers.map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>{number === 0 ? "Specials" : `Season ${number}`}</button>)}</div>
     <AnimatePresence mode="wait"><motion.div className="episode-list" key={season} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={motionTokens.normal}>{isLoadingEpisodes && <p className="episode-state">Loading every episode…</p>}{episodeError && <p className="episode-state form-error" role="alert">{episodeError}</p>}{!isLoadingEpisodes && !episodeError && !episodes.length && <p className="episode-state">No episodes are listed for this season.</p>}{episodes.map((episode) => <motion.article layout className="episode" key={episode.id}>

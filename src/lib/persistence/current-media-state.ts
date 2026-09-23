@@ -1,5 +1,6 @@
 import { mediaKey } from "@/lib/persistence/domain";
 import type { MosaicState } from "@/lib/persistence/types";
+import { importedSeriesStatus } from "@/lib/current-media/projection";
 
 export interface CurrentMediaState {
   mediaKey: string;
@@ -26,6 +27,13 @@ export function deriveCurrentMediaState(state: MosaicState): CurrentMediaState[]
     item.isFavorite = entry.isFavorite;
     item.latestOccurredAt = entry.updatedAt;
   }
+  for (const seriesState of state.seriesStates) {
+    const item = ensure(mediaKey(seriesState.series));
+    // Explicit imported state wins over an older library row. Episode history is
+    // deliberately not used to manufacture an active "watching" state.
+    item.status = importedSeriesStatus(seriesState.facts) ?? item.status;
+    item.latestOccurredAt = seriesState.updatedAt;
+  }
   for (const rating of state.ratings) ensure(rating.mediaKey).rating = rating.value;
   for (const item of state.gamePlaythroughs) {
     const current = ensure(mediaKey(item.media));
@@ -38,11 +46,6 @@ export function deriveCurrentMediaState(state: MosaicState): CurrentMediaState[]
     current.status = item.status;
     current.progressPercent = item.progressPercent;
     current.latestOccurredAt = item.updatedAt;
-  }
-  for (const item of state.episodeWatches) {
-    const current = ensure(mediaKey(item.series));
-    current.status ??= "watching";
-    if (!current.latestOccurredAt || item.watchedAt > current.latestOccurredAt) current.latestOccurredAt = item.watchedAt;
   }
   return [...snapshot.values()].sort((first, second) => (second.latestOccurredAt ?? "").localeCompare(first.latestOccurredAt ?? ""));
 }

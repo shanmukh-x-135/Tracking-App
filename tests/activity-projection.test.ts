@@ -42,6 +42,7 @@ test("current state stays compact and separates card state from historical movie
 
 test("Continue only includes unfinished series, games, and books", () => {
   const state = emptyMosaicState();
+  state.library = [{ media: series, status: "watching", isFavorite: false, updatedAt: "2026-01-03T00:00:00.000Z" }];
   state.movieWatches = [{ id: "movie", media: movie, watchedAt: "2026-01-05", isRewatch: false }];
   state.episodeWatches = [{ id: "episode", series, seasonNumber: 1, episodeNumber: 3, watchedAt: "2026-01-03T00:00:00.000Z" }];
   state.gamePlaythroughs = [{ id: "game", media: game, status: "playing", platform: "PC", playtimeMinutes: 90, progressPercent: 42, updatedAt: "2026-01-04T00:00:00.000Z" }];
@@ -53,11 +54,12 @@ test("Continue only includes unfinished series, games, and books", () => {
   const continuedSeries = items.find(({ kind }) => kind === "series");
   assert.equal(continuedSeries?.label, "Next · S02E01");
   assert.equal(continuedSeries?.progress, 13);
-  assert.equal(continuedSeries?.detail, "1 of 8 released episodes");
+  assert.equal(continuedSeries?.detail, "1 / 8 released episodes");
 });
 
 test("series continuation counts unique released episodes and imported completed seasons without inventing logs", () => {
   const state = emptyMosaicState();
+  state.library = [{ media: series, status: "watching", isFavorite: false, updatedAt: "2026-01-04T00:00:00.000Z" }];
   state.episodeWatches = [
     { id: "first", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-01-04T00:00:00.000Z" },
     { id: "rewatch", series, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-01-05T00:00:00.000Z", isRewatch: true },
@@ -66,13 +68,14 @@ test("series continuation counts unique released episodes and imported completed
   const item = deriveContinue(state).find(({ kind }) => kind === "series");
   assert.equal(item?.progress, 75);
   assert.equal(item?.label, "Next · S01E02");
-  assert.equal(item?.detail, "6 of 8 released episodes");
+  assert.equal(item?.detail, "6 / 8 released episodes");
   assert.equal(projectActivity(state).filter(({ eventType }) => eventType === "episode_watch").length, 2);
 });
 
 test("future episode logs do not advance released-series progress", () => {
   const state = emptyMosaicState();
   const airingSeries: CatalogSeries = { ...series, eligibleEpisodeCount: 4, eligibleEpisodeCounts: { 1: 3, 2: 1 } };
+  state.library = [{ media: airingSeries, status: "watching", isFavorite: false, updatedAt: "2026-01-04T00:00:00.000Z" }];
   state.episodeWatches = [{ id: "future", series: airingSeries, seasonNumber: 2, episodeNumber: 5, watchedAt: "2026-01-04T00:00:00.000Z" }];
   const item = deriveContinue(state).find(({ kind }) => kind === "series");
   assert.equal(item?.progress, 0);
@@ -110,6 +113,25 @@ test("TV metrics keep unique episodes, explicit logs, rewatches, and bulk season
     episodeWatchLogs: 3,
     episodeRewatches: 1,
     completedSeasons: 1,
-    showsInProgress: 1,
+    showsInProgress: 0,
+    seriesStatuses: { watching: 0, paused: 0, completed: 0, dropped: 0, watchlist: 0 },
   });
+});
+
+test("canonical current media honors imported show state over watched history", () => {
+  const state = emptyMosaicState();
+  const watching: CatalogSeries = { ...series, providerId: "watching" };
+  const paused: CatalogSeries = { ...series, providerId: "paused" };
+  const historical: CatalogSeries = { ...series, providerId: "historical" };
+  state.seriesStates = [
+    { id: "watching", series: watching, facts: { watched_any: true, watchlisted: false, currently_watching: true, paused: false, dropped: false, finished: false }, updatedAt: "2026-02-03T00:00:00.000Z" },
+    { id: "paused", series: paused, facts: { watched_any: true, watchlisted: false, currently_watching: false, paused: true, dropped: false, finished: false }, updatedAt: "2026-02-02T00:00:00.000Z" },
+    { id: "historical", series: historical, facts: { watched_any: true, watchlisted: false, currently_watching: false, paused: false, dropped: false, finished: false }, updatedAt: "2026-02-01T00:00:00.000Z" },
+  ];
+  state.episodeWatches = [
+    { id: "watch", series: watching, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-03T00:00:00.000Z" },
+    { id: "paused-watch", series: paused, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-02T00:00:00.000Z" },
+    { id: "historical-watch", series: historical, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-01T00:00:00.000Z" },
+  ];
+  assert.deepEqual(deriveContinue(state).map(({ media }) => media.providerId), ["watching"]);
 });
