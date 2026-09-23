@@ -50,13 +50,14 @@ Project `mosaic` is imported from `shanmukh-x-135/Tracking-App` and linked local
 NEXT_PUBLIC_DATA_MODE
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+NEXT_PUBLIC_SITE_URL
 TMDB_API_READ_TOKEN
 IGDB_CLIENT_ID
 IGDB_CLIENT_SECRET
 GOOGLE_BOOKS_API_KEY
 ```
 
-Set `NEXT_PUBLIC_DATA_MODE=live` only when the corresponding Supabase project has received all migrations. Public environment values are frozen into the client bundle during `next build`, so redeploy after changing them.
+Set `NEXT_PUBLIC_DATA_MODE=live` only when the corresponding Supabase project has received all migrations. Set Production `NEXT_PUBLIC_SITE_URL=https://mosaic-eight-theta.vercel.app`; it is the canonical origin for Google OAuth initiation and callback redirects. Leave it unset for Preview so Preview authentication remains on its intentional active origin. Public environment values are frozen into the client bundle during `next build`, so redeploy after changing them.
 
 Use Vercel's encrypted environment-variable controls for secrets. Do not paste provider credentials into repository files or build logs. Create and validate a preview from `chore/live-bringup` before promoting the same commit to production.
 
