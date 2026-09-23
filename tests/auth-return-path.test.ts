@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import { GET } from "../src/app/auth/callback/route";
+import { handleOAuthCallback } from "../src/lib/auth/callback";
 import { createOAuthCallbackUrl, safeReturnPath } from "../src/lib/auth/return-path";
 
 test("OAuth return paths stay within Mosaic", () => {
@@ -47,21 +47,33 @@ test("Production OAuth always uses the configured canonical origin", () => {
   }
 });
 
-test("the callback redirects only to a validated path on the request origin", async () => {
-  const previousMode = process.env.NEXT_PUBLIC_DATA_MODE;
+test("a successful live callback always redirects to the canonical host", async () => {
   const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  process.env.NEXT_PUBLIC_DATA_MODE = "mock";
   process.env.NEXT_PUBLIC_SITE_URL = "https://mosaic-eight-theta.vercel.app";
 
   try {
-    const successResponse = await GET(new NextRequest("https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?next=/library"));
-    const unsafeResponse = await GET(new NextRequest("https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?next=/%5Cevil.example"));
+    const successfulHome = await handleOAuthCallback(new NextRequest("https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?code=test-code&next=/home"), { isLive: true, exchangeCodeForSession: async () => ({ error: null }) });
+    const successfulLibrary = await handleOAuthCallback(new NextRequest("https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?code=test-code&next=/library"), { isLive: true, exchangeCodeForSession: async () => ({ error: null }) });
+    const unsafeResponses = await Promise.all(["https://evil.example", "//evil.example", "\\evil", "/\\evil"].map((next) => handleOAuthCallback(new NextRequest(`https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?code=test-code&next=${encodeURIComponent(next)}`), { isLive: true, exchangeCodeForSession: async () => ({ error: null }) })));
 
-    assert.equal(successResponse.headers.get("location"), "https://mosaic-eight-theta.vercel.app/library");
-    assert.equal(unsafeResponse.headers.get("location"), "https://mosaic-eight-theta.vercel.app/home");
+    assert.equal(successfulHome.headers.get("location"), "https://mosaic-eight-theta.vercel.app/home");
+    assert.equal(successfulLibrary.headers.get("location"), "https://mosaic-eight-theta.vercel.app/library");
+    for (const response of unsafeResponses) assert.equal(response.headers.get("location"), "https://mosaic-eight-theta.vercel.app/home");
   } finally {
-    if (previousMode === undefined) delete process.env.NEXT_PUBLIC_DATA_MODE;
-    else process.env.NEXT_PUBLIC_DATA_MODE = previousMode;
+    if (previousSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
+  }
+});
+
+test("the missing-code callback branch keeps the canonical host", async () => {
+  const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  process.env.NEXT_PUBLIC_SITE_URL = "https://mosaic-eight-theta.vercel.app";
+
+  try {
+    const missingCodeResponse = await handleOAuthCallback(new NextRequest("https://mosaic-shanmukh-s-projects3.vercel.app/auth/callback?next=/library"), { isLive: true, exchangeCodeForSession: async () => ({ error: null }) });
+
+    assert.equal(missingCodeResponse.headers.get("location"), "https://mosaic-eight-theta.vercel.app/login?error=missing_code");
+  } finally {
     if (previousSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
     else process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
   }
