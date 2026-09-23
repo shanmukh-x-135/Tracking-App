@@ -19,6 +19,20 @@ test("Google OAuth returns to the active origin's home callback", () => {
   );
 });
 
+test("Local OAuth keeps the local origin when no canonical production URL is configured", () => {
+  const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+
+  try {
+    assert.equal(
+      createOAuthCallbackUrl("http://localhost:3000", "/home"),
+      "http://localhost:3000/auth/callback?next=%2Fhome",
+    );
+  } finally {
+    if (previousSiteUrl !== undefined) process.env.NEXT_PUBLIC_SITE_URL = previousSiteUrl;
+  }
+});
+
 test("Production OAuth always uses the configured canonical origin", () => {
   const previousSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   process.env.NEXT_PUBLIC_SITE_URL = "https://mosaic-eight-theta.vercel.app";
