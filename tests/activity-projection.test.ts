@@ -4,6 +4,7 @@ import { projectActivity } from "../src/lib/activity/projection";
 import { deriveContinue } from "../src/lib/home/continue";
 import { deriveAnalytics, deriveTvMetrics } from "../src/lib/analytics/derive";
 import { deriveCurrentMediaState } from "../src/lib/persistence/current-media-state";
+import { catalogMediaSchema } from "../src/lib/persistence/validation";
 import { emptyMosaicState } from "../src/lib/persistence/types";
 import type { CatalogBook, CatalogGame, CatalogMovie, CatalogSeries } from "../src/lib/media/types";
 
@@ -11,6 +12,15 @@ const movie: CatalogMovie = { provider: "mock", providerId: "movie", mediaType: 
 const series: CatalogSeries = { provider: "mock", providerId: "series", mediaType: "tv", title: "Series", genres: [], episodeCount: 10, eligibleEpisodeCount: 8, seasonEpisodeCounts: { 1: 3, 2: 5, 3: 2 } };
 const game: CatalogGame = { provider: "mock", providerId: "game", mediaType: "game", title: "Game", genres: [], platforms: ["PC"] };
 const book: CatalogBook = { provider: "mock", providerId: "book", mediaType: "book", title: "Book", genres: [], authors: [], pageCount: 400 };
+
+test("persisted series metadata retains the released-episode denominator used by Home and Library", () => {
+  const parsed = catalogMediaSchema.parse(series);
+  assert.equal(parsed.mediaType, "tv");
+  if (parsed.mediaType === "tv") {
+    assert.deepEqual(parsed.seasonEpisodeCounts, { 1: 3, 2: 5, 3: 2 });
+    assert.equal(parsed.eligibleEpisodeCount, 8);
+  }
+});
 
 test("activity projection is chronological, domain-aware, and contains no fabricated events", () => {
   const state = emptyMosaicState();

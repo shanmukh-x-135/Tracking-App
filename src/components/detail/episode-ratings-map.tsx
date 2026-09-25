@@ -7,13 +7,13 @@ import type { CatalogEpisode, CatalogSeries } from "@/lib/media/types";
 type RatingsPayload = { seasons?: CatalogEpisode[][] };
 
 export const episodeRatingLegend = [
-  { label: "Absolute Cinema", color: "#1EA1F2", minimum: 9.7 },
-  { label: "Awesome", color: "#186A3B", minimum: 9 },
-  { label: "Great", color: "#27B463", minimum: 8 },
-  { label: "Good", color: "#F4D040", minimum: 7 },
-  { label: "Average", color: "#F39C13", minimum: 6 },
-  { label: "Bad", color: "#E74B3C", minimum: 5 },
-  { label: "Garbage", color: "#633974", minimum: 0 },
+  { label: "Absolute Cinema", color: "#38BDF8", minimum: 9.7 },
+  { label: "Awesome", color: "#22C55E", minimum: 9 },
+  { label: "Great", color: "#4ADE80", minimum: 8 },
+  { label: "Good", color: "#FDE047", minimum: 7 },
+  { label: "Average", color: "#F59E0B", minimum: 6 },
+  { label: "Bad", color: "#FB7185", minimum: 5 },
+  { label: "Garbage", color: "#A855F7", minimum: 0 },
 ] as const;
 
 export type EpisodeRatingCategory = (typeof episodeRatingLegend)[number]["label"] | "Unrated";

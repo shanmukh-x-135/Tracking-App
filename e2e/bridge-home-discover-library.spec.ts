@@ -38,3 +38,29 @@ test("Discover genre/theme controls and mobile chrome remain accessible", async 
   await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("Discover Spotlight and Episode Ratings stay art-led and compact across breakpoints", async ({ page }) => {
+  for (const width of [390, 430, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: width <= 430 ? 844 : 900 });
+    await page.goto("/discover");
+    const spotlight = page.locator("main .discover-spotlight").first();
+    await expect(spotlight).toBeVisible();
+    await expect(spotlight.locator(".spotlight-ambient")).toHaveCount(1);
+    await expect(spotlight.locator(".spotlight-copy").getByRole("link", { name: "View story" })).toBeVisible();
+    expect(await spotlight.locator(".spotlight-art").evaluate((node) => getComputedStyle(node, "::after").pointerEvents)).toBe("none");
+    expect(await spotlight.locator(".spotlight-image img").evaluate((node) => getComputedStyle(node).mixBlendMode)).toBe("normal");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: `artifacts/immediate-pass/discover-${width}.png`, fullPage: true });
+  }
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/series/severance");
+  const ratings = page.getByRole("heading", { name: "Episode Ratings" });
+  await expect(ratings).toBeVisible();
+  const scroll = page.locator(".episode-ratings-scroll");
+  await expect(scroll).toHaveCSS("border-top-style", "none");
+  await page.screenshot({ path: "artifacts/immediate-pass/episode-ratings-expanded-1440.png", fullPage: true });
+  await page.getByRole("button", { name: "Collapse" }).click();
+  await expect(scroll).toBeHidden();
+  await page.screenshot({ path: "artifacts/immediate-pass/episode-ratings-collapsed-1440.png", fullPage: true });
+});
