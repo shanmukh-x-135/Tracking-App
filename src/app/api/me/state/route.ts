@@ -1,34 +1,27 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { applySupabaseMutation, readSupabaseState } from "@/lib/persistence/supabase-state";
+import { apiError } from "@/lib/api/errors";
+import { getAuthenticatedUser } from "@/lib/auth/server-auth";
 import { persistenceMutationSchema } from "@/lib/persistence/validation";
+import { applyMosaicMutation, getMosaicState } from "@/lib/services/mosaic";
 
-async function authenticated() {
-  const client = await createClient();
-  const { data, error } = await client.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : undefined;
-  return { client, userId, error };
-}
-
-export async function GET() {
-  const { client, userId } = await authenticated();
-  if (!userId) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  try { return NextResponse.json(await readSupabaseState(client, userId)); }
+export async function GET(request: Request) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return apiError("UNAUTHORIZED", "Authentication required.", 401);
+  try { return NextResponse.json(await getMosaicState(user.client, user.id)); }
   catch (error) {
     console.error("Mosaic state could not be loaded.", { message: error instanceof Error ? error.message : "Unknown error" });
-    return NextResponse.json({ error: "Your Mosaic data could not be loaded." }, { status: 500 });
+    return apiError("INTERNAL_ERROR", "Your Mosaic data could not be loaded.", 500);
   }
 }
 
 export async function POST(request: Request) {
-  const { client, userId } = await authenticated();
-  if (!userId) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  const user = await getAuthenticatedUser(request);
+  if (!user) return apiError("UNAUTHORIZED", "Authentication required.", 401);
   const parsed = persistenceMutationSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "The update was invalid." }, { status: 400 });
+  if (!parsed.success) return apiError("VALIDATION_ERROR", "The update was invalid.", 400);
   try {
-    await applySupabaseMutation(client, userId, parsed.data);
-    return NextResponse.json(await readSupabaseState(client, userId));
+    return NextResponse.json(await applyMosaicMutation(user.client, user.id, parsed.data));
   } catch {
-    return NextResponse.json({ error: "Your update could not be saved." }, { status: 500 });
+    return apiError("INTERNAL_ERROR", "Your update could not be saved.", 500);
   }
 }

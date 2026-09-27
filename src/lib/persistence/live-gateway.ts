@@ -1,4 +1,5 @@
 import type { MosaicState, PersistenceGateway, PersistenceMutation } from "@/lib/persistence/types";
+import { apiErrorMessage } from "@/lib/api/errors";
 
 async function request(method: "GET" | "POST", mutation?: PersistenceMutation): Promise<MosaicState> {
   const response = await fetch("/api/me/state", {
@@ -8,8 +9,8 @@ async function request(method: "GET" | "POST", mutation?: PersistenceMutation): 
   });
   if (response.status === 401) throw new Error("Sign in to save this update.");
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: string } | null;
-    throw new Error(body?.error ?? "Mosaic could not save your update.");
+    const body = await response.json().catch(() => null);
+    throw new Error(apiErrorMessage(body, "Mosaic could not save your update."));
   }
   return response.json() as Promise<MosaicState>;
 }
