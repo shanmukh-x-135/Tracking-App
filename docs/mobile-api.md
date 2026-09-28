@@ -38,7 +38,7 @@ backward-compatibly and the existing web API remains their source of truth.
 | Capability | Method and path | Response | Notes |
 | --- | --- | --- | --- |
 | Authenticated identity/profile | `GET /api/me` | `{ id, profile }` | `profile` is `null` only for a legacy account whose profile has not been created yet. |
-| Current media / Continue | `GET /api/me/continue?limit=20` | `{ items: ContinueItem[] }` | `limit` is 1–100. Only watching series, playing games, and reading books are included. |
+| Current media / Continue | `GET /api/me/continue?limit=20` | `{ items: ContinueItem[] }` | `limit` is optional (1–100 when supplied). Without it, all active items are returned in Home order. |
 | Library | `GET /api/me/library` | `{ items: LibraryEntry[] }` | Media is normalized Mosaic catalog data, not raw provider data. |
 | Activity/diary | `GET /api/me/activity?limit=50` | `{ items: ActivityEvent[] }` | `limit` is 1–100; returned events are newest first. |
 | Lists | `GET /api/me/lists` | `{ items: UserList[] }` | Cross-media list order is the item `position`. |
@@ -48,6 +48,106 @@ backward-compatibly and the existing web API remains their source of truth.
 `GET /api/me/state` remains a web-compatible full snapshot endpoint. Native
 screens should prefer the concise endpoint for their use case. `GET
 /api/me/media-state` remains available for compact card synchronization.
+
+### `ContinueItem`
+
+`GET /api/me/continue` is the mobile-safe projection used by Mosaic Home. It
+contains only resumable media: a series whose authoritative state is
+`watching`, a book with a `reading` record, or a game with a `playing`
+playthrough. Movies do not currently have a resumable/in-progress state in
+Mosaic and are therefore never returned. `paused`, finished/completed,
+dropped/DNF, archived, and saved-only states are excluded. In particular,
+Serializd's historical `watched_any` fact does not activate a series; only its
+explicit `currently_watching` fact does. Paused imported series remain
+excluded because Home currently treats pause as non-resumable.
+
+Items use the existing Home ordering: descending active-state activity time,
+then a stable kind/title/provider-identity tie-break. The optional `limit`
+query parameter is a presentation convenience, not a server-side Home cap.
+
+| Field | Type | Nullable / optional behavior | Meaning and applicability |
+| --- | --- | --- | --- |
+| `id` | string | never null | Mosaic provider-qualified identity (`provider:mediaType:providerId`). |
+| `mediaType` | `"series" \| "book" \| "game"` | never null | Home-friendly media kind. Series corresponds to Mosaic catalog `tv`. |
+| `provider` | `"tmdb" \| "igdb" \| "googlebooks" \| "mock"` | never null | Catalog provider; use with `providerId` for provider operations. |
+| `providerId` | string | never null | Provider-native catalog identifier. |
+| `title` | string | never null | Catalog-normalized display title. |
+| `posterUrl` | string | omitted when unavailable | Already-normalized artwork URL. Do not reconstruct provider image URLs. |
+| `backdropUrl` | string | omitted when unavailable | Already-normalized artwork URL. Do not reconstruct provider image URLs. |
+| `status` | `"watching" \| "reading" \| "playing"` | never null | The authoritative active state that qualified this item. |
+| `lastActivityAt` | ISO-8601 string or `null` | `null` only if no active-state timestamp is available | Timestamp used by the existing Home ordering. |
+| `progress` | progress object | never null | Structured, media-specific tracking values below; never parse a UI display string. |
+| `nextAction` | action object | never null | Domain-aware action a client can offer. |
+
+`progress` is one of the following shapes, selected by `mediaType`:
+
+| `mediaType` | Progress fields | Null semantics |
+| --- | --- | --- |
+| `series` | `watchedEpisodes` (number), `totalEpisodes` (number or `null`), `percent` (number or `null`), optional `nextSeasonNumber` and `nextEpisodeNumber` | `totalEpisodes` and `percent` are `null` when Mosaic lacks an aired, non-special episode denominator. This is unknown, not `0%`. |
+| `book` | `currentPage` (number or `null`), `totalPages` (number or `null`), `percent` (number or `null`) | Each unavailable page value is `null`; `percent` is `null` unless a recorded percentage or valid page denominator exists. A real zero-percent reading is `0`. |
+| `game` | `percent` (number or `null`), `playtimeMinutes` (number) | `percent` is `null` when no completion percentage was recorded. `playtimeMinutes` may legitimately be `0`. |
+
+`nextAction` has one of these shapes:
+
+| Media type | Shape |
+| --- | --- |
+| `series` | `{ "type": "log_episode", "seasonNumber"?: number, "episodeNumber"?: number }` |
+| `book` | `{ "type": "update_book_progress" }` |
+| `game` | `{ "type": "update_game_playthrough" }` |
+
+The next episode coordinates are omitted when Mosaic cannot determine a next
+aired episode. The current contract does not expose an episode title because
+the persisted Home projection does not retain one for an unwatched episode.
+
+Example response:
+
+```json
+{
+  "items": [
+    {
+      "id": "tmdb:tv:1396",
+      "mediaType": "series",
+      "provider": "tmdb",
+      "providerId": "1396",
+      "title": "Breaking Bad",
+      "posterUrl": "https://image.tmdb.org/t/p/w500/example.jpg",
+      "backdropUrl": "https://image.tmdb.org/t/p/w1280/example.jpg",
+      "status": "watching",
+      "lastActivityAt": "2026-09-21T18:22:00.000Z",
+      "progress": {
+        "watchedEpisodes": 14,
+        "totalEpisodes": 62,
+        "percent": 23,
+        "nextSeasonNumber": 2,
+        "nextEpisodeNumber": 1
+      },
+      "nextAction": { "type": "log_episode", "seasonNumber": 2, "episodeNumber": 1 }
+    },
+    {
+      "id": "googlebooks:book:volume-42",
+      "mediaType": "book",
+      "provider": "googlebooks",
+      "providerId": "volume-42",
+      "title": "The Left Hand of Darkness",
+      "status": "reading",
+      "lastActivityAt": "2026-09-20T09:00:00.000Z",
+      "progress": { "currentPage": 96, "totalPages": 304, "percent": 32 },
+      "nextAction": { "type": "update_book_progress" }
+    },
+    {
+      "id": "igdb:game:7346",
+      "mediaType": "game",
+      "provider": "igdb",
+      "providerId": "7346",
+      "title": "Hades",
+      "status": "playing",
+      "lastActivityAt": "2026-09-19T20:15:00.000Z",
+      "progress": { "percent": null, "playtimeMinutes": 245 },
+      "nextAction": { "type": "update_game_playthrough" }
+    }
+  ]
+}
+```
 
 ### Mutation command body
 

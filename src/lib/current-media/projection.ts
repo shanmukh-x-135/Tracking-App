@@ -1,5 +1,5 @@
-import type { CatalogMedia, CatalogSeries } from "@/lib/media/types";
-import { mediaKey } from "@/lib/persistence/domain";
+import type { CatalogMedia, CatalogSeries, MediaProvider } from "@/lib/media/types";
+import { calculateBookProgress, mediaKey } from "@/lib/persistence/domain";
 import type { LibraryStatus, MosaicState } from "@/lib/persistence/types";
 import { deriveSeriesProgress } from "@/lib/tv/series-progress";
 
@@ -13,6 +13,54 @@ export interface CurrentMediaItem {
   detail: string;
   progress?: number;
   occurredAt: string;
+}
+
+export interface SeriesContinueProgress {
+  watchedEpisodes: number;
+  /** `null` when Mosaic does not know the aired, non-special episode total. */
+  totalEpisodes: number | null;
+  /** `null` when there is no trustworthy denominator. */
+  percent: number | null;
+  nextSeasonNumber?: number;
+  nextEpisodeNumber?: number;
+}
+
+export interface BookContinueProgress {
+  currentPage: number | null;
+  totalPages: number | null;
+  /** `null` when neither a supplied percentage nor a page denominator is known. */
+  percent: number | null;
+}
+
+export interface GameContinueProgress {
+  percent: number | null;
+  playtimeMinutes: number;
+}
+
+export type ContinueProgress = SeriesContinueProgress | BookContinueProgress | GameContinueProgress;
+
+export type ContinueNextAction =
+  | { type: "log_episode"; seasonNumber?: number; episodeNumber?: number }
+  | { type: "update_book_progress" }
+  | { type: "update_game_playthrough" };
+
+/**
+ * Stable, catalog-normalized representation for native clients. It contains no
+ * presentation labels or persistence-row details, so clients never have to
+ * recreate Mosaic's active-state or progress rules.
+ */
+export interface ContinueItem {
+  id: string;
+  mediaType: CurrentMediaKind;
+  provider: MediaProvider;
+  providerId: string;
+  title: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  status: CurrentMediaItem["status"];
+  lastActivityAt: string | null;
+  progress: ContinueProgress;
+  nextAction: ContinueNextAction;
 }
 
 export function importedSeriesStatus(facts: Record<string, boolean | null> | undefined): LibraryStatus | undefined {
@@ -34,11 +82,6 @@ export function deriveSeriesCurrentStatus(state: MosaicState, series: CatalogSer
   const imported = state.seriesStates.find((item) => mediaKey(item.series) === key);
   const importedStatus = importedSeriesStatus(imported?.facts);
   return { status: importedStatus ?? library?.status, updatedAt: imported?.updatedAt ?? library?.updatedAt };
-}
-
-function bookProgress(currentPage?: number, totalPages?: number, percentage?: number): number | undefined {
-  if (percentage !== undefined) return percentage;
-  return totalPages && totalPages > 0 ? Math.round(((currentPage ?? 0) / totalPages) * 100) : undefined;
 }
 
 /**
@@ -66,7 +109,7 @@ export function deriveCurrentMedia(state: MosaicState, options: { limit?: number
   }
   for (const reading of state.bookReadings) {
     if (reading.status !== "reading") continue;
-    const progress = bookProgress(reading.currentPage, reading.totalPages, reading.progressPercent);
+    const progress = calculateBookProgress(reading.currentPage, reading.totalPages, reading.progressPercent);
     add({ kind: "book", media: reading.media, status: "reading", label: reading.totalPages ? `${reading.currentPage ?? 0} / ${reading.totalPages} pages` : "Reading", detail: "Update progress", progress, occurredAt: reading.updatedAt });
   }
   for (const playthrough of state.gamePlaythroughs) {
@@ -75,4 +118,64 @@ export function deriveCurrentMedia(state: MosaicState, options: { limit?: number
   }
   const ranked = [...candidates.values()].sort((first, second) => second.occurredAt.localeCompare(first.occurredAt) || first.kind.localeCompare(second.kind) || first.media.title.localeCompare(second.media.title) || mediaKey(first.media).localeCompare(mediaKey(second.media)));
   return options.limit === undefined ? ranked : ranked.slice(0, options.limit);
+}
+
+/** Projects the existing current-media state into the versioned mobile contract. */
+export function projectContinueItems(state: MosaicState, options: { limit?: number } = {}): ContinueItem[] {
+  return deriveCurrentMedia(state, options).map((item) => {
+    const base = {
+      id: mediaKey(item.media),
+      mediaType: item.kind,
+      provider: item.media.provider,
+      providerId: item.media.providerId,
+      title: item.media.title,
+      posterUrl: item.media.posterUrl,
+      backdropUrl: item.media.backdropUrl,
+      status: item.status,
+      lastActivityAt: item.occurredAt || null,
+    };
+
+    if (item.kind === "series" && item.media.mediaType === "tv") {
+      const seriesProgress = deriveSeriesProgress(state, item.media);
+      return {
+        ...base,
+        progress: {
+          watchedEpisodes: seriesProgress.watchedEpisodes,
+          totalEpisodes: seriesProgress.eligibleEpisodes ?? null,
+          percent: seriesProgress.eligibleEpisodes === undefined ? null : seriesProgress.progress,
+          ...(seriesProgress.nextEpisode ? {
+            nextSeasonNumber: seriesProgress.nextEpisode.seasonNumber,
+            nextEpisodeNumber: seriesProgress.nextEpisode.episodeNumber,
+          } : {}),
+        },
+        nextAction: seriesProgress.nextEpisode
+          ? { type: "log_episode" as const, seasonNumber: seriesProgress.nextEpisode.seasonNumber, episodeNumber: seriesProgress.nextEpisode.episodeNumber }
+          : { type: "log_episode" as const },
+      } satisfies ContinueItem;
+    }
+
+    if (item.kind === "book" && item.media.mediaType === "book") {
+      const reading = state.bookReadings.find((candidate) => candidate.status === "reading" && mediaKey(candidate.media) === base.id);
+      const percent = reading ? calculateBookProgress(reading.currentPage, reading.totalPages, reading.progressPercent) : undefined;
+      return {
+        ...base,
+        progress: {
+          currentPage: reading?.currentPage ?? null,
+          totalPages: reading?.totalPages ?? null,
+          percent: percent ?? null,
+        },
+        nextAction: { type: "update_book_progress" },
+      } satisfies ContinueItem;
+    }
+
+    const playthrough = state.gamePlaythroughs.find((candidate) => candidate.status === "playing" && mediaKey(candidate.media) === base.id);
+    return {
+      ...base,
+      progress: {
+        percent: playthrough?.progressPercent ?? null,
+        playtimeMinutes: playthrough?.playtimeMinutes ?? 0,
+      },
+      nextAction: { type: "update_game_playthrough" },
+    } satisfies ContinueItem;
+  });
 }

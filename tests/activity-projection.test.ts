@@ -4,6 +4,7 @@ import { projectActivity } from "../src/lib/activity/projection";
 import { deriveContinue } from "../src/lib/home/continue";
 import { deriveAnalytics, deriveTvMetrics } from "../src/lib/analytics/derive";
 import { deriveCurrentMediaState } from "../src/lib/persistence/current-media-state";
+import { projectContinueItems } from "../src/lib/current-media/projection";
 import { catalogMediaSchema } from "../src/lib/persistence/validation";
 import { emptyMosaicState } from "../src/lib/persistence/types";
 import type { CatalogBook, CatalogGame, CatalogMovie, CatalogSeries } from "../src/lib/media/types";
@@ -144,4 +145,45 @@ test("canonical current media honors imported show state over watched history", 
     { id: "historical-watch", series: historical, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-02-01T00:00:00.000Z" },
   ];
   assert.deepEqual(deriveContinue(state).map(({ media }) => media.providerId), ["watching"]);
+});
+
+test("mobile ContinueItem projection maps active domain state without fabricated progress", () => {
+  const state = emptyMosaicState();
+  const activeSeries: CatalogSeries = { ...series, providerId: "active-series", posterUrl: "https://art.test/series-poster.jpg", backdropUrl: "https://art.test/series-backdrop.jpg" };
+  const unknownSeries: CatalogSeries = { ...series, providerId: "unknown-series", episodeCount: undefined, eligibleEpisodeCount: undefined, seasonEpisodeCounts: undefined, eligibleEpisodeCounts: undefined };
+  const finishedSeries: CatalogSeries = { ...series, providerId: "finished-series" };
+  const historicalSeries: CatalogSeries = { ...series, providerId: "history-only" };
+  state.library = [
+    { media: activeSeries, status: "watching", isFavorite: false, updatedAt: "2026-03-03T00:00:00.000Z" },
+    { media: unknownSeries, status: "watching", isFavorite: false, updatedAt: "2026-03-02T00:00:00.000Z" },
+    { media: finishedSeries, status: "completed", isFavorite: false, updatedAt: "2026-03-01T00:00:00.000Z" },
+  ];
+  state.seriesStates = [{ id: "history", series: historicalSeries, facts: { watched_any: true, currently_watching: false, paused: false, dropped: false, finished: false, watchlisted: false }, updatedAt: "2026-03-04T00:00:00.000Z" }];
+  state.episodeWatches = [{ id: "episode", series: activeSeries, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-03-03T00:00:00.000Z" }];
+  state.bookReadings = [
+    { id: "reading", media: { ...book, posterUrl: "https://art.test/book.jpg" }, status: "reading", currentPage: 100, totalPages: 400, updatedAt: "2026-03-05T00:00:00.000Z" },
+    { id: "finished", media: { ...book, providerId: "finished-book" }, status: "finished", currentPage: 400, totalPages: 400, updatedAt: "2026-03-06T00:00:00.000Z" },
+    { id: "dnf", media: { ...book, providerId: "dnf-book" }, status: "dnf", updatedAt: "2026-03-06T00:00:00.000Z" },
+  ];
+  state.gamePlaythroughs = [
+    { id: "playing", media: game, status: "playing", playtimeMinutes: 123, progressPercent: undefined, updatedAt: "2026-03-04T00:00:00.000Z" },
+    { id: "completed", media: { ...game, providerId: "completed-game" }, status: "completed", playtimeMinutes: 300, progressPercent: 100, updatedAt: "2026-03-06T00:00:00.000Z" },
+    { id: "dropped", media: { ...game, providerId: "dropped-game" }, status: "dropped", playtimeMinutes: 12, updatedAt: "2026-03-06T00:00:00.000Z" },
+  ];
+
+  const items = projectContinueItems(state);
+  assert.deepEqual(items.map((item) => item.id), ["mock:book:book", "mock:game:game", "mock:tv:active-series", "mock:tv:unknown-series"]);
+  assert.equal(items.some((item) => item.id === "mock:tv:history-only"), false);
+  assert.equal(items.some((item) => item.id.includes("finished") || item.id.includes("dnf") || item.id.includes("dropped")), false);
+
+  const seriesItem = items.find((item) => item.id === "mock:tv:active-series");
+  assert.deepEqual(seriesItem?.progress, { watchedEpisodes: 1, totalEpisodes: 8, percent: 13, nextSeasonNumber: 1, nextEpisodeNumber: 2 });
+  assert.equal(seriesItem?.posterUrl, "https://art.test/series-poster.jpg");
+  assert.equal(seriesItem?.backdropUrl, "https://art.test/series-backdrop.jpg");
+  assert.deepEqual(seriesItem?.nextAction, { type: "log_episode", seasonNumber: 1, episodeNumber: 2 });
+
+  const unknownItem = items.find((item) => item.id === "mock:tv:unknown-series");
+  assert.deepEqual(unknownItem?.progress, { watchedEpisodes: 0, totalEpisodes: null, percent: null });
+  assert.deepEqual(items.find((item) => item.id === "mock:book:book")?.progress, { currentPage: 100, totalPages: 400, percent: 25 });
+  assert.deepEqual(items.find((item) => item.id === "mock:game:game")?.progress, { percent: null, playtimeMinutes: 123 });
 });

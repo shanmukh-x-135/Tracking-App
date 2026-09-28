@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deriveAnalytics, type MosaicAnalytics } from "@/lib/analytics/derive";
 import { projectActivity, type ActivityEvent } from "@/lib/activity/projection";
-import { deriveContinue, type ContinueItem } from "@/lib/home/continue";
+import { projectContinueItems, type ContinueItem } from "@/lib/current-media/projection";
 import { applySupabaseMutation, readSupabaseState } from "@/lib/persistence/supabase-state";
 import type { LibraryEntry, MosaicState, PersistenceMutation, UserList } from "@/lib/persistence/types";
 import type { Database } from "@/types/database";
@@ -20,7 +20,7 @@ export async function applyMosaicMutation(client: Client, userId: string, mutati
 }
 
 export async function getCurrentMedia(client: Client, userId: string, limit?: number): Promise<ContinueItem[]> {
-  return deriveContinue(await getMosaicState(client, userId), limit === undefined ? {} : { limit });
+  return projectContinueItems(await getMosaicState(client, userId), limit === undefined ? {} : { limit });
 }
 
 export async function getLibrary(client: Client, userId: string): Promise<LibraryEntry[]> {
