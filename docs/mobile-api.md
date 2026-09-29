@@ -39,7 +39,7 @@ backward-compatibly and the existing web API remains their source of truth.
 | --- | --- | --- | --- |
 | Authenticated identity/profile | `GET /api/me` | `{ id, profile }` | `profile` is `null` only for a legacy account whose profile has not been created yet. |
 | Current media / Continue | `GET /api/me/continue?limit=20` | `{ items: ContinueItem[] }` | `limit` is optional (1–100 when supplied). Without it, all active items are returned in Home order. |
-| Library | `GET /api/me/library` | `{ items: LibraryEntry[] }` | Media is normalized Mosaic catalog data, not raw provider data. |
+| Library | `GET /api/me/library?type=&status=&sort=` | `{ items: LibraryEntry[] }` | Complete tile-ready tracked collection; all query parameters are optional. |
 | Activity/diary | `GET /api/me/activity?limit=50` | `{ items: ActivityEvent[] }` | `limit` is 1–100; returned events are newest first. |
 | Lists | `GET /api/me/lists` | `{ items: UserList[] }` | Cross-media list order is the item `position`. |
 | Stats | `GET /api/me/stats` | `MosaicAnalytics` | Rebuildable projection; no derived analytics row is mutable. |
@@ -148,6 +148,150 @@ Example response:
   ]
 }
 ```
+
+### Library
+
+`GET /api/me/library?type=<movie|tv|game|book>&status=<LibraryStatus>&sort=<updated|title|rating|release>`
+returns the complete tracked Mosaic Library, not the smaller Home Continue
+subset. Authentication is required: send the Supabase access token as
+`Authorization: Bearer <access-token>` (or use a browser session). A 401 means
+the credential is missing, expired, or invalid; a transient Library failure
+does not change the client's authentication state.
+
+The response is `{ "items": LibraryEntry[] }`. It is deliberately
+unpaginated: every matching entry is returned, so client-side filtering and
+sorting are correct when no server query parameters are used. There is no page
+size, cursor, offset, or next-page token. The default stable order is most
+recent `updatedAt` first, with provider-qualified identity as a tie-break.
+
+`type`, `status`, and `sort` are optional server-side filters. `type=tv` is
+the **Series** filter. `status` uses the values below and can be used with or
+without `type`; a valid combination with no matching items returns an empty
+array. Unsupported values return 400. Sorting applies after filtering:
+`updated` (default, newest first), `title` (ascending), `rating` (highest user
+rating first; unrated last), and `release` (newest known release year first;
+unknown years last).
+
+Library contains every media item explicitly retained in Mosaic's library
+state, including watched/watchlist movies; watching, completed, paused,
+dropped, and watchlist series; reading, finished, paused, DNF, and
+want-to-read books; and playing, completed, paused, dropped, and backlog
+games. Removing an item from Library removes it from this endpoint. Historical
+activity alone never creates a Library entry.
+
+#### `LibraryEntry` fields
+
+| Field | Type | Nullable / optional behavior | Meaning |
+| --- | --- | --- | --- |
+| `id` | string | required | Canonical provider-qualified identity: `provider:mediaType:providerId`. |
+| `mediaType` | `"movie" \| "tv" \| "game" \| "book"` | required | Catalog domain; `tv` is Series. |
+| `provider` | `"tmdb" \| "igdb" \| "googlebooks" \| "mock"` | required | Catalog provider. |
+| `providerId` | string | required | Opaque provider-native ID. Never title-match or coerce to a number. |
+| `title` | string | required | Normalized catalog title. |
+| `posterUrl` | string | omitted if unavailable | Fully qualified poster/cover URL. |
+| `backdropUrl` | string | omitted if unavailable | Fully qualified wide artwork URL. |
+| `releaseYear` | number | omitted if unknown | Movie release, series first-air, game release, or book publication year. |
+| `status` | `LibraryStatus` | required | Domain-appropriate personal Library state. |
+| `userRating` | number or `null` | `null` means the user has not rated this item | Mosaic user rating: 0.5–5.0 inclusive, in 0.5-star increments. This is distinct from catalog `communityRating`. |
+| `isFavorite` | boolean | required | User's Library favorite flag. |
+| `updatedAt` | ISO-8601 string | required | Last Library state update; used by default ordering. |
+| `progress` | progress object | omitted for movies and for books/games without a persisted reading/playthrough; present for series | Structured personal progress; never parse a display string. |
+
+Artwork URLs are already fully qualified and normalized. iOS must never append
+provider-specific TMDB, IGDB, or Google Books image URL segments. The fields
+above make every tile renderable without catalog detail fan-out.
+
+#### `LibraryStatus` by media type
+
+| Media type | Valid JSON status values |
+| --- | --- |
+| movie | `watchlist`, `watched` |
+| tv | `watchlist`, `watching`, `completed`, `paused`, `dropped` |
+| game | `backlog`, `playing`, `paused`, `completed`, `dropped` |
+| book | `want_to_read`, `reading`, `paused`, `finished`, `dnf` |
+
+`status` is never null. Labels such as “Want to read” and “DNF” are client
+presentation choices for the exact wire values above.
+
+#### Library progress
+
+| Media type | Shape | Null semantics |
+| --- | --- | --- |
+| tv | `{ watchedEpisodes, totalEpisodes, percent, nextSeasonNumber?, nextEpisodeNumber? }` | `totalEpisodes` and `percent` are `null` when Mosaic lacks an aired, non-special denominator; this is unknown, not zero progress. |
+| book | `{ currentPage, totalPages, percent }` | Omitted if there is no persisted reading. Otherwise page fields are `null` when unknown; `percent` is `null` unless recorded directly or calculable from known pages. A real zero percent remains `0`. |
+| game | `{ playtimeMinutes, percent }` | Omitted if there is no persisted playthrough. Otherwise `playtimeMinutes` is a known non-negative integer (zero is valid); `percent` is `null` if no completion percentage was recorded. |
+| movie | omitted | Mosaic has no resumable movie progress state. |
+
+Series watched counts and next episode coordinates use Mosaic's existing
+released-episode logic. Book and game progress are the most recently updated
+reading/playthrough for the Library item; status remains the authoritative
+Library status.
+
+Example:
+
+```json
+{
+  "items": [
+    {
+      "id": "mock:movie:dune-part-two",
+      "mediaType": "movie",
+      "provider": "mock",
+      "providerId": "dune-part-two",
+      "title": "Dune: Part Two",
+      "posterUrl": "https://images.example/movie.jpg",
+      "releaseYear": 2024,
+      "status": "watched",
+      "userRating": 4.5,
+      "isFavorite": true,
+      "updatedAt": "2026-09-20T10:00:00.000Z"
+    },
+    {
+      "id": "tmdb:tv:1396",
+      "mediaType": "tv",
+      "provider": "tmdb",
+      "providerId": "1396",
+      "title": "Breaking Bad",
+      "status": "watching",
+      "userRating": null,
+      "isFavorite": false,
+      "updatedAt": "2026-09-19T10:00:00.000Z",
+      "progress": { "watchedEpisodes": 14, "totalEpisodes": 62, "percent": 23, "nextSeasonNumber": 2, "nextEpisodeNumber": 1 }
+    },
+    {
+      "id": "googlebooks:book:volume-42",
+      "mediaType": "book",
+      "provider": "googlebooks",
+      "providerId": "volume-42",
+      "title": "The Left Hand of Darkness",
+      "status": "finished",
+      "userRating": 5,
+      "isFavorite": false,
+      "updatedAt": "2026-09-18T10:00:00.000Z",
+      "progress": { "currentPage": 304, "totalPages": 304, "percent": 100 }
+    },
+    {
+      "id": "igdb:game:7346",
+      "mediaType": "game",
+      "provider": "igdb",
+      "providerId": "7346",
+      "title": "Hades",
+      "status": "playing",
+      "userRating": null,
+      "isFavorite": false,
+      "updatedAt": "2026-09-17T10:00:00.000Z",
+      "progress": { "playtimeMinutes": 245, "percent": null }
+    }
+  ]
+}
+```
+
+Library uses the normalized mobile error envelope. 400 `VALIDATION_ERROR`
+means an unsupported `type`, `status`, or `sort`; correct and retry the
+request. 401 `UNAUTHORIZED` means the credential must be refreshed or the user
+must sign in. 404 and 429 are not used by this unpaginated collection route.
+500 `INTERNAL_ERROR` means the account's Library state could not be loaded;
+retry conservatively. No database, Supabase, or provider internals are
+included in error messages.
 
 ### Mutation command body
 

@@ -5,7 +5,8 @@ import { deriveAnalytics, type MosaicAnalytics } from "@/lib/analytics/derive";
 import { projectActivity, type ActivityEvent } from "@/lib/activity/projection";
 import { projectContinueItems, type ContinueItem } from "@/lib/current-media/projection";
 import { applySupabaseMutation, readSupabaseState } from "@/lib/persistence/supabase-state";
-import type { LibraryEntry, MosaicState, PersistenceMutation, UserList } from "@/lib/persistence/types";
+import { projectLibraryEntries, type LibraryProjectionOptions, type MobileLibraryEntry } from "@/lib/library/projection";
+import type { MosaicState, PersistenceMutation, UserList } from "@/lib/persistence/types";
 import type { Database } from "@/types/database";
 
 type Client = SupabaseClient<Database>;
@@ -23,8 +24,8 @@ export async function getCurrentMedia(client: Client, userId: string, limit?: nu
   return projectContinueItems(await getMosaicState(client, userId), limit === undefined ? {} : { limit });
 }
 
-export async function getLibrary(client: Client, userId: string): Promise<LibraryEntry[]> {
-  return (await getMosaicState(client, userId)).library;
+export async function getLibrary(client: Client, userId: string, options: LibraryProjectionOptions = {}): Promise<MobileLibraryEntry[]> {
+  return projectLibraryEntries(await getMosaicState(client, userId), options);
 }
 
 export async function getActivity(client: Client, userId: string, limit: number): Promise<ActivityEvent[]> {
