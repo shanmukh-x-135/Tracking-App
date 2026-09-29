@@ -190,5 +190,5 @@ test("catalog search returns partial success when one provider fails", async () 
   };
   const result = await aggregateProviderSearch("dune", [successful, failing]);
   assert.equal(result.items.length, 1);
-  assert.deepEqual(result.failures, [{ provider: "igdb", message: "Games are temporarily unavailable." }]);
+  assert.deepEqual(result.failures, [{ provider: "igdb", message: "Search is temporarily unavailable." }]);
 });

@@ -172,18 +172,137 @@ statuses, and book-progress normalization. A finished book is normalized to
 
 ## Public catalog endpoints
 
-These existing routes are provider-normalized server contracts and may be
-called without Mosaic account authentication:
+Catalog search and media detail are public: no Mosaic account or Bearer token
+is required, and their payload never gains user tracking state when a token is
+present. Personal state belongs to `/api/me/*`. Provider credentials and raw
+TMDB, IGDB, and Google Books payloads remain server-side.
 
-| Capability | Path |
-| --- | --- |
-| Search | `GET /api/catalog/search?q=<query>&type=<movie|tv|game|book>` |
-| Detail | `GET /api/catalog/:provider/:type/:id` |
-| Episode ratings | `GET /api/catalog/:provider/tv/:id/episode-ratings` |
+### Catalog identity and artwork
 
-Related, season, watch-provider, discover, theme, and genre routes remain
-available to the web app. Provider credentials and raw TMDB, IGDB, and Google
-Books payloads remain server-side; clients receive Mosaic catalog shapes.
+Every search result and detail response has the same opaque identity tuple:
+`provider`, `mediaType`, and string `providerId`. Use that exact tuple to form
+the detail URL: `GET /api/catalog/{provider}/{mediaType}/{providerId}`. Do not
+title-match, parse IDs as numbers, or substitute another provider.
+
+`posterUrl` and `backdropUrl`, when present, are fully qualified HTTPS URLs
+already normalized by Mosaic. `posterUrl` is the cover/poster for all four
+media types; `backdropUrl` is optional wide artwork. Native clients must never
+append TMDB, IGDB, or Google Books image base URLs.
+
+### Cross-media search
+
+`GET /api/catalog/search?q=<query>&type=<movie|tv|game|book>` returns:
+
+```json
+{ "items": ["CatalogMedia"], "failures": ["CatalogFailure"], "profiles": ["CatalogProfile"] }
+```
+
+`q` is required after trimming and must contain 2–100 characters. Search is
+case-insensitive as implemented by each normalized provider. Omit `type` for
+the true **All** aggregate: Mosaic queries all configured catalog providers,
+deduplicates by the provider-qualified identity, and then returns their
+provider-normalized results. `type` filters that aggregate to the requested
+Mosaic media type; `tv` is the value for the UI label **Series**.
+
+| UI filter | Query parameter | Included media type |
+| --- | --- | --- |
+| All | omit `type` | movie, tv, game, book |
+| Movies | `type=movie` | movie |
+| Series | `type=tv` | tv |
+| Games | `type=game` | game |
+| Books | `type=book` | book |
+
+There is no pagination or global result cap. Provider-local limits currently
+apply (mock: 20; TMDB: up to 40 across two pages; IGDB: 8; Google Books: 8).
+Ordering is the configured provider order followed by each provider's own
+ranking; it is not a global cross-provider relevance score. A successful
+provider's results are retained when another provider fails, with that failure
+listed in `failures`.
+
+#### Search response fields
+
+`items` contains the same `CatalogMedia` discriminated union returned by
+detail. These common fields are present for all types unless marked optional:
+
+| Field | Type | Optional behavior | Meaning |
+| --- | --- | --- | --- |
+| `provider` | `"tmdb" \| "igdb" \| "googlebooks" \| "mock"` | required | Catalog source. |
+| `providerId` | string | required | Opaque provider-native ID. |
+| `mediaType` | `"movie" \| "tv" \| "game" \| "book"` | required | Mosaic catalog domain. |
+| `title` | string | required | Normalized display title. |
+| `originalTitle` | string | omitted if unavailable | Provider original-language title, where supplied. |
+| `description` | string | omitted if unavailable | Normalized synopsis/summary. Google Books HTML is converted to plain text. |
+| `posterUrl` / `backdropUrl` | string | each omitted if unavailable | Fully qualified artwork URLs. |
+| `releaseDate` | string | omitted if unavailable | Provider-normalized partial or full publication/release date; do not assume `YYYY-MM-DD`. |
+| `releaseYear` | number | omitted if unavailable | Four-digit year derived from the release date when available. |
+| `genres` | string array | required; may be empty | Normalized provider categories/genres. |
+| `communityRating` | number | omitted if unavailable | Public provider rating. It is not a user rating and its scale remains provider-specific (TMDB commonly 0–10; IGDB, Google Books, and mock catalog commonly 0–5). |
+
+`failures` is an array of `{ provider, message }`; it is present even when
+empty. A failure message is safe, generic provider availability text. `profiles`
+is a separate optional people-search extension (`id`, `username`,
+`displayName`, optional `avatarUrl`) and never appears in `items`; mobile
+catalog UI may ignore it.
+
+Illustrative search items (all fields match the actual response):
+
+```json
+{
+  "items": [
+    { "provider": "tmdb", "providerId": "157336", "mediaType": "movie", "title": "Interstellar", "releaseYear": 2014, "posterUrl": "https://image.tmdb.org/t/p/w500/poster.jpg", "genres": ["Drama"], "communityRating": 8.4 },
+    { "provider": "tmdb", "providerId": "1396", "mediaType": "tv", "title": "Breaking Bad", "releaseYear": 2008, "posterUrl": "https://image.tmdb.org/t/p/w500/poster.jpg", "genres": ["Drama"] },
+    { "provider": "igdb", "providerId": "7346", "mediaType": "game", "title": "Hades", "posterUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cover.jpg", "genres": ["Roguelike"] },
+    { "provider": "googlebooks", "providerId": "volume-42", "mediaType": "book", "title": "The Left Hand of Darkness", "posterUrl": "https://books.google.com/cover.jpg", "genres": ["Science Fiction"] }
+  ],
+  "failures": [],
+  "profiles": []
+}
+```
+
+### Media detail
+
+`GET /api/catalog/{provider}/{mediaType}/{providerId}` returns one
+`CatalogMedia` object, not an envelope. It includes every common field listed
+above plus only the fields applicable to its `mediaType`. Fields not available
+from a provider are omitted rather than populated with `null` or fabricated
+values.
+
+| Type and route | Additional fields | Semantics |
+| --- | --- | --- |
+| Movie: `/api/catalog/:provider/movie/:id` | `runtimeMinutes?`, `director?`, `studio?`, `studioLogoUrl?` | Runtime is minutes. Studio artwork is fully qualified when supplied. Watch-provider availability is **not** part of this response. |
+| Series: `/api/catalog/:provider/tv/:id` | `seasonCount?`, `episodeCount?`, `seasonNumbers?`, `seasonEpisodeCounts?`, `eligibleEpisodeCounts?`, `eligibleEpisodeCount?`, `seasons?`, `network?`, `networkLogoUrl?` | Counts and season maps are provider metadata, not user progress. Season map keys are provider season numbers and can include `0` for specials. No user tracking status or episode ratings matrix is included. |
+| Game: `/api/catalog/:provider/game/:id` | `platforms` (required string array), `developer?`, `publisher?`, `developerLogoUrl?`, `publisherLogoUrl?` | `platforms` may be empty. Company fields and logos are omitted if unavailable. |
+| Book: `/api/catalog/:provider/book/:id` | `subtitle?`, `authors` (required string array), `publisher?`, `pageCount?`, `isbn?` | `authors` may be empty. `pageCount` and publication date are omitted when the provider does not supply them. Google Books description HTML is returned as sanitized plain text. |
+
+The common `communityRating` is the only public/provider rating in this
+contract. It is omitted when absent; no rating count is exposed by these
+routes. Network, platform, publisher, and author data remain type-specific as
+shown above.
+
+### Catalog errors
+
+Catalog route errors use the same normalized envelope as private mobile routes:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "…" } }
+```
+
+| Status | Code | When | Retryable |
+| --- | --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Missing/too-short/too-long query, unsupported `type`, or malformed provider identity | No; correct the request. |
+| 401 | — | Not used by documented catalog search/detail; both are public. | — |
+| 404 | `NOT_FOUND` | A valid detail identity has no matching catalog item. | No; do not title-match a substitute. |
+| 429 | — | Not surfaced as a stable client contract. Upstream throttling is normalized below. | — |
+| 503 | `PROVIDER_UNAVAILABLE` | Detail provider failure, or search when every catalog provider fails. | Yes; retry with backoff. |
+| 500 | `INTERNAL_ERROR` | Reserved by Mosaic's normalized error model; not intentionally emitted by these routes for expected provider failures. | Potentially; retry conservatively. |
+
+For partial search failures, the route returns HTTP 200 with available `items`
+and a non-empty `failures` array. No stack traces, upstream response bodies,
+credentials, or provider-specific parsing shapes are exposed.
+
+Related, season, watch-provider, discover, theme, genre, and episode-rating
+routes remain web-facing ancillary APIs and are not part of this mobile
+Milestone 2 contract.
 
 ## Not ready for a native client
 
