@@ -39,6 +39,7 @@ backward-compatibly and the existing web API remains their source of truth.
 | --- | --- | --- | --- |
 | Authenticated identity/profile | `GET /api/me` | `{ id, profile }` | `profile` is `null` only for a legacy account whose profile has not been created yet. |
 | Current media / Continue | `GET /api/me/continue?limit=20` | `{ items: ContinueItem[] }` | `limit` is optional (1–100 when supplied). Without it, all active items are returned in Home order. |
+| Personal Series state | `GET /api/me/series-state?provider=&providerId=` | focused Series tracking projection | Authenticated; contains only one Series's status, rating, canonical episode watches, and season states. |
 | Library | `GET /api/me/library?type=&status=&sort=` | `{ items: LibraryEntry[] }` | Complete tile-ready tracked collection; all query parameters are optional. |
 | Activity/diary | `GET /api/me/activity?limit=50` | `{ items: ActivityEvent[] }` | `limit` is 1–100; returned events are newest first. |
 | Lists | `GET /api/me/lists` | `{ items: UserList[] }` | Cross-media list order is the item `position`. |
