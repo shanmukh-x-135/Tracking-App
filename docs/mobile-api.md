@@ -333,6 +333,26 @@ already normalized by Mosaic. `posterUrl` is the cover/poster for all four
 media types; `backdropUrl` is optional wide artwork. Native clients must never
 append TMDB, IGDB, or Google Books image base URLs.
 
+### Series season episodes
+
+`GET /api/catalog/{provider}/tv/{providerId}/season/{seasonNumber}` is the
+mobile-safe, public, on-demand episode contract. `provider`, `providerId`, and
+the integer `seasonNumber` are the complete opaque route identity. The route
+never returns raw provider payloads and must not be fanned out for every
+season from a Series detail screen.
+
+It returns `{ "episodes": CatalogEpisode[] }`, ordered by `episodeNumber`.
+Each record has required `id`, `seasonNumber`, `episodeNumber`, and `title`;
+`overview`, `stillUrl`, `airDate`, `runtimeMinutes`, `publicRating`, and
+`publicRatingCount` are omitted when the provider has no normalized value.
+Artwork URLs are fully qualified when present. A `400` uses the standard
+`VALIDATION_ERROR` envelope for an invalid identity; an upstream failure uses
+`PROVIDER_UNAVAILABLE` with `503`. Successful responses are cacheable for one
+hour and may be served stale while revalidating for one day. Native clients may
+cache by `(provider, providerId, seasonNumber)`, render a cached season
+immediately, and refresh only on explicit retry or targeted mutation
+invalidation.
+
 ### Cross-media search
 
 `GET /api/catalog/search?q=<query>&type=<movie|tv|game|book>` returns:
