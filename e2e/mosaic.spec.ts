@@ -54,3 +54,26 @@ test("Your Mosaic stays interactive with a dense activity-backed field", async (
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "artifacts/mosaic-density-reduced-390.png", fullPage: true });
 });
+
+test("a recap uses its real period data and can hand off into the Mosaic", async ({ page }) => {
+  await page.addInitScript(() => {
+    const movie = { provider: "mock", providerId: "recap-e2e", mediaType: "movie", title: "September Film", genres: ["Drama"] };
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-recap-e2e", email: "recap@example.com", displayName: "Recap Viewer" }));
+    window.localStorage.setItem("mosaic:state:mock-recap-e2e", JSON.stringify({
+      library: [{ media: movie, status: "watched", isFavorite: false, updatedAt: "2026-09-01T00:00:00.000Z" }],
+      movieWatches: [{ id: "september-watch", media: movie, watchedAt: "2026-09-02T00:00:00.000Z" }],
+      episodeWatches: [], ratings: [], reviews: [], lists: [], seasonStates: [], seriesStates: [], tvHistory: [], gamePlaythroughs: [], bookReadings: [],
+    }));
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/mosaic?recap=2026-09");
+  await expect(page.getByRole("dialog", { name: "Your Mosaic recap" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your September 2026 Mosaic" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Replay recap" })).toBeVisible();
+  await page.screenshot({ path: "artifacts/mosaic-recap-monthly-1280.png", fullPage: true });
+  await page.getByRole("button", { name: "Skip recap" }).click();
+  await expect(page.getByRole("dialog", { name: "Your Mosaic recap" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Inspect September Film" })).toBeVisible();
+  await page.goto("/profile");
+  await expect(page.getByRole("link", { name: "This year's recap" })).toHaveAttribute("href", /\/mosaic\?recap=\d{4}/);
+});

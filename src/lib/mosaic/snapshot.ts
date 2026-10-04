@@ -3,7 +3,7 @@ import { calculateBookProgress, mediaKey } from "@/lib/persistence/domain";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { MosaicState } from "@/lib/persistence/types";
 
-export type MosaicPeriod = { kind: "all"; label: "All time" } | { kind: "year"; year: number; label: string };
+export type MosaicPeriod = { kind: "all"; label: "All time" } | { kind: "year"; year: number; label: string } | { kind: "month"; year: number; month: number; label: string };
 export type MosaicMediaType = "movie" | "series" | "game" | "book";
 
 export interface MosaicTile {
@@ -32,6 +32,10 @@ interface ActivitySeed { media: CatalogMedia; occurredAt: string; isRewatch?: bo
 export function periodFor(input?: string | null): MosaicPeriod {
   if (!input || input === "all") return { kind: "all", label: "All time" };
   if (/^\d{4}$/.test(input) && Number(input) >= 1900 && Number(input) <= 2100) return { kind: "year", year: Number(input), label: input };
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(input)) {
+    const [year, month] = input.split("-").map(Number);
+    if (year >= 1900 && year <= 2100) return { kind: "month", year, month, label: new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1))) };
+  }
   throw new Error("The requested Mosaic period is invalid.");
 }
 
@@ -44,7 +48,11 @@ function mediaHref(media: CatalogMedia): string {
   const type = media.mediaType === "tv" ? "series" : media.mediaType;
   return `/${type}/${encodeURIComponent(createProviderKey({ provider: media.provider, mediaType: media.mediaType, providerId: media.providerId }))}`;
 }
-function withinPeriod(value: string, period: MosaicPeriod): boolean { return period.kind === "all" || value.slice(0, 4) === String(period.year); }
+function withinPeriod(value: string, period: MosaicPeriod): boolean {
+  if (period.kind === "all") return true;
+  if (period.kind === "year") return value.slice(0, 4) === String(period.year);
+  return value.slice(0, 7) === `${period.year}-${String(period.month).padStart(2, "0")}`;
+}
 function boundedWeight(events: number, rewatchCount: number, favorite: boolean, rating?: number): number {
   // Activity has the largest effect; optional signals are small enrichments.
   return Math.min(2.25, Number((1 + Math.min(events - 1, 6) * .14 + Math.min(rewatchCount, 3) * .1 + (favorite ? .12 : 0) + (rating && rating >= 4 ? .08 : 0)).toFixed(2)));
