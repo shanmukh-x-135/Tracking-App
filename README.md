@@ -105,6 +105,10 @@ npm run build
 
 ## Current scope
 
+### Your Mosaic (Prompt 1 foundation)
+
+`/mosaic` is a private, activity-backed view of a signed-in user's logged media. Its authenticated live contract is `GET /api/me/mosaic?period=all|YYYY`; the same projector is reused by the mock-mode prototype. It includes one tile per title with real activity and never promotes a saved status, rating, or favourite into consumption. All-time and calendar-year views are supported. Calendar-month views are intentionally deferred: game and book records currently retain their latest progress timestamp rather than a durable per-session event history, so a month view would overstate activity.
+
 Phase 3 adds production bring-up tooling, a trustworthy migration pipeline, historical reconstruction, reversible provenance, complete cross-media list editing, user-owned data export, and a normalized Serializd migration path. Serializd normalized-v1 JSON is supported only through its versioned, validated contract; Backloggd and Fable continue to use honest Mosaic CSV fallbacks until trustworthy export contracts are available. Hosted Supabase, OAuth, Vercel, and live provider traffic still require project credentials and must follow the guarded steps in [Production bring-up](docs/production.md). Social follows/comments, notifications, moderation, and recommendation pipelines remain intentionally deferred.
 
 Series pages include canonical show, season, and episode routes. Episodes support watched state and a personal rating through the existing episode-log mutation; episode review authoring is intentionally not exposed yet because the current mutation contract does not persist it.

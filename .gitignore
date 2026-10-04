@@ -12,6 +12,7 @@ playwright-report
 .env*
 !.env.example
 supabase/.temp
+mosaic_figma_handoff/
 
 # Local coding-agent integrations are installed per workspace, not shipped.
 .github/agents/

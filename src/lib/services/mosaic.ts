@@ -6,6 +6,7 @@ import { projectActivity, type ActivityEvent } from "@/lib/activity/projection";
 import { projectContinueItems, type ContinueItem } from "@/lib/current-media/projection";
 import { applySupabaseMutation, readSupabaseState } from "@/lib/persistence/supabase-state";
 import { projectLibraryEntries, type LibraryProjectionOptions, type MobileLibraryEntry } from "@/lib/library/projection";
+import { deriveMosaicSnapshot, type MosaicPeriod, type MosaicSnapshot } from "@/lib/mosaic/snapshot";
 import type { MosaicState, PersistenceMutation, UserList } from "@/lib/persistence/types";
 import type { Database } from "@/types/database";
 
@@ -34,6 +35,10 @@ export async function getActivity(client: Client, userId: string, limit: number)
 
 export async function getStats(client: Client, userId: string): Promise<MosaicAnalytics> {
   return deriveAnalytics(await getMosaicState(client, userId));
+}
+
+export async function getMosaicSnapshot(client: Client, userId: string, period: MosaicPeriod): Promise<MosaicSnapshot> {
+  return deriveMosaicSnapshot(await getMosaicState(client, userId), period);
 }
 
 export async function getLists(client: Client, userId: string): Promise<UserList[]> {

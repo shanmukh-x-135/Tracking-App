@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BarChart3, BookOpen, Clock3, List, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Clock3, List, Settings, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AccountActions } from "@/components/auth/account-actions";
 import { MediaShelf, mediaHref } from "@/components/media/media-card";
@@ -16,6 +16,7 @@ import type { CatalogMedia } from "@/lib/media/types";
 import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
 import { ProfileEditor } from "@/components/profile/profile-editor";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { deriveProfileMovieCount } from "@/lib/mosaic/snapshot";
 
 type ProfileTab = "overview" | "library" | "history" | "reviews" | "lists" | "stats";
 const tabs: [ProfileTab, string][] = [["overview", "Overview"], ["library", "Library"], ["history", "Diary / History"], ["reviews", "Reviews"], ["lists", "Lists"], ["stats", "Stats"]];
@@ -75,7 +76,7 @@ export function ProfilePage() {
 
   if (!user) return <div className="page"><div className="page-narrow"><div className="empty-state"><h1>Your Mosaic profile is waiting</h1><p>Sign in to see your personal history, reviews, lists, and media milestones.</p><Link className="button primary" href="/login">Sign in</Link></div></div></div>;
 
-  const primaryStats = [[state.movieWatches.length, "Movies watched"], [tvMetrics.uniqueEpisodesWatched, "Unique episodes watched"], [state.gamePlaythroughs.filter(({ status }) => status === "completed").length, "Games completed"], [state.bookReadings.filter(({ status }) => status === "finished").length, "Books read"]] as const;
+  const primaryStats = [[deriveProfileMovieCount(state), "Movies watched"], [tvMetrics.uniqueEpisodesWatched, "Unique episodes watched"], [state.gamePlaythroughs.filter(({ status }) => status === "completed").length, "Games completed"], [state.bookReadings.filter(({ status }) => status === "finished").length, "Books read"]] as const;
   const secondaryStats = [[state.movieWatches.filter(({ isRewatch }) => isRewatch).length + tvMetrics.episodeRewatches, "Rewatch logs"], [readingPages, "Pages logged"], [`${Math.round(gamingHours * 10) / 10}h`, "Gaming time"], [averageRating ? `★ ${averageRating.toFixed(1)}` : "—", "Average rating"]] as const;
 
   return <div className="page profile-page"><div className="page-narrow">
@@ -97,7 +98,7 @@ export function ProfilePage() {
     {tab === "lists" && <section className="section"><div className="section-head"><div><span className="eyebrow">Cross-media curation</span><h2>Your lists</h2></div><Link className="text-link" href="/lists">Manage lists →</Link></div>{state.lists.length ? <div className="recent-log-grid">{state.lists.map((list) => <Link className="recent-log-card" href={`/lists/${list.id}`} key={list.id}><span className="recent-log-art"><List size={22}/></span><span><small>{list.visibility}</small><strong>{list.title}</strong><em>{list.items.length} item{list.items.length === 1 ? "" : "s"}</em><time>{displayDate(list.updatedAt)}</time></span></Link>)}</div> : <div className="empty-state"><h2>Make a list that crosses formats</h2><p>Build one list with movies, series, games, and books.</p><Link className="button primary" href="/lists">Create a list</Link></div>}</section>}
     {tab === "stats" && <><section className="section"><div className="section-head"><div><span className="eyebrow">All time</span><h2>Tracking snapshot</h2></div></div><div className="profile-secondary-stats">{secondaryStats.map(([value, label]) => <div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div></section><section className="section"><div className="section-head"><div><span className="eyebrow">Series state</span><h2>What you are tracking</h2></div></div><div className="profile-secondary-stats">{Object.entries(tvMetrics.seriesStatuses).map(([status, count]) => <div key={status}><strong>{count}</strong><span>{status}</span></div>)}</div><p className="muted">Episode rewatches remain diary history and do not inflate current series state.</p></section><section className="section"><div className="profile-insights"><div className="profile-insight"><h3>Rating distribution</h3>{state.ratings.length ? <div className="insight-bars" aria-label="Rating distribution">{ratingDistribution.map(({ value, count }) => <div className="insight-bar" key={value}><span>{value}★</span><i><motion.b animate={{ width: `${(count / largestRatingBucket) * 100}%` }} transition={motionTokens.slow}/></i><strong>{count}</strong></div>)}</div> : <p className="muted">Rate a story to see your taste take shape.</p>}</div><div className="profile-insight"><h3>Logged by medium</h3>{loggedByMedium.some(({ count }) => count) ? <div className="insight-bars" aria-label="Logged by medium">{loggedByMedium.map(({ label, count }) => <div className="insight-bar" key={label}><span>{label}</span><i><motion.b animate={{ width: `${(count / largestMediumBucket) * 100}%` }} transition={motionTokens.slow}/></i><strong>{count}</strong></div>)}</div> : <p className="muted">Your real logs will appear here.</p>}</div></div></section></>}
     </motion.div></AnimatePresence>
-    <div className="profile-shortcuts"><Link href="/activity"><Clock3 size={16}/>Activity</Link><Link href="/library"><BookOpen size={16}/>Library</Link><Link href="/lists"><List size={16}/>Lists</Link><Link href="/settings/data"><Settings size={16}/>Your data</Link></div>
+    <div className="profile-shortcuts"><Link href="/mosaic"><Sparkles size={16}/>Your Mosaic</Link><Link href="/activity"><Clock3 size={16}/>Activity</Link><Link href="/library"><BookOpen size={16}/>Library</Link><Link href="/lists"><List size={16}/>Lists</Link><Link href="/settings/data"><Settings size={16}/>Your data</Link></div>
     <ProfileEditor user={user} open={isEditing} onOpenChange={setIsEditing} onSave={updateProfile}/>
   </div></div>;
 }
