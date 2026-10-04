@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const routes = ["/", "/discover", "/library", "/lists", "/profile", "/profile/alexchen", "/activity", "/movie/dune-part-two", "/series/severance", "/game/red-dead-redemption-2", "/book/dune", "/franchise/dune", "/settings/data", "/credits"];
+const routes = ["/", "/discover", "/library", "/lists", "/profile", "/profile/alexchen", "/activity", "/movie/dune-part-two", "/series/severance", "/series/severance/season/1", "/series/severance/season/1/episode/1", "/game/red-dead-redemption-2", "/book/dune", "/franchise/dune", "/settings/data", "/credits"];
 const widths = [1440, 1280, 1024, 768, 390];
 
 for (const width of widths) {
@@ -42,6 +42,52 @@ test("all primary routes render without runtime errors", async ({ page }) => {
   }
   expect(errors).toEqual([]);
 });
+
+test("series hierarchy supports direct season and episode routes", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-series-hierarchy", email: "series@example.com", displayName: "Series Viewer" }));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/series/severance");
+  const seasonLink = page.locator(".season-guide-card").first();
+  await expect(seasonLink).toHaveAttribute("href", "/series/severance/season/1");
+  await seasonLink.click();
+  await expect(page).toHaveURL(/\/series\/severance\/season\/1$/);
+  await expect(page.getByRole("heading", { name: "Season 1" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open S01E01/ })).toBeVisible();
+  await page.getByRole("link", { name: /Open S01E01/ }).click();
+  await expect(page).toHaveURL(/\/series\/severance\/season\/1\/episode\/1$/);
+  await expect(page.getByRole("button", { name: /Log watched S01E01/ })).toBeVisible();
+  const invalid = await page.goto("/series/severance/season/999/episode/1");
+  expect(invalid?.status()).toBe(404);
+});
+
+test("logging an episode updates its dedicated and season views", async ({ page }) => {
+  await page.goto("/signup");
+  await page.getByLabel("Display name").fill("Episode Logger");
+  await page.getByLabel("Email").fill("episode@example.com");
+  await page.getByLabel("Password").fill("storykeeper");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/home$/);
+
+  await page.goto("/series/severance/season/1/episode/1");
+  await page.getByRole("button", { name: /Log watched S01E01/ }).click();
+  await expect(page.getByRole("button", { name: /Undo watched S01E01/ })).toBeVisible();
+  await page.goto("/series/severance/season/1");
+  await expect(page.getByText("1 / 10 watched")).toBeVisible();
+});
+
+for (const width of widths) {
+  test(`series hierarchy remains inside the viewport at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    for (const route of ["/series/severance/season/1", "/series/severance/season/1/episode/1"]) {
+      await page.goto(route);
+      await expect(page.locator("main").first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: `artifacts/series-hierarchy-${width}-${route.includes("episode") ? "episode" : "season"}.png`, fullPage: true });
+    }
+  });
+}
 
 test("search and media-specific log interactions work", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

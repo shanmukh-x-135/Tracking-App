@@ -37,9 +37,20 @@ export interface CatalogSeries extends CatalogMediaBase {
   eligibleEpisodeCounts?: Record<number, number>;
   /** Released, non-special episodes known by the provider at normalization time. */
   eligibleEpisodeCount?: number;
-  seasons?: { providerId: string; seasonNumber: number }[];
+  /** Lightweight season summaries supplied with a series record. Episode lists
+   * are loaded only for the season being viewed. */
+  seasons?: CatalogSeason[];
   network?: string;
   networkLogoUrl?: string;
+}
+
+export interface CatalogSeason {
+  providerId?: string;
+  seasonNumber: number;
+  name?: string;
+  posterUrl?: string;
+  airDate?: string;
+  episodeCount?: number;
 }
 
 /** A normalized TV episode. Provider payloads never reach presentation components. */

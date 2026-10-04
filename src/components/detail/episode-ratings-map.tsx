@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogEpisode, CatalogSeries } from "@/lib/media/types";
 
@@ -69,7 +70,8 @@ export function EpisodeRatingsMap({ media }: { media: CatalogSeries }): React.JS
             const rating = episode.publicRating;
             const category = episodeRatingCategory(rating);
             const label = `${seasonLabel(episode.seasonNumber)}E${episode.episodeNumber}: ${episode.title}. ${rating === undefined ? "Public rating unavailable." : `Public rating ${rating.toFixed(1)} out of 10${episode.publicRatingCount ? ` from ${episode.publicRatingCount.toLocaleString()} votes` : ""}.`}`;
-            return <span className={`episode-rating-cell ${category === "Unrated" ? "unrated" : ""}`} style={{ gridColumn: seasonIndex + 2, gridRow: episode.episodeNumber + 1, backgroundColor: rating === undefined ? undefined : episodeRatingLegend.find((item) => item.label === category)?.color }} key={episode.id} role="img" aria-label={label} title={label}>{rating === undefined ? "—" : rating.toFixed(1)}</span>;
+            const seriesId = media.provider === "mock" ? media.providerId : `${media.provider}:tv:${media.providerId}`;
+            return <Link href={`/series/${encodeURIComponent(seriesId)}/season/${episode.seasonNumber}/episode/${episode.episodeNumber}`} className={`episode-rating-cell ${category === "Unrated" ? "unrated" : ""}`} style={{ gridColumn: seasonIndex + 2, gridRow: episode.episodeNumber + 1, backgroundColor: rating === undefined ? undefined : episodeRatingLegend.find((item) => item.label === category)?.color }} key={episode.id} aria-label={label} title={label}>{rating === undefined ? "—" : rating.toFixed(1)}</Link>;
           }))}
         </div>
       </div>

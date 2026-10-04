@@ -80,6 +80,27 @@ function EpisodeActions({ media, season, episode, watch }: { media: CatalogSerie
   return <div className="episode-actions"><RatingInput label="Episode rating" value={selectedRating} onChange={rated}/></div>;
 }
 
+function seriesHref(media: CatalogSeries): string {
+  const id = media.provider === "mock" ? media.providerId : `${media.provider}:tv:${media.providerId}`;
+  return `/series/${encodeURIComponent(id)}`;
+}
+
+function SeriesGuide({ media }: { media: CatalogSeries }) {
+  const { state } = useMosaicState();
+  const numbers = media.seasonNumbers?.length ? [...new Set(media.seasonNumbers)].sort((a, b) => a - b) : [];
+  if (!numbers.length) return null;
+  const key = mediaKey(media);
+  return <section className="section series-guide"><div className="section-head"><div><span className="eyebrow">Series hierarchy</span><h2>Episode Guide</h2></div></div><div className="season-guide-list">{numbers.map((seasonNumber) => {
+    const season = media.seasons?.find((candidate) => candidate.seasonNumber === seasonNumber);
+    const count = season?.episodeCount ?? media.seasonEpisodeCounts?.[seasonNumber];
+    const stateEntry = state.seasonStates.find((item) => mediaKey(item.series) === key && item.seasonNumber === seasonNumber);
+    const watched = new Set(state.episodeWatches.filter((item) => !item.isRewatch && mediaKey(item.series) === key && item.seasonNumber === seasonNumber).map((item) => item.episodeNumber)).size;
+    const watchedCount = stateEntry?.state === "completed" && count !== undefined ? count : watched;
+    const title = season?.name || (seasonNumber === 0 ? "Specials" : `Season ${seasonNumber}`);
+    return <Link className="season-guide-card" href={`${seriesHref(media)}/season/${seasonNumber}`} key={seasonNumber}><div className="season-guide-art"><Image src={season?.posterUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div><div><strong>{title}</strong><span>{season?.airDate ?? "Air date unavailable"}</span><span>{count === undefined ? "Episode count unavailable" : `${count} episodes · ${watchedCount} watched`}</span></div><span className="season-guide-arrow" aria-hidden="true">→</span></Link>;
+  })}</div></section>;
+}
+
 function SeriesSection({ media }: { media: CatalogSeries }) {
   const seasonNumbers = media.seasonNumbers?.length
     ? [...new Set(media.seasonNumbers)].sort((first, second) => first - second)
@@ -216,7 +237,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "movie" && <WatchProviders media={media}/>}
-      {media.mediaType === "tv" && <><EpisodeRatingsMap media={media}/><SeriesSection media={media}/><WatchProviders media={media}/></>}
+      {media.mediaType === "tv" && <><SeriesGuide media={media}/><EpisodeRatingsMap media={media}/><SeriesSection media={media}/><WatchProviders media={media}/></>}
       {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
       {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related titles are available from this provider right now."}</p>}</section>}
     </div><aside>

@@ -106,3 +106,5 @@ npm run build
 ## Current scope
 
 Phase 3 adds production bring-up tooling, a trustworthy migration pipeline, historical reconstruction, reversible provenance, complete cross-media list editing, user-owned data export, and a normalized Serializd migration path. Serializd normalized-v1 JSON is supported only through its versioned, validated contract; Backloggd and Fable continue to use honest Mosaic CSV fallbacks until trustworthy export contracts are available. Hosted Supabase, OAuth, Vercel, and live provider traffic still require project credentials and must follow the guarded steps in [Production bring-up](docs/production.md). Social follows/comments, notifications, moderation, and recommendation pipelines remain intentionally deferred.
+
+Series pages include canonical show, season, and episode routes. Episodes support watched state and a personal rating through the existing episode-log mutation; episode review authoring is intentionally not exposed yet because the current mutation contract does not persist it.

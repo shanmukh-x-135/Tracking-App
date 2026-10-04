@@ -25,7 +25,7 @@ export interface TmdbMedia {
   number_of_episodes?: number;
   networks?: Array<{ name: string; logo_path?: string | null }>;
   production_companies?: Array<{ name: string; logo_path?: string | null }>;
-  seasons?: Array<{ id?: number; season_number?: number; episode_count?: number; air_date?: string | null }>;
+  seasons?: Array<{ id?: number; season_number?: number; name?: string; poster_path?: string | null; episode_count?: number; air_date?: string | null }>;
   last_episode_to_air?: { season_number?: number; episode_number?: number; air_date?: string | null };
   credits?: { crew?: Array<{ job: string; name: string }> };
 }
@@ -108,7 +108,12 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
     seasonEpisodeCounts: Object.keys(seasonEpisodeCounts).length ? seasonEpisodeCounts : undefined,
     eligibleEpisodeCounts: Object.keys(seasonEpisodeCounts).length ? eligibleEpisodeCounts : undefined,
     eligibleEpisodeCount: Object.keys(seasonEpisodeCounts).length ? eligibleEpisodeCount : undefined,
-    seasons: item.seasons?.flatMap((season) => Number.isInteger(season.id) && Number.isInteger(season.season_number) ? [{ providerId: String(season.id), seasonNumber: season.season_number! }] : []),
+    seasons: item.seasons?.flatMap((season) => Number.isInteger(season.season_number) ? [{
+      providerId: Number.isInteger(season.id) ? String(season.id) : undefined,
+      seasonNumber: season.season_number!, name: season.name?.trim() || undefined,
+      posterUrl: image(season.poster_path, "w500"), airDate: season.air_date || undefined,
+      episodeCount: Number.isInteger(season.episode_count) ? season.episode_count : undefined,
+    }] : []),
     network: item.networks?.[0]?.name, networkLogoUrl: image(item.networks?.[0]?.logo_path, "w500"),
   };
 }
