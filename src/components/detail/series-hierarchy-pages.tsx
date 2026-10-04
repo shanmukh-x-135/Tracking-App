@@ -80,6 +80,23 @@ function EpisodeRow({ series, seasonNumber, episode }: { series: CatalogSeries; 
   </article>;
 }
 
+function EpisodeActivity({ series, seasonNumber, episode }: { series: CatalogSeries; seasonNumber: number; episode: CatalogEpisode }) {
+  const { state } = useMosaicState();
+  const logs = state.episodeWatches
+    .filter((watch) => mediaKey(watch.series) === mediaKey(series) && watch.seasonNumber === seasonNumber && watch.episodeNumber === episode.episodeNumber)
+    .sort((first, second) => second.watchedAt.localeCompare(first.watchedAt));
+  const latest = logs[0];
+  const firstWatch = logs.find((watch) => !watch.isRewatch);
+  return <aside className="status-card episode-activity"><span className="eyebrow">Your activity</span><h3>{latest ? "Episode history" : "Not logged yet"}</h3>
+    {latest ? <dl>
+      <div><dt>First watch</dt><dd>{firstWatch ? firstWatch.watchedAt.slice(0, 10) : "Not recorded"}</dd></div>
+      {logs.filter((watch) => watch.isRewatch).length > 0 && <div><dt>Rewatches</dt><dd>{logs.filter((watch) => watch.isRewatch).length}</dd></div>}
+      {latest.rating !== undefined && <div><dt>Your rating</dt><dd>★ {latest.rating.toFixed(1)}</dd></div>}
+      {latest.review && <div><dt>Review</dt><dd>{latest.containsSpoilers ? "Spoiler-marked review saved" : "Review saved"}</dd></div>}
+    </dl> : <p>Log this episode when you finish it. Your rating and future rewatches will stay here.</p>}
+  </aside>;
+}
+
 export function SeasonDetailPage({ series, seasonNumber, episodes }: { series: CatalogSeries; seasonNumber: number; episodes: CatalogEpisode[] }) {
   const summary = series.seasons?.find((item) => item.seasonNumber === seasonNumber);
   const title = summary?.name || (seasonNumber === 0 ? "Specials" : `Season ${seasonNumber}`);
@@ -95,7 +112,7 @@ export function EpisodeDetailPage({ series, seasonNumber, episode, previous, nex
   const details = [episode.airDate, episode.runtimeMinutes ? `${episode.runtimeMinutes} min` : undefined, episode.publicRating === undefined ? undefined : `★ ${episode.publicRating.toFixed(1)} public rating`].filter(Boolean);
   return <div className="series-subpage page">
     <nav className="series-breadcrumb" aria-label="Breadcrumb"><Link href={seriesHref(series)}>{series.title}</Link><span>/</span><Link href={seasonHref(series, seasonNumber)}>{seasonTitle}</Link><span>/</span><span>{episodeCode(seasonNumber, episode.episodeNumber)}</span></nav>
-    <section className="episode-hero"><div className="episode-hero-art"><Image src={episode.stillUrl ?? series.backdropUrl ?? series.posterUrl ?? "/media-placeholder.svg"} alt="" fill priority sizes="100vw"/></div><div className="episode-hero-copy"><span className="type-badge">{episodeCode(seasonNumber, episode.episodeNumber)}</span><h1>{episode.title}</h1><p className="episode-detail-meta">{details.length ? details.join(" · ") : "Episode details unavailable."}</p><p>{episode.overview || "A synopsis is not available for this episode yet."}</p><div className="episode-detail-actions"><EpisodeToggle series={series} seasonNumber={seasonNumber} episode={episode}/><EpisodeRating series={series} seasonNumber={seasonNumber} episode={episode}/></div></div></section>
-    <nav className="episode-neighbors" aria-label="Episode navigation">{previous ? <Link href={episodeHref(series, seasonNumber, previous.episodeNumber)}><ChevronLeft size={17}/><span>Previous</span><strong>{episodeCode(seasonNumber, previous.episodeNumber)} · {previous.title}</strong></Link> : <span/>}<Link className="button" href={seasonHref(series, seasonNumber)}>Back to season</Link>{next ? <Link href={episodeHref(series, seasonNumber, next.episodeNumber)}><span>Next</span><strong>{episodeCode(seasonNumber, next.episodeNumber)} · {next.title}</strong><ChevronRight size={17}/></Link> : <span/>}</nav>
+    <div className="episode-detail-layout"><div><section className="episode-hero"><div className="episode-hero-art"><Image src={episode.stillUrl ?? series.backdropUrl ?? series.posterUrl ?? "/media-placeholder.svg"} alt="" fill priority sizes="100vw"/></div><div className="episode-hero-copy"><span className="type-badge">{episodeCode(seasonNumber, episode.episodeNumber)}</span><p className="episode-show-title">{series.title} · {seasonTitle}</p><h1>{episode.title}</h1><p className="episode-detail-meta">{details.length ? details.join(" · ") : "Episode details unavailable."}</p><p>{episode.overview || "A synopsis is not available for this episode yet."}</p><div className="episode-detail-actions"><EpisodeToggle series={series} seasonNumber={seasonNumber} episode={episode}/><EpisodeRating series={series} seasonNumber={seasonNumber} episode={episode}/></div></div></section>
+    <nav className="episode-neighbors" aria-label="Episode navigation">{previous ? <Link href={episodeHref(series, seasonNumber, previous.episodeNumber)}><ChevronLeft size={17}/><span>Previous</span><strong>{episodeCode(seasonNumber, previous.episodeNumber)} · {previous.title}</strong></Link> : <span/>}<Link className="button" href={seasonHref(series, seasonNumber)}>Back to season</Link>{next ? <Link href={episodeHref(series, seasonNumber, next.episodeNumber)}><span>Next</span><strong>{episodeCode(seasonNumber, next.episodeNumber)} · {next.title}</strong><ChevronRight size={17}/></Link> : <span/>}</nav></div><EpisodeActivity series={series} seasonNumber={seasonNumber} episode={episode}/></div>
   </div>;
 }

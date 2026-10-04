@@ -49,7 +49,7 @@ test("series hierarchy supports direct season and episode routes", async ({ page
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/series/severance");
-  const seasonLink = page.locator(".season-guide-card").first();
+  const seasonLink = page.getByRole("link", { name: "Open season" }).first();
   await expect(seasonLink).toHaveAttribute("href", "/series/severance/season/1");
   await seasonLink.click();
   await expect(page).toHaveURL(/\/series\/severance\/season\/1$/);

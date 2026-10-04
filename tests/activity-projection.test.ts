@@ -89,13 +89,12 @@ test("future episode logs do not advance released-series progress", () => {
   state.library = [{ media: airingSeries, status: "watching", isFavorite: false, updatedAt: "2026-01-04T00:00:00.000Z" }];
   state.episodeWatches = [{ id: "future", series: airingSeries, seasonNumber: 2, episodeNumber: 5, watchedAt: "2026-01-04T00:00:00.000Z" }];
   const item = deriveContinue(state).find(({ kind }) => kind === "series");
-  assert.equal(item?.progress, 0);
-  assert.equal(item?.label, "Next · S01E01");
+  assert.equal(item, undefined);
 });
 
 test("Home continuation can be capped while Library retains the complete active set", () => {
   const state = emptyMosaicState();
-  state.gamePlaythroughs = Array.from({ length: 9 }, (_, index) => ({ id: String(index), media: { ...game, providerId: `game-${index}`, title: `Game ${index}` }, status: "playing" as const, playtimeMinutes: 0, updatedAt: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z` }));
+  state.gamePlaythroughs = Array.from({ length: 9 }, (_, index) => ({ id: String(index), media: { ...game, providerId: `game-${index}`, title: `Game ${index}` }, status: "playing" as const, playtimeMinutes: 0, progressPercent: 25, updatedAt: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z` }));
   assert.equal(deriveContinue(state, { limit: 8 }).length, 8);
   assert.equal(deriveContinue(state).length, 9);
 });
@@ -124,7 +123,7 @@ test("TV metrics keep unique episodes, explicit logs, rewatches, and bulk season
     episodeWatchLogs: 3,
     episodeRewatches: 1,
     completedSeasons: 1,
-    showsInProgress: 0,
+    showsInProgress: 1,
     seriesStatuses: { watching: 0, paused: 0, completed: 0, dropped: 0, watchlist: 0 },
   });
 });
@@ -172,7 +171,7 @@ test("mobile ContinueItem projection maps active domain state without fabricated
   ];
 
   const items = projectContinueItems(state);
-  assert.deepEqual(items.map((item) => item.id), ["mock:book:book", "mock:game:game", "mock:tv:active-series", "mock:tv:unknown-series"]);
+  assert.deepEqual(items.map((item) => item.id), ["mock:book:book", "mock:game:game", "mock:tv:active-series"]);
   assert.equal(items.some((item) => item.id === "mock:tv:history-only"), false);
   assert.equal(items.some((item) => item.id.includes("finished") || item.id.includes("dnf") || item.id.includes("dropped")), false);
 
@@ -182,8 +181,29 @@ test("mobile ContinueItem projection maps active domain state without fabricated
   assert.equal(seriesItem?.backdropUrl, "https://art.test/series-backdrop.jpg");
   assert.deepEqual(seriesItem?.nextAction, { type: "log_episode", seasonNumber: 1, episodeNumber: 2 });
 
-  const unknownItem = items.find((item) => item.id === "mock:tv:unknown-series");
-  assert.deepEqual(unknownItem?.progress, { watchedEpisodes: 0, totalEpisodes: null, percent: null });
   assert.deepEqual(items.find((item) => item.id === "mock:book:book")?.progress, { currentPage: 100, totalPages: 400, percent: 25 });
   assert.deepEqual(items.find((item) => item.id === "mock:game:game")?.progress, { percent: null, playtimeMinutes: 123 });
+});
+
+test("Continue only includes partial, activity-backed progress across domains", () => {
+  const state = emptyMosaicState();
+  const longSeries: CatalogSeries = { ...series, providerId: "long-series", eligibleEpisodeCount: 39, seasonEpisodeCounts: { 1: 39 } };
+  state.library = [{ media: longSeries, status: "watching", isFavorite: false, updatedAt: "2026-04-01T00:00:00.000Z" }];
+  state.episodeWatches = Array.from({ length: 39 }, (_, index) => ({ id: `episode-${index + 1}`, series: longSeries, seasonNumber: 1, episodeNumber: index + 1, watchedAt: `2026-04-${String(Math.min(index + 1, 28)).padStart(2, "0")}T00:00:00.000Z` }));
+  state.bookReadings = [
+    { id: "book-zero", media: { ...book, providerId: "book-zero" }, status: "reading", currentPage: 0, totalPages: 400, updatedAt: "2026-04-01T00:00:00.000Z" },
+    { id: "book-partial", media: { ...book, providerId: "book-partial" }, status: "reading", currentPage: 120, totalPages: 400, updatedAt: "2026-04-02T00:00:00.000Z" },
+    { id: "book-finished", media: { ...book, providerId: "book-finished" }, status: "finished", currentPage: 400, totalPages: 400, updatedAt: "2026-04-03T00:00:00.000Z" },
+  ];
+  state.gamePlaythroughs = [
+    { id: "game-zero", media: { ...game, providerId: "game-zero" }, status: "playing", playtimeMinutes: 0, progressPercent: 0, updatedAt: "2026-04-01T00:00:00.000Z" },
+    { id: "game-partial", media: { ...game, providerId: "game-partial" }, status: "paused", playtimeMinutes: 40, progressPercent: 35, updatedAt: "2026-04-02T00:00:00.000Z" },
+    { id: "game-finished", media: { ...game, providerId: "game-finished" }, status: "completed", playtimeMinutes: 400, progressPercent: 100, updatedAt: "2026-04-03T00:00:00.000Z" },
+  ];
+
+  const ids = deriveContinue(state).map((item) => item.media.providerId);
+  assert.deepEqual(ids, ["book-partial", "game-partial"]);
+
+  state.episodeWatches = state.episodeWatches.slice(0, 1);
+  assert.equal(deriveContinue(state).some((item) => item.media.providerId === "long-series"), true);
 });

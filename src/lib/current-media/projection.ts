@@ -99,22 +99,30 @@ export function deriveCurrentMedia(state: MosaicState, options: { limit?: number
   const seriesByKey = new Map<string, CatalogSeries>();
   for (const entry of state.library) if (entry.media.mediaType === "tv") seriesByKey.set(mediaKey(entry.media), entry.media);
   for (const seriesState of state.seriesStates) if (seriesState.series.mediaType === "tv") seriesByKey.set(mediaKey(seriesState.series), seriesState.series);
+  for (const watch of state.episodeWatches) if (watch.series.mediaType === "tv") seriesByKey.set(mediaKey(watch.series), watch.series);
   for (const series of seriesByKey.values()) {
     const current = deriveSeriesCurrentStatus(state, series);
-    if (current.status !== "watching") continue;
     const progress = deriveSeriesProgress(state, series);
+    // Continue is an activity surface: a status alone is never enough. The
+    // released denominator protects currently-airing shows from future episodes.
+    if (!progress.eligibleEpisodes || progress.watchedEpisodes <= 0 || progress.watchedEpisodes >= progress.eligibleEpisodes) continue;
+    if (["completed", "dropped", "watchlist", "paused", "watched"].includes(current.status ?? "")) continue;
     const label = progress.nextEpisode ? `Next · S${String(progress.nextEpisode.seasonNumber).padStart(2, "0")}E${String(progress.nextEpisode.episodeNumber).padStart(2, "0")}` : "Continue watching";
-    const detail = progress.eligibleEpisodes === undefined ? "Episode total unavailable" : `${progress.watchedEpisodes} / ${progress.eligibleEpisodes} released episodes`;
-    add({ kind: "series", media: series, status: "watching", label, detail, progress: progress.eligibleEpisodes === undefined ? undefined : progress.progress, occurredAt: current.updatedAt ?? "" });
+    const latestWatch = state.episodeWatches.filter((watch) => !watch.isRewatch && mediaKey(watch.series) === mediaKey(series)).sort((first, second) => second.watchedAt.localeCompare(first.watchedAt))[0];
+    add({ kind: "series", media: series, status: "watching", label, detail: `${progress.watchedEpisodes} / ${progress.eligibleEpisodes} released episodes`, progress: progress.progress, occurredAt: latestWatch?.watchedAt ?? current.updatedAt ?? "" });
   }
   for (const reading of state.bookReadings) {
-    if (reading.status !== "reading") continue;
     const progress = calculateBookProgress(reading.currentPage, reading.totalPages, reading.progressPercent);
-    add({ kind: "book", media: reading.media, status: "reading", label: reading.totalPages ? `${reading.currentPage ?? 0} / ${reading.totalPages} pages` : "Reading", detail: "Update progress", progress, occurredAt: reading.updatedAt });
+    if (progress === undefined || progress <= 0 || progress >= 100 || ["finished", "dnf"].includes(reading.status)) continue;
+    const label = reading.totalPages ? `${reading.currentPage ?? 0} / ${reading.totalPages} pages` : `${progress}% read`;
+    add({ kind: "book", media: reading.media, status: "reading", label, detail: "Reading progress", progress, occurredAt: reading.updatedAt });
   }
   for (const playthrough of state.gamePlaythroughs) {
-    if (playthrough.status !== "playing") continue;
-    add({ kind: "game", media: playthrough.media, status: "playing", label: playthrough.platform ? `Playing on ${playthrough.platform}` : "Playing", detail: `${Math.round(playthrough.playtimeMinutes / 6) / 10}h played`, progress: playthrough.progressPercent, occurredAt: playthrough.updatedAt });
+    const hasPartialProgress = playthrough.progressPercent !== undefined
+      ? playthrough.progressPercent > 0 && playthrough.progressPercent < 100
+      : playthrough.playtimeMinutes > 0;
+    if (!hasPartialProgress || ["completed", "dropped"].includes(playthrough.status)) continue;
+    add({ kind: "game", media: playthrough.media, status: "playing", label: playthrough.platform ? `Playing on ${playthrough.platform}` : "Playing", detail: playthrough.progressPercent === undefined ? `${Math.round(playthrough.playtimeMinutes / 6) / 10}h played` : `${playthrough.progressPercent}% complete`, progress: playthrough.progressPercent, occurredAt: playthrough.updatedAt });
   }
   const ranked = [...candidates.values()].sort((first, second) => second.occurredAt.localeCompare(first.occurredAt) || first.kind.localeCompare(second.kind) || first.media.title.localeCompare(second.media.title) || mediaKey(first.media).localeCompare(mediaKey(second.media)));
   return options.limit === undefined ? ranked : ranked.slice(0, options.limit);
@@ -155,7 +163,7 @@ export function projectContinueItems(state: MosaicState, options: { limit?: numb
     }
 
     if (item.kind === "book" && item.media.mediaType === "book") {
-      const reading = state.bookReadings.find((candidate) => candidate.status === "reading" && mediaKey(candidate.media) === base.id);
+      const reading = state.bookReadings.find((candidate) => mediaKey(candidate.media) === base.id);
       const percent = reading ? calculateBookProgress(reading.currentPage, reading.totalPages, reading.progressPercent) : undefined;
       return {
         ...base,
@@ -168,7 +176,7 @@ export function projectContinueItems(state: MosaicState, options: { limit?: numb
       } satisfies ContinueItem;
     }
 
-    const playthrough = state.gamePlaythroughs.find((candidate) => candidate.status === "playing" && mediaKey(candidate.media) === base.id);
+    const playthrough = state.gamePlaythroughs.find((candidate) => mediaKey(candidate.media) === base.id);
     return {
       ...base,
       progress: {

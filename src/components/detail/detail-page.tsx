@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Check } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaShelf } from "@/components/media/media-card";
 import type { CatalogBook, CatalogEpisode, CatalogGame, CatalogMedia, CatalogSearchResult, CatalogSeries } from "@/lib/media/types";
@@ -14,7 +14,7 @@ import { bookSynopsis, normalizeBookCategories, shouldCollapseBookSynopsis } fro
 import { WatchProviders } from "@/components/detail/watch-providers";
 import { EpisodeRatingsMap } from "@/components/detail/episode-ratings-map";
 import { RatingInput } from "@/components/ui/rating-input";
-import { AnimatePresence, motion, motionTokens } from "@/components/motion/motion";
+import { motion, motionTokens } from "@/components/motion/motion";
 import { deriveSeriesCurrentStatus } from "@/lib/current-media/projection";
 import { deriveSeriesProgress } from "@/lib/tv/series-progress";
 
@@ -72,14 +72,6 @@ function BookHero({ media, franchise }: { media: CatalogBook; franchise?: Franch
   </section>;
 }
 
-function EpisodeActions({ media, season, episode, watch }: { media: CatalogSeries; season: number; episode: CatalogEpisode; watch?: { rating?: number; watchedAt?: string } }) {
-  const { mutate } = useMosaicState();
-  const [rating, setRating] = useState<number | undefined>();
-  const selectedRating = rating === undefined ? watch?.rating ?? 0 : rating;
-  const rated = (value: number) => { setRating(value); void mutate({ type: "episode.log", series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: watch?.watchedAt ?? new Date().toISOString(), rating: value }).catch(() => undefined); };
-  return <div className="episode-actions"><RatingInput label="Episode rating" value={selectedRating} onChange={rated}/></div>;
-}
-
 function seriesHref(media: CatalogSeries): string {
   const id = media.provider === "mock" ? media.providerId : `${media.provider}:tv:${media.providerId}`;
   return `/series/${encodeURIComponent(id)}`;
@@ -88,6 +80,7 @@ function seriesHref(media: CatalogSeries): string {
 function SeriesGuide({ media }: { media: CatalogSeries }) {
   const { state } = useMosaicState();
   const numbers = media.seasonNumbers?.length ? [...new Set(media.seasonNumbers)].sort((a, b) => a - b) : [];
+  const [openSeason, setOpenSeason] = useState<number | undefined>(numbers.includes(1) ? 1 : numbers[0]);
   if (!numbers.length) return null;
   const key = mediaKey(media);
   return <section className="section series-guide"><div className="section-head"><div><span className="eyebrow">Series hierarchy</span><h2>Episode Guide</h2></div></div><div className="season-guide-list">{numbers.map((seasonNumber) => {
@@ -97,28 +90,20 @@ function SeriesGuide({ media }: { media: CatalogSeries }) {
     const watched = new Set(state.episodeWatches.filter((item) => !item.isRewatch && mediaKey(item.series) === key && item.seasonNumber === seasonNumber).map((item) => item.episodeNumber)).size;
     const watchedCount = stateEntry?.state === "completed" && count !== undefined ? count : watched;
     const title = season?.name || (seasonNumber === 0 ? "Specials" : `Season ${seasonNumber}`);
-    return <Link className="season-guide-card" href={`${seriesHref(media)}/season/${seasonNumber}`} key={seasonNumber}><div className="season-guide-art"><Image src={season?.posterUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div><div><strong>{title}</strong><span>{season?.airDate ?? "Air date unavailable"}</span><span>{count === undefined ? "Episode count unavailable" : `${count} episodes · ${watchedCount} watched`}</span></div><span className="season-guide-arrow" aria-hidden="true">→</span></Link>;
+    const expanded = openSeason === seasonNumber;
+    return <article className={`season-guide-entry ${expanded ? "is-open" : ""}`} key={seasonNumber}><div className="season-guide-card"><div className="season-guide-art"><Image src={season?.posterUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div><div className="season-guide-copy"><strong>{title}</strong><span>{season?.airDate ?? "Air date unavailable"}</span><span>{count === undefined ? "Episode count unavailable" : `${watchedCount} / ${count} watched`}</span>{count !== undefined && <div className="progress-track" aria-label={`${watchedCount} of ${count} watched`}><i className="progress-bar" style={{ width: `${Math.min(100, Math.round(watchedCount / count * 100))}%` }}/></div>}</div><div className="season-guide-actions"><button type="button" className="icon-button" onClick={() => setOpenSeason(expanded ? undefined : seasonNumber)} aria-expanded={expanded} aria-controls={`season-inline-${seasonNumber}`} aria-label={`${expanded ? "Collapse" : "Expand"} ${title}`}>{expanded ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button><Link className="button compact" href={`${seriesHref(media)}/season/${seasonNumber}`}>Open season</Link></div></div>{expanded && <InlineSeasonEpisodes id={`season-inline-${seasonNumber}`} media={media} seasonNumber={seasonNumber}/>}</article>;
   })}</div></section>;
 }
 
-function SeriesSection({ media }: { media: CatalogSeries }) {
-  const seasonNumbers = media.seasonNumbers?.length
-    ? [...new Set(media.seasonNumbers)].sort((first, second) => first - second)
-    : Array.from({ length: media.seasonCount ?? 0 }, (_, index) => index + 1);
-  const [season, setSeason] = useState(seasonNumbers.includes(1) ? 1 : seasonNumbers[0] ?? 1);
+function InlineSeasonEpisodes({ id, media, seasonNumber }: { id: string; media: CatalogSeries; seasonNumber: number }) {
   const [episodes, setEpisodes] = useState<CatalogEpisode[]>([]);
   const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false);
   const [episodeError, setEpisodeError] = useState<string>();
   const { state, mutate } = useMosaicState();
-  const seriesProgress = deriveSeriesProgress(state, media);
-  const currentStatus = deriveSeriesCurrentStatus(state, media).status ?? "watchlist";
-  const watched = state.episodeWatches.filter((watch) => mediaKey(watch.series) === mediaKey(media) && watch.seasonNumber === season);
-  const completedSeason = state.seasonStates.find((item) => mediaKey(item.series) === mediaKey(media) && item.seasonNumber === season && item.state === "completed");
-  const watchedCount = completedSeason ? episodes.length : new Set(watched.map((watch) => watch.episodeNumber)).size;
   useEffect(() => {
     const controller = new AbortController();
     queueMicrotask(() => { setIsLoadingEpisodes(true); setEpisodeError(undefined); setEpisodes([]); });
-    void fetch(`/api/catalog/${media.provider}/tv/${encodeURIComponent(media.providerId)}/season/${season}`, { signal: controller.signal })
+    void fetch(`/api/catalog/${media.provider}/tv/${encodeURIComponent(media.providerId)}/season/${seasonNumber}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Episode details are unavailable right now.");
         const payload: { episodes?: CatalogEpisode[] } = await response.json();
@@ -128,25 +113,42 @@ function SeriesSection({ media }: { media: CatalogSeries }) {
       .catch((cause: unknown) => { if (!controller.signal.aborted) setEpisodeError(cause instanceof Error ? cause.message : "Episode details are unavailable right now."); })
       .finally(() => { if (!controller.signal.aborted) setIsLoadingEpisodes(false); });
     return () => controller.abort();
-  }, [media.provider, media.providerId, season]);
-
-  if (!seasonNumbers.length) return <section className="section"><div className="status-card"><h3>Episode details unavailable</h3><p>Tracking will still be available after this series is added to your library.</p></div></section>;
-  return <section className="section">
-    <div className="section-head"><div><span className="eyebrow">Series tracking · {currentStatus}</span><h2>{season === 0 ? "Specials" : `Season ${season}`}</h2></div><span className="muted" style={{ fontSize: 12 }}>{watchedCount} / {episodes.length || "—"} watched</span></div>
-    {seriesProgress.eligibleEpisodes === undefined ? <p className="muted">Series progress is unavailable until the provider supplies released episode totals.</p> : <TrackingProgress value={seriesProgress.progress} label={`${seriesProgress.watchedEpisodes} / ${seriesProgress.eligibleEpisodes} released episodes`}/>}
-    {completedSeason && <p className="muted">Season marked watched{completedSeason.provenance === "imported_state" ? " from imported state" : ""}. Individual watch dates are shown only when an explicit historical log exists.</p>}
-    <div className="season-tabs">{seasonNumbers.map((number) => <button key={number} onClick={() => setSeason(number)} className={`filter-button ${season === number ? "active" : ""}`}>{number === 0 ? "Specials" : `Season ${number}`}</button>)}</div>
-    <AnimatePresence mode="wait"><motion.div className="episode-list" key={season} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={motionTokens.normal}>{isLoadingEpisodes && <p className="episode-state">Loading every episode…</p>}{episodeError && <p className="episode-state form-error" role="alert">{episodeError}</p>}{!isLoadingEpisodes && !episodeError && !episodes.length && <p className="episode-state">No episodes are listed for this season.</p>}{episodes.map((episode) => <motion.article layout className="episode" key={episode.id}>
+  }, [media.provider, media.providerId, seasonNumber]);
+  const watched = state.episodeWatches.filter((watch) => mediaKey(watch.series) === mediaKey(media) && watch.seasonNumber === seasonNumber);
+  return <div className="inline-episode-list" id={id}>{isLoadingEpisodes && <p className="episode-state">Loading episodes…</p>}{episodeError && <p className="episode-state form-error" role="alert">{episodeError}</p>}{!isLoadingEpisodes && !episodeError && !episodes.length && <p className="episode-state">No episodes are listed for this season.</p>}{episodes.map((episode) => <article className="inline-episode" key={episode.id}>
       <div className="episode-thumb"><Image src={episode.stillUrl ?? media.backdropUrl ?? media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="72px"/></div>
-      <div><h4>S{String(season).padStart(2, "0")}E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</h4><p>{episode.airDate ?? episode.runtimeMinutes ? [episode.airDate, episode.runtimeMinutes ? `${episode.runtimeMinutes} min` : undefined].filter(Boolean).join(" · ") : episode.overview || "Episode details are unavailable."}</p></div>
+      <div><Link href={`${seriesHref(media)}/season/${seasonNumber}/episode/${episode.episodeNumber}`}><h4>S{String(seasonNumber).padStart(2, "0")}E{String(episode.episodeNumber).padStart(2, "0")} · {episode.title}</h4></Link><p>{[episode.airDate, episode.runtimeMinutes ? `${episode.runtimeMinutes} min` : undefined, episode.publicRating === undefined ? undefined : `★ ${episode.publicRating.toFixed(1)}`].filter(Boolean).join(" · ") || "Episode details are unavailable."}</p></div>
       <div className="episode-actions"><button className={`icon-button ${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "watched" : ""}`} onClick={() => {
         const existing = watched.find((watch) => watch.episodeNumber === episode.episodeNumber);
         const mutation = existing
-          ? { type: "episode.unwatch" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber }
-          : { type: "episode.log" as const, series: media, seasonNumber: season, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString() };
+          ? { type: "episode.unwatch" as const, series: media, seasonNumber, episodeNumber: episode.episodeNumber }
+          : { type: "episode.log" as const, series: media, seasonNumber, episodeNumber: episode.episodeNumber, episodeTitle: episode.title, watchedAt: new Date().toISOString() };
         void mutate(mutation).catch(() => undefined);
-      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} S${String(season).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}: ${episode.title}`}><Check size={17}/></button><EpisodeActions media={media} season={season} episode={episode} watch={watched.find((watch) => watch.episodeNumber === episode.episodeNumber)}/></div>
-    </motion.article>)}</motion.div></AnimatePresence>
+      }} aria-label={`${watched.some((watch) => watch.episodeNumber === episode.episodeNumber) ? "Undo watched" : "Mark watched"} S${String(seasonNumber).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}: ${episode.title}`}><Check size={17}/></button></div>
+    </article>)}</div>;
+}
+
+function SeriesActivity({ media }: { media: CatalogSeries }) {
+  const { state } = useMosaicState();
+  const key = mediaKey(media);
+  const current = deriveSeriesCurrentStatus(state, media);
+  const progress = deriveSeriesProgress(state, media);
+  const watches = state.episodeWatches
+    .filter((watch) => mediaKey(watch.series) === key)
+    .sort((first, second) => second.watchedAt.localeCompare(first.watchedAt));
+  const latestWatch = watches[0];
+  const rating = state.ratings.find((entry) => entry.mediaKey === key);
+  const review = state.reviews.find((entry) => mediaKey(entry.media) === key);
+  const hasActivity = Boolean(current.status || watches.length || rating || review || state.seasonStates.some((entry) => mediaKey(entry.series) === key));
+  const status = current.status ? current.status.replaceAll("_", " ") : undefined;
+  return <section className="status-card series-activity"><span className="eyebrow">Your activity</span><h3>{hasActivity ? "Series progress" : "No activity yet"}</h3>
+    {hasActivity ? <dl>
+      {status && <div><dt>Status</dt><dd>{status}</dd></div>}
+      {progress.eligibleEpisodes !== undefined && <div><dt>Progress</dt><dd>{progress.watchedEpisodes} / {progress.eligibleEpisodes} released episodes</dd></div>}
+      {latestWatch && <div><dt>Latest episode</dt><dd>S{String(latestWatch.seasonNumber).padStart(2, "0")}E{String(latestWatch.episodeNumber).padStart(2, "0")}{latestWatch.episodeTitle ? ` · ${latestWatch.episodeTitle}` : ""}</dd></div>}
+      {rating && <div><dt>Your rating</dt><dd>★ {rating.value.toFixed(1)}</dd></div>}
+      {review && <div><dt>Review</dt><dd>{review.containsSpoilers ? "Spoiler-marked review saved" : "Review saved"}</dd></div>}
+    </dl> : <p>Log an episode or set a season status to keep this series moving.</p>}
   </section>;
 }
 
@@ -237,11 +239,11 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
       {facts.length > 0 && <div className="facts">{facts.map(([label, value]) => <div className="fact" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>}
       {media.mediaType === "movie" && <MovieSection media={media}/>}
       {media.mediaType === "movie" && <WatchProviders media={media}/>}
-      {media.mediaType === "tv" && <><SeriesGuide media={media}/><EpisodeRatingsMap media={media}/><SeriesSection media={media}/><WatchProviders media={media}/></>}
+      {media.mediaType === "tv" && <><SeriesGuide media={media}/><EpisodeRatingsMap media={media}/></>}
       {media.mediaType === "game" && <><GameMetadata media={media}/><GameSection media={media}/></>}
       {isRelatedLoaded && <section className="section"><div className="section-head"><h2>{relatedHeading(media)}</h2></div>{related.length ? <MediaShelf items={related} showType/> : <p className="muted">{relatedError ?? "No related titles are available from this provider right now."}</p>}</section>}
-    </div><aside>
-      <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>
+    </div><aside className={media.mediaType === "tv" ? "series-detail-rail" : undefined}>
+      {media.mediaType === "tv" ? <><SeriesActivity media={media}/><WatchProviders media={media}/></> : <div className="status-card"><span className="eyebrow">Your activity</span><h3>{actionLabel(media.mediaType)} history</h3><p>Your saved progress, ratings, reviews, and future rewatches appear here.</p></div>}
     </aside></div>
   </>;
 }
