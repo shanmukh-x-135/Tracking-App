@@ -59,6 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (pathname === "/login" || pathname === "/signup") return <>{children}</>;
+  if (pathname === "/mosaic") return <MosaicMotion>{children}</MosaicMotion>;
   const active = (href: string) => pathname.startsWith(href.split("?")[0]);
 
   return <MosaicMotion>

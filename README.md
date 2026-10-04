@@ -109,9 +109,9 @@ npm run build
 
 `/mosaic` is a private, activity-backed view of a signed-in user's logged media. Its authenticated live contract is `GET /api/me/mosaic?period=all|YYYY`; the same projector is reused by the mock-mode prototype. It includes one tile per title with real activity and never promotes a saved status, rating, or favourite into consumption. All-time and calendar-year views are supported. Calendar-month views are intentionally deferred: game and book records currently retain their latest progress timestamp rather than a durable per-session event history, so a month view would overstate activity.
 
-### Your Mosaic (Prompt 2 interaction)
+### Your Mosaic spatial explorer
 
-The interactive field uses transform-only DOM tiles with Motion rather than a canvas renderer. This keeps each story a native, keyboard-focusable control and lets existing optimized media artwork participate in the layout; deterministic placement and density-aware tile sizing retain a readable overview for histories around 500 titles. The field supports wheel zoom, pointer pan, reset, type emphasis, reduced-motion rendering, and a semantic story-link fallback. The focused browser coverage in `e2e/mosaic.spec.ts` exercises the controls and a 500-title activity fixture.
+`/mosaic` owns the viewport and arranges the existing activity-backed story tiles in a deterministic, asymmetric contour field. Chronology sets tile order, media type provides a small lane offset, and verified activity weight changes tile size modestly. The far view simplifies most cards while medium and close views progressively reveal optimized artwork. Native story links remain keyboard-focusable and open their real detail routes. The explorer supports pointer-anchored wheel zoom, drag pan, touch pinch, fit/reset, type emphasis, and reduced motion. No synthetic stories or inferred taste signals are used. The focused browser coverage in `e2e/mosaic.spec.ts` exercises the controls, recap handoff, and a 500-title fixture. A future cinematic entrance and broader Profile placement remain separate work.
 
 ### Your Mosaic recap (Prompt 3)
 
