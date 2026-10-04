@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ video: process.env.MOSAIC_RECORD_VIDEO === "1" ? "on" : "off" });
+
 test("Your Mosaic supports inspection, type emphasis, zoom, and reset", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -69,20 +71,93 @@ test("Your Mosaic stays interactive with a dense activity-backed field", async (
   await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "far");
   await expect.poll(() => page.locator(".mosaic-spatial-tile img").first().evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
   await page.screenshot({ path: "artifacts/mosaic-density-far-1024.png", fullPage: true });
-  await page.getByRole("button", { name: "Zoom in" }).click();
-  await page.getByRole("button", { name: "Zoom in" }).click();
+
+  const focus = await page.locator(".mosaic-spatial-tile").evaluateAll((elements) => {
+    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
+    const centerX = stage.left + stage.width / 2;
+    const centerY = stage.top + stage.height / 2;
+    return elements.map((element, index) => {
+      const box = element.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      const y = box.top + box.height / 2;
+      return { index, x, y, distance: Math.hypot(x - centerX, y - centerY) };
+    }).sort((first, second) => first.distance - second.distance)[0];
+  });
+  const focusedTile = page.locator(".mosaic-spatial-tile").nth(focus.index);
+  const fittedStyle = await focusedTile.getAttribute("style");
+  await page.mouse.move(focus.x, focus.y);
+  await page.mouse.wheel(0, -500);
   await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "medium");
+  await page.waitForTimeout(260);
+  expect(await focusedTile.getAttribute("style")).not.toBe(fittedStyle);
+  const mediumBox = await focusedTile.boundingBox();
+  expect(Math.hypot(mediumBox!.x + mediumBox!.width / 2 - focus.x, mediumBox!.y + mediumBox!.height / 2 - focus.y)).toBeLessThan(35);
+  if (await page.getByRole("button", { name: "Close selected story" }).isVisible()) await page.getByRole("button", { name: "Close selected story" }).click();
   await page.screenshot({ path: "artifacts/mosaic-density-medium-1024.png", fullPage: true });
-  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.mouse.move(focus.x, focus.y);
+  await page.mouse.wheel(0, -350);
   await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "close");
+  await page.waitForTimeout(260);
+  const closeBox = await focusedTile.boundingBox();
+  expect(Math.hypot(closeBox!.x + closeBox!.width / 2 - focus.x, closeBox!.y + closeBox!.height / 2 - focus.y)).toBeLessThan(35);
+  const visibleCollisions = await page.locator(".mosaic-spatial-tile").evaluateAll((elements) => {
+    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
+    const boxes = elements.map((element) => element.getBoundingClientRect()).filter((box) => box.right > stage.left && box.left < stage.right && box.bottom > stage.top && box.top < stage.bottom);
+    let collisions = 0;
+    for (let first = 0; first < boxes.length; first += 1) {
+      for (let second = first + 1; second < boxes.length; second += 1) {
+        const horizontal = Math.min(boxes[first].right, boxes[second].right) - Math.max(boxes[first].left, boxes[second].left);
+        const vertical = Math.min(boxes[first].bottom, boxes[second].bottom) - Math.max(boxes[first].top, boxes[second].top);
+        if (horizontal > 1 && vertical > 1) collisions += 1;
+      }
+    }
+    return collisions;
+  });
+  expect(visibleCollisions).toBe(0);
+  if (await page.getByRole("button", { name: "Close selected story" }).isVisible()) await page.getByRole("button", { name: "Close selected story" }).click();
   await page.screenshot({ path: "artifacts/mosaic-density-close-1024.png", fullPage: true });
-  await page.getByRole("button", { name: "Fit view" }).click();
+
+  const panStart = await page.evaluate(() => {
+    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
+    for (let radius = 0; radius < 240; radius += 18) {
+      for (let angle = 0; angle < 12; angle += 1) {
+        const x = stage.left + stage.width / 2 + Math.cos(angle * Math.PI / 6) * radius;
+        const y = stage.top + stage.height / 2 + Math.sin(angle * Math.PI / 6) * radius;
+        if (document.elementFromPoint(x, y)?.closest(".mosaic-spatial-tile, .mosaic-inspector, .mosaic-explorer-hud")) continue;
+        return { x, y };
+      }
+    }
+    throw new Error("No empty drag surface was available");
+  });
+  const world = page.locator(".mosaic-spatial-world");
+  const beforePan = await world.getAttribute("style");
+  await page.mouse.move(panStart.x, panStart.y);
+  await page.mouse.down();
+  await page.mouse.move(panStart.x + 42, panStart.y + 24, { steps: 6 });
+  await page.mouse.up();
+  expect(await world.getAttribute("style")).not.toBe(beforePan);
+
+  await focusedTile.click();
+  await expect(page).toHaveURL(/\/movie\//);
+  await page.goBack();
+  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "close");
+  await page.mouse.move(focus.x, focus.y);
+  await page.mouse.wheel(0, 1400);
   await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "far");
+  await expect(focusedTile).toHaveAttribute("style", fittedStyle!);
+  await page.waitForTimeout(260);
+  const returnedBox = await focusedTile.boundingBox();
+  expect(Math.hypot(returnedBox!.x + returnedBox!.width / 2 - focus.x, returnedBox!.y + returnedBox!.height / 2 - focus.y)).toBeLessThan(2);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
   await expect(page.locator(".mosaic-spatial-stage")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: "artifacts/mosaic-density-reduced-390.png", fullPage: true });
+  if (process.env.MOSAIC_RECORD_VIDEO === "1") {
+    const video = page.video();
+    await page.close();
+    await video?.saveAs("artifacts/mosaic-semantic-zoom-interaction.webm");
+  }
 });
 
 test("a recap uses its real period data and can hand off into the Mosaic", async ({ page }) => {
