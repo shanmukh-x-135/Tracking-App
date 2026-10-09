@@ -1,8 +1,31 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 test.use({ video: process.env.MOSAIC_RECORD_VIDEO === "1" ? "on" : "off" });
 
-test("Your Mosaic supports inspection, type emphasis, zoom, and reset", async ({ page }) => {
+const stage = (page: Page) => page.locator(".mosaic-field-stage");
+
+/** Overlapping pairs among every story card that is visible in the viewport. */
+function visibleCollisions(page: Page) {
+  return page.locator(".mosaic-field-tile").evaluateAll((elements) => {
+    const boxes = elements.map((element) => element.getBoundingClientRect()).filter((box) => box.right > 0 && box.left < window.innerWidth && box.bottom > 0 && box.top < window.innerHeight);
+    let collisions = 0;
+    for (let first = 0; first < boxes.length; first += 1) {
+      for (let second = first + 1; second < boxes.length; second += 1) {
+        const horizontal = Math.min(boxes[first].right, boxes[second].right) - Math.max(boxes[first].left, boxes[second].left);
+        const vertical = Math.min(boxes[first].bottom, boxes[second].bottom) - Math.max(boxes[first].top, boxes[second].top);
+        if (horizontal > 1 && vertical > 1) collisions += 1;
+      }
+    }
+    return collisions;
+  });
+}
+
+async function settle(page: Page) {
+  await expect(page.locator(".mosaic-field-world")).toHaveCSS("will-change", "auto");
+  await page.waitForTimeout(120);
+}
+
+test("Your Mosaic supports focus, detail, zoom, and opening a story", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -24,27 +47,41 @@ test("Your Mosaic supports inspection, type emphasis, zoom, and reset", async ({
   await expect(page.getByRole("heading", { name: "Your Mosaic" })).toBeVisible();
   const film = page.getByRole("link", { name: "Open Mosaic Test Film" });
   await expect(film).toBeVisible();
-  await film.hover();
-  await expect(page.getByRole("heading", { name: "Mosaic Test Film" })).toBeVisible();
+  await expect(stage(page)).toHaveAttribute("data-entrance", "done", { timeout: 6000 });
+  // A story without artwork still reads as a designed card, never a blank rectangle.
+  await expect(film.locator(".mosaic-field-fallback strong")).toHaveText("Mosaic Test Film");
+  // The first selection focuses the story and attaches its real activity beside it.
+  await film.click();
+  await expect(page).toHaveURL(/\/mosaic$/);
+  const detail = page.getByRole("complementary", { name: "Selected story" });
+  await expect(detail.getByRole("heading", { name: "Mosaic Test Film" })).toBeVisible();
+  await expect(detail).toContainText("1 watch logged");
+  await expect(detail).toContainText("Sep 25, 2026");
+  await settle(page);
+  const filmBox = (await film.boundingBox())!;
+  const detailBox = (await detail.boundingBox())!;
+  expect(detailBox.x).toBeGreaterThanOrEqual(filmBox.x + filmBox.width);
   await page.screenshot({ path: "artifacts/mosaic-focused-1440.png", fullPage: true });
-  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.keyboard.press("Escape");
+  await expect(detail).toHaveCount(0);
+  const scale = Number(await stage(page).getAttribute("data-scale"));
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await settle(page);
+  expect(Number(await stage(page).getAttribute("data-scale"))).toBeLessThan(scale);
   await page.getByRole("button", { name: "Fit view" }).click();
+  await settle(page);
   await page.screenshot({ path: "artifacts/mosaic-interactive-1440.png", fullPage: true });
   await page.setViewportSize({ width: 768, height: 900 });
   await page.screenshot({ path: "artifacts/mosaic-sparse-768.png", fullPage: true });
-  await page.mouse.move(440, 470);
-  await page.mouse.wheel(0, -400);
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "medium");
-  await page.locator(".mosaic-spatial-stage").focus();
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "far");
-  await expect(page.locator(".mosaic-spatial-world")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  // Selecting the focused story a second time follows its real detail link.
+  await film.click();
+  await expect(detail).toBeVisible();
   await film.click();
   await expect(page).toHaveURL(/\/movie\/mock(?:%3A|:)movie(?:%3A|:)mosaic-e2e-movie/i);
   expect(errors).toEqual([]);
 });
 
-test("Your Mosaic stays interactive with a dense activity-backed field", async ({ page }) => {
+test("Your Mosaic stays collision-free and explorable with 500 activity-backed stories", async ({ page }) => {
   await page.addInitScript(() => {
     const artwork = [
       "photo-1414235077428-338989a2e8c0", "photo-1470770841072-f978cf4d019e", "photo-1497366754035-f200968a6e72",
@@ -67,91 +104,81 @@ test("Your Mosaic stays interactive with a dense activity-backed field", async (
   });
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/mosaic");
-  await expect(page.getByRole("link", { name: "Open Archive Story 500" })).toBeVisible();
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "far");
-  await expect.poll(() => page.locator(".mosaic-spatial-tile img").first().evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.getByRole("link", { name: "Open Archive Story 500" })).toBeAttached();
+  await expect(stage(page)).toHaveAttribute("data-zoom-level", "far");
+  await expect(stage(page)).toHaveAttribute("data-entrance", "done", { timeout: 6000 });
+  // Overview is artwork, not placeholders: every story renders its poster.
+  await expect(page.locator(".mosaic-field-tile img")).toHaveCount(500);
+  await expect.poll(() => page.locator(".mosaic-field-tile img").first().evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  expect(await visibleCollisions(page)).toBe(0);
   await page.screenshot({ path: "artifacts/mosaic-density-far-1024.png", fullPage: true });
 
-  const focus = await page.locator(".mosaic-spatial-tile").evaluateAll((elements) => {
-    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
-    const centerX = stage.left + stage.width / 2;
-    const centerY = stage.top + stage.height / 2;
-    return elements.map((element, index) => {
-      const box = element.getBoundingClientRect();
-      const x = box.left + box.width / 2;
-      const y = box.top + box.height / 2;
-      return { index, x, y, distance: Math.hypot(x - centerX, y - centerY) };
-    }).sort((first, second) => first.distance - second.distance)[0];
-  });
-  const focusedTile = page.locator(".mosaic-spatial-tile").nth(focus.index);
-  const fittedStyle = await focusedTile.getAttribute("style");
-  await page.mouse.move(focus.x, focus.y);
-  await page.mouse.wheel(0, -500);
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "medium");
-  await page.waitForTimeout(260);
-  expect(await focusedTile.getAttribute("style")).not.toBe(fittedStyle);
-  const mediumBox = await focusedTile.boundingBox();
-  expect(Math.hypot(mediumBox!.x + mediumBox!.width / 2 - focus.x, mediumBox!.y + mediumBox!.height / 2 - focus.y)).toBeLessThan(35);
-  if (await page.getByRole("button", { name: "Close selected story" }).isVisible()) await page.getByRole("button", { name: "Close selected story" }).click();
-  await page.screenshot({ path: "artifacts/mosaic-density-medium-1024.png", fullPage: true });
-  await page.mouse.move(focus.x, focus.y);
-  await page.mouse.wheel(0, -350);
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "close");
-  await page.waitForTimeout(260);
-  const closeBox = await focusedTile.boundingBox();
-  expect(Math.hypot(closeBox!.x + closeBox!.width / 2 - focus.x, closeBox!.y + closeBox!.height / 2 - focus.y)).toBeLessThan(35);
-  const visibleCollisions = await page.locator(".mosaic-spatial-tile").evaluateAll((elements) => {
-    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
-    const boxes = elements.map((element) => element.getBoundingClientRect()).filter((box) => box.right > stage.left && box.left < stage.right && box.bottom > stage.top && box.top < stage.bottom);
-    let collisions = 0;
-    for (let first = 0; first < boxes.length; first += 1) {
-      for (let second = first + 1; second < boxes.length; second += 1) {
-        const horizontal = Math.min(boxes[first].right, boxes[second].right) - Math.max(boxes[first].left, boxes[second].left);
-        const vertical = Math.min(boxes[first].bottom, boxes[second].bottom) - Math.max(boxes[first].top, boxes[second].top);
-        if (horizontal > 1 && vertical > 1) collisions += 1;
-      }
+  const box = (await stage(page).boundingBox())!;
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(center.x, center.y);
+  for (const level of ["medium", "close"] as const) {
+    for (let step = 0; step < 12 && await stage(page).getAttribute("data-zoom-level") !== level; step += 1) {
+      await page.mouse.wheel(0, -160);
+      await page.waitForTimeout(90);
     }
-    return collisions;
-  });
-  expect(visibleCollisions).toBe(0);
-  if (await page.getByRole("button", { name: "Close selected story" }).isVisible()) await page.getByRole("button", { name: "Close selected story" }).click();
-  await page.screenshot({ path: "artifacts/mosaic-density-close-1024.png", fullPage: true });
+    await expect(stage(page)).toHaveAttribute("data-zoom-level", level);
+    await settle(page);
+    expect(await visibleCollisions(page)).toBe(0);
+    await page.screenshot({ path: `artifacts/mosaic-density-${level}-1024.png`, fullPage: true });
+  }
 
-  const panStart = await page.evaluate(() => {
-    const stage = document.querySelector(".mosaic-spatial-stage")!.getBoundingClientRect();
-    for (let radius = 0; radius < 240; radius += 18) {
-      for (let angle = 0; angle < 12; angle += 1) {
-        const x = stage.left + stage.width / 2 + Math.cos(angle * Math.PI / 6) * radius;
-        const y = stage.top + stage.height / 2 + Math.sin(angle * Math.PI / 6) * radius;
-        if (document.elementFromPoint(x, y)?.closest(".mosaic-spatial-tile, .mosaic-inspector, .mosaic-explorer-hud")) continue;
-        return { x, y };
-      }
-    }
-    throw new Error("No empty drag surface was available");
-  });
-  const world = page.locator(".mosaic-spatial-world");
+  // Dragging pans the field and never selects a story.
+  const world = page.locator(".mosaic-field-world");
   const beforePan = await world.getAttribute("style");
-  await page.mouse.move(panStart.x, panStart.y);
+  await page.mouse.move(center.x, center.y);
   await page.mouse.down();
-  await page.mouse.move(panStart.x + 42, panStart.y + 24, { steps: 6 });
+  await page.mouse.move(center.x + 60, center.y + 30, { steps: 8 });
   await page.mouse.up();
+  await settle(page);
   expect(await world.getAttribute("style")).not.toBe(beforePan);
+  await expect(page.locator(".mosaic-detail")).toHaveCount(0);
 
+  // Focus a story near the centre: its detail sits beside the artwork without covering it.
+  const focusIndex = await page.locator(".mosaic-field-tile").evaluateAll((elements, point) => elements.map((element, index) => {
+    const rectangle = element.getBoundingClientRect();
+    return { index, distance: Math.hypot(rectangle.x + rectangle.width / 2 - point.x, rectangle.y + rectangle.height / 2 - point.y) };
+  }).sort((first, second) => first.distance - second.distance)[0].index, center);
+  const focusedTile = page.locator(".mosaic-field-tile").nth(focusIndex);
+  await focusedTile.click();
+  const detail = page.getByRole("complementary", { name: "Selected story" });
+  await expect(detail).toBeVisible();
+  await settle(page);
+  const tileBox = (await focusedTile.boundingBox())!;
+  const detailBox = (await detail.boundingBox())!;
+  const overlapX = Math.min(tileBox.x + tileBox.width, detailBox.x + detailBox.width) - Math.max(tileBox.x, detailBox.x);
+  const overlapY = Math.min(tileBox.y + tileBox.height, detailBox.y + detailBox.height) - Math.max(tileBox.y, detailBox.y);
+  expect(overlapX > 0 && overlapY > 0).toBe(false);
+  expect(tileBox.width).toBeGreaterThan(200);
+  expect(await visibleCollisions(page)).toBe(0);
+  await page.screenshot({ path: "artifacts/mosaic-density-selected-close-1024.png", fullPage: true });
+
+  // Opening the story and coming back restores the same view and selection.
+  const focusedStyle = await world.getAttribute("style");
+  const title = await detail.getByRole("heading").textContent();
   await focusedTile.click();
   await expect(page).toHaveURL(/\/movie\//);
   await page.goBack();
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "close");
-  await page.mouse.move(focus.x, focus.y);
-  await page.mouse.wheel(0, 1400);
-  await expect(page.locator(".mosaic-spatial-stage")).toHaveAttribute("data-zoom-level", "far");
-  await expect(focusedTile).toHaveAttribute("style", fittedStyle!);
-  await page.waitForTimeout(260);
-  const returnedBox = await focusedTile.boundingBox();
-  expect(Math.hypot(returnedBox!.x + returnedBox!.width / 2 - focus.x, returnedBox!.y + returnedBox!.height / 2 - focus.y)).toBeLessThan(2);
+  await expect(detail.getByRole("heading")).toHaveText(title!);
+  await expect(stage(page)).toHaveAttribute("data-entrance", "done");
+  await settle(page);
+  expect(await world.getAttribute("style")).toBe(focusedStyle);
+  await page.keyboard.press("Escape");
+  await expect(detail).toHaveCount(0);
+  await page.getByRole("button", { name: "Fit view" }).click();
+  await expect(stage(page)).toHaveAttribute("data-zoom-level", "far");
+
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
-  await expect(page.locator(".mosaic-spatial-stage")).toBeVisible();
+  await expect(stage(page)).toBeVisible();
+  await expect(stage(page)).toHaveAttribute("data-entrance", "done");
   await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
+  expect(await visibleCollisions(page)).toBe(0);
   await page.screenshot({ path: "artifacts/mosaic-density-reduced-390.png", fullPage: true });
   if (process.env.MOSAIC_RECORD_VIDEO === "1") {
     const video = page.video();
