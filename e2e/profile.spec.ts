@@ -106,7 +106,7 @@ test("the Overview keeps metrics, history and favourites truthful", async ({ pag
   await expect(page.getByRole("heading", { name: "Diary / History" })).toBeVisible();
   await expect(page.locator(".profile-shortcuts").getByRole("link", { name: "Your Mosaic" })).toHaveAttribute("href", "/mosaic");
   await page.getByRole("button", { name: "Stats" }).click();
-  await expect(page.getByRole("heading", { name: "Tracking snapshot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your story, in numbers" })).toBeVisible();
   await page.getByRole("button", { name: "Overview" }).click();
   await expect(page.getByRole("link", { name: "Explore your Mosaic" })).toBeVisible();
   await page.getByRole("button", { name: "Edit profile" }).click();
@@ -128,5 +128,59 @@ test("the Overview reflows on mobile and stays honest when empty", async ({ brow
   for (const label of ["Movies watched", "Unique episodes watched", "Games completed", "Books read"]) await expect(metric(page, label)).toHaveText("0");
   await expect(page.getByText("No favourites yet")).toBeVisible();
   await page.screenshot({ path: "artifacts/profile-overview-empty-390.png", fullPage: true });
+  await context.close();
+});
+
+test("Stats tell the story with honest units and a working period filter", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await seedProfile(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/profile?tab=stats");
+  await expect(page.getByRole("heading", { name: "Your story, in numbers" })).toBeVisible();
+  const footprint = page.locator(".stats-footprint");
+  // "Movies watched" keeps counting watch logs; distinct films are labelled separately.
+  await expect(footprint.locator('[data-media="movie"] strong')).toHaveText("6");
+  await expect(footprint.locator('[data-media="movie"]')).toContainText("5 unique films");
+  await expect(footprint.locator('[data-media="movie"]')).toContainText("1 rewatch");
+  await expect(footprint.locator('[data-media="series"] strong')).toHaveText("3");
+  await expect(footprint.locator('[data-media="series"]')).toContainText("3 unique episodes");
+  await expect(footprint.locator('[data-media="game"] strong')).toHaveText("0");
+  await expect(footprint.locator('[data-media="game"]')).toContainText("1 playing now");
+  await expect(footprint.locator('[data-media="book"] strong')).toHaveText("1");
+  // No shared scale across media remains.
+  await expect(page.getByText("Logged by medium")).toHaveCount(0);
+  // Ratings state their population and use real values.
+  await expect(page.locator(".stats-average")).toContainText("★ 4.5");
+  await expect(page.locator(".stats-average")).toContainText("every title you have rated");
+  await expect(page.locator(".stats-top li").first()).toContainText("Profile Film 1");
+  // Activity chart is keyboard readable.
+  await page.locator(".stats-bars").focus();
+  await page.keyboard.press("End");
+  await expect(page.locator(".stats-chart-readout")).toContainText("Sep");
+  // The period filter changes dated stats and leaves current-state media alone.
+  const period = page.getByRole("radiogroup", { name: "Period" });
+  await expect(period.getByRole("radio")).toHaveText(["All time", "2026"]);
+  await period.getByRole("radio", { name: "2026" }).click();
+  await expect(page.getByRole("heading", { name: "2026, in stories" })).toBeVisible();
+  await expect(period.getByRole("radio", { name: "2026" })).toHaveAttribute("aria-checked", "true");
+  await expect(footprint.locator('[data-media="movie"] strong')).toHaveText("6");
+  await expect(footprint.locator('[data-media="game"]')).toContainText("Current status");
+  await expect(page.locator(".stats-bars .stats-bar")).toHaveCount(12);
+  await page.screenshot({ path: "artifacts/profile-stats-1440.png", fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test("Stats stay honest and usable when empty on mobile", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await seedProfile(page, { empty: true });
+  await page.goto("/profile?tab=stats");
+  await expect(page.getByRole("heading", { name: "Your story, in numbers" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Period" })).toHaveCount(0);
+  for (const medium of ["movie", "series", "game", "book"]) await expect(page.locator(`.stats-footprint [data-media="${medium}"] strong`)).toHaveText("0");
+  await expect(page.getByText("No film watches recorded so far.")).toBeVisible();
+  await expect(page.getByText("Rate a story from its page and your rating pattern will appear here.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await context.close();
 });

@@ -24,7 +24,7 @@ function shortDate(value: string): { day: string; month: string; full: string } 
 }
 
 /** Artwork, or a typographic stand-in when a title has none; never a fabricated image. */
-function Artwork({ media, sizes, priority = false }: { media: Pick<CatalogMedia, "title" | "posterUrl" | "mediaType">; sizes: string; priority?: boolean }) {
+export function Artwork({ media, sizes, priority = false }: { media: Pick<CatalogMedia, "title" | "posterUrl" | "mediaType">; sizes: string; priority?: boolean }) {
   return media.posterUrl
     ? <Image src={media.posterUrl} alt="" fill sizes={sizes} priority={priority}/>
     : <span className="profile-art-fallback" data-media-type={media.mediaType} aria-hidden="true"><b>{media.title.trim().charAt(0).toUpperCase()}</b></span>;
