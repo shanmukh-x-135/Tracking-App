@@ -127,9 +127,9 @@ function FavouriteGallery({ favourites, onLibrary }: { favourites: CatalogMedia[
       <div><span className="eyebrow">Taste profile</span><h2 id="profile-favourites-title">Favourite stories</h2></div>
       {favourites.length ? <span className="profile-favourites-count">{favourites.length} saved favourite{favourites.length === 1 ? "" : "s"}{favourites.length > shown.length ? <> · <button className="text-link" onClick={onLibrary}>See all in Library →</button></> : null}</span> : null}
     </div>
-    {shown.length ? <ul className={`profile-gallery count-${Math.min(shown.length, 9)}`}>{shown.map((media, index) => <li key={`${media.provider}:${media.providerId}`} className={index === 0 ? "is-feature" : undefined}>
+    {shown.length ? <ul className="profile-gallery">{shown.map((media) => <li key={`${media.provider}:${media.providerId}`}>
       <Link href={mediaHref(media)} className="profile-gallery-item">
-        <span className="profile-gallery-art"><Artwork media={media} sizes={index === 0 ? "(max-width: 720px) 60vw, 340px" : "(max-width: 720px) 34vw, 180px"} priority={index === 0}/></span>
+        <span className="profile-gallery-art"><Artwork media={media} sizes="(max-width: 720px) 32vw, (max-width: 900px) 24vw, 200px"/></span>
         <span className="profile-gallery-copy"><strong>{media.title}</strong><small>{[typeLabels[media.mediaType], media.releaseYear].filter(Boolean).join(" · ")}</small></span>
       </Link>
     </li>)}</ul> : <div className="profile-quiet"><h3>No favourites yet</h3><p>Mark a story as a favourite from its page and it will take its place in this gallery.</p></div>}

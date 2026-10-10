@@ -88,13 +88,16 @@ test("the Overview keeps metrics, history and favourites truthful", async ({ pag
   await expect(rows.first()).toHaveAttribute("href", /\/movie\/mock(?:%3A|:)movie(?:%3A|:)profile-movie-1/i);
   await expect(page.getByRole("link", { name: "Movie diary" })).toHaveAttribute("href", "/activity?view=diary");
 
-  // Favourites keep library order; the first leads the gallery.
+  // Favourites keep library order and share one poster size and aspect ratio.
   const gallery = page.locator(".profile-gallery li");
   await expect(gallery).toHaveCount(3);
   await expect(gallery.nth(0)).toContainText("Profile Film 2");
   await expect(gallery.nth(1)).toContainText("Profile Film 4");
   await expect(gallery.nth(2)).toContainText("Profile Series");
   await expect(page.getByText("3 saved favourites")).toBeVisible();
+  const posters = await page.locator(".profile-gallery-art").evaluateAll((elements) => elements.map((element) => { const box = element.getBoundingClientRect(); return { width: Math.round(box.width), height: Math.round(box.height) }; }));
+  expect(new Set(posters.map(({ width, height }) => `${width}x${height}`)).size).toBe(1);
+  expect(posters[0].height / posters[0].width).toBeCloseTo(1.5, 1);
 
   // Profile navigation still works; the shortcut row belongs to the other tabs.
   await expect(page.locator(".profile-shortcuts")).toHaveCount(0);

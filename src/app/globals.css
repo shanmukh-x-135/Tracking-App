@@ -1145,9 +1145,6 @@ body { background: radial-gradient(ellipse 80% 30% at 50% -8%, rgba(113, 148, 18
 /* Favourite stories: an editorial gallery led by the first favourite. */
 .profile-favourites-count { color:var(--foreground-muted); font-size:13px; }
 .profile-gallery { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:clamp(18px,2vw,28px) clamp(12px,1.4vw,20px); margin:0; padding:0; list-style:none; }
-.profile-gallery .is-feature { grid-column:span 2; grid-row:span 2; }
-.profile-gallery.count-1,.profile-gallery.count-2,.profile-gallery.count-3,.profile-gallery.count-4 { grid-template-columns:repeat(auto-fill,minmax(150px,210px)); }
-.profile-gallery.count-1 .is-feature,.profile-gallery.count-2 .is-feature,.profile-gallery.count-3 .is-feature,.profile-gallery.count-4 .is-feature { grid-column:auto; grid-row:auto; }
 .profile-gallery-item { display:grid; gap:10px; }
 .profile-gallery-art { position:relative; display:block; aspect-ratio:2/3; overflow:hidden; border-radius:10px; background:#121a26; box-shadow:0 0 0 1px rgba(255,255,255,.07),0 22px 44px -18px rgba(0,0,0,.8); transition:transform .3s var(--ease-standard),box-shadow .3s var(--ease-standard); }
 .profile-gallery-art img { transition:transform .5s var(--ease-standard); }
@@ -1157,7 +1154,6 @@ body { background: radial-gradient(ellipse 80% 30% at 50% -8%, rgba(113, 148, 18
 .profile-gallery-copy { display:grid; gap:3px; min-width:0; }
 .profile-gallery-copy strong { overflow:hidden; font-size:14px; letter-spacing:-.01em; text-overflow:ellipsis; white-space:nowrap; }
 .profile-gallery-copy small { color:var(--foreground-muted); font-size:12px; }
-.profile-gallery .is-feature .profile-gallery-copy strong { font-size:clamp(18px,1.6vw,22px); letter-spacing:-.03em; white-space:normal; }
 
 @media (max-width:820px) {
   /* AccountActions renders div.actions; place it on its own row under the identity. */
