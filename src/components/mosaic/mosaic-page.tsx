@@ -1,11 +1,13 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus, Scan, X } from "lucide-react";
-import { type CSSProperties, memo, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Minus, Plus, Scan } from "lucide-react";
+import { type CSSProperties, memo, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MosaicRecap } from "@/components/mosaic/mosaic-recap";
+import { mediaLabels, StoryDetail } from "@/components/mosaic/story-detail";
 import { useReducedMotion } from "@/components/motion/motion";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { type Camera, clampCamera, fittedCamera, focusCamera, LEVEL_WIDTH, screenPosition, type Stage, zoomAt, zoomLevel, type ZoomLevel } from "@/lib/mosaic/camera";
@@ -21,37 +23,29 @@ const returnViewKey = "mosaic:return-view:v2";
 const DETAIL_WIDTH = 344;
 const SHEET_HEIGHT = 262;
 const NARROW_STAGE = 720;
-const mediaLabels: Record<MosaicMediaType, string> = { movie: "Movie", series: "Series", game: "Game", book: "Book" };
 
 function validPeriod(value?: string): value is string {
   if (!value) return false;
   try { periodFor(value); return true; } catch { return false; }
 }
 
-function formatDate(value?: string): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(date);
-}
+// The 3D scene is client-only and loaded on demand so other routes never pay for three.js.
+const MosaicUniverse = dynamic(() => import("@/components/mosaic/mosaic-universe"), { ssr: false, loading: () => <div className="mosaic-explorer-message"><span className="mosaic-loading-orbit" aria-hidden="true"/><h2>Opening your universe</h2></div> });
 
-/** Facts shown for a selected story, worded to match what each medium actually records. */
-function storyFacts(tile: MosaicTile): string[] {
-  const count = tile.activity.eventCount;
-  const plural = (singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
-  const facts: string[] = [];
-  if (tile.mediaType === "movie") facts.push(plural("watch logged", "watches logged"));
-  if (tile.mediaType === "series") facts.push(plural("episode logged", "episodes logged"));
-  const first = formatDate(tile.activity.firstActivityAt);
-  const last = formatDate(tile.activity.lastActivityAt);
-  // Games and books keep only their latest progress timestamp, so no first date or session count is implied.
-  if (tile.mediaType === "game" || tile.mediaType === "book") { if (last) facts.push(`Progress updated ${last}`); }
-  else if (first && last && first !== last) facts.push(`${first} – ${last}`);
-  else if (last) facts.push(last);
-  if (tile.activity.progress !== undefined && !tile.activity.completed) facts.push(`${tile.activity.progress}% progress`);
-  if (tile.activity.completed) facts.push(tile.mediaType === "book" ? "Finished" : "Completed");
-  if (tile.userSignals.rewatchCount) facts.push(`${tile.userSignals.rewatchCount} ${tile.userSignals.rewatchCount === 1 ? "rewatch" : "rewatches"}`);
-  return facts;
+type Renderer = "pending" | "3d" | "2d";
+let detectedRenderer: Exclude<Renderer, "pending"> | undefined;
+function detectRenderer(): Exclude<Renderer, "pending"> {
+  if (detectedRenderer) return detectedRenderer;
+  try {
+    const forced = new URLSearchParams(window.location.search).get("renderer");
+    const canvas = document.createElement("canvas");
+    detectedRenderer = forced !== "2d" && (canvas.getContext("webgl2") || canvas.getContext("webgl")) ? "3d" : "2d";
+  } catch {
+    detectedRenderer = "2d";
+  }
+  return detectedRenderer;
 }
+const subscribeToNothing = () => () => undefined;
 
 function signatureForSnapshot(tiles: MosaicTile[], period: string): string {
   let hash = 2166136261;
@@ -146,6 +140,10 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
   const [level, setLevel] = useState<ZoomLevel>("far");
   const [entrance, setEntrance] = useState<"pending" | "running" | "done">("pending");
   const [showHint, setShowHint] = useState(true);
+  const detected = useSyncExternalStore<Renderer>(subscribeToNothing, detectRenderer, () => "pending");
+  const [contextLost, setContextLost] = useState(false);
+  const renderer: Renderer = contextLost ? "2d" : detected;
+  const flat = renderer === "2d";
 
   const stageRef = useRef<HTMLElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
@@ -281,7 +279,7 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
 
   // Restore the viewport after returning from a story; otherwise frame the field.
   useEffect(() => {
-    if (isLoading || !layout.tiles.length || !stage.width) return;
+    if (!flat || isLoading || !layout.tiles.length || !stage.width) return;
     if (!restoredView.current) {
       restoredView.current = true;
       try {
@@ -303,7 +301,7 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
     const focus = live.current.selected;
     if (focus) jumpTo(focusCamera(focus, layout, stage, detail));
     else jumpTo(fittedCamera(layout, stage));
-  }, [detail, isLoading, jumpTo, layout, snapshotSignature, stage]);
+  }, [detail, flat, isLoading, jumpTo, layout, snapshotSignature, stage]);
 
   // The opening "bloom": stories travel out from the centre, newest first.
   useEffect(() => {
@@ -504,16 +502,13 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
   const keyHandler = useRef(onKeyDown);
   useEffect(() => { keyHandler.current = onKeyDown; });
   useEffect(() => {
-    if (isRecapOpen || isLoading || !snapshot.tiles.length) return;
+    if (!flat || isRecapOpen || isLoading || !snapshot.tiles.length) return;
     const listener = (event: globalThis.KeyboardEvent) => keyHandler.current(event);
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [isLoading, isRecapOpen, snapshot.tiles.length]);
+  }, [flat, isLoading, isRecapOpen, snapshot.tiles.length]);
 
   if (!user && !isLoading) return <main className="mosaic-explorer mosaic-explorer-empty"><div><h1>Your Mosaic is waiting</h1><p>Sign in to explore the stories you have logged.</p><Link className="button accent" href="/login">Sign in</Link></div></main>;
-
-  const facts = selected ? storyFacts(selected.tile) : [];
-  const meta = selected ? [mediaLabels[selected.tile.mediaType], selected.tile.providerMetadata.year, ...(selected.tile.providerMetadata.genres ?? []).slice(0, 2)].filter(Boolean).join(" · ") : "";
 
   return <main className="mosaic-explorer">
     <header className="mosaic-explorer-hud">
@@ -521,8 +516,8 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
       <div className="mosaic-explorer-controls"><label>Period<select value={periodValue} onChange={(event) => changePeriod(event.target.value)}><option value="all">All time</option>{years.map((year) => <option key={year} value={year}>{year}</option>)}{periodValue.includes("-") && <option value={periodValue}>{periodFor(periodValue).label}</option>}</select></label></div>
     </header>
 
-    <canvas className="mosaic-field-dust" ref={dustRef} aria-hidden="true"/>
-    {isLoading ? <div className="mosaic-explorer-message"><span className="mosaic-loading-orbit" aria-hidden="true"/><h2>Gathering your history</h2></div> : error ? <div className="mosaic-explorer-message"><h2>Your history could not be loaded</h2><p>{error}</p></div> : !snapshot.tiles.length ? <div className="mosaic-explorer-message"><h2>No stories in this period</h2><p>Your Mosaic only includes real activity. Log a movie, episode, game update, or reading progress to begin.</p><Link className="button accent" href="/discover">Find something to track</Link></div> : <>
+    {flat && <canvas className="mosaic-field-dust" ref={dustRef} aria-hidden="true"/>}
+    {isLoading || renderer === "pending" ? <div className="mosaic-explorer-message"><span className="mosaic-loading-orbit" aria-hidden="true"/><h2>Gathering your history</h2></div> : error ? <div className="mosaic-explorer-message"><h2>Your history could not be loaded</h2><p>{error}</p></div> : !snapshot.tiles.length ? <div className="mosaic-explorer-message"><h2>No stories in this period</h2><p>Your Mosaic only includes real activity. Log a movie, episode, game update, or reading progress to begin.</p><Link className="button accent" href="/discover">Find something to track</Link></div> : renderer === "3d" ? <MosaicUniverse key={periodValue} tiles={snapshot.tiles} counts={counts} signature={snapshotSignature} reducedMotion={reducedMotion} onUnavailable={() => setContextLost(true)}/> : <>
       <section
         className="mosaic-field-stage"
         ref={stageRef}
@@ -542,20 +537,7 @@ export function MosaicPage({ recapPeriod, initialPeriod }: { recapPeriod?: strin
         {showHint && <p className="mosaic-field-hint" aria-hidden="true">Scroll or pinch to zoom · Drag to explore · Select a story to focus</p>}
       </section>
 
-      {selected && <aside className={`mosaic-detail ${narrow ? "is-sheet" : "is-beside"}`} ref={cardRef} aria-label="Selected story" aria-live="polite" key={selected.tile.key}>
-        <button type="button" className="mosaic-detail-close" onClick={clearSelection} aria-label="Close selected story"><X size={16}/></button>
-        <span className="mosaic-detail-kind" data-media-type={selected.tile.mediaType}>{meta}</span>
-        <h2>{selected.tile.title}</h2>
-        {facts.length ? <ul>{facts.map((fact) => <li key={fact}>{fact}</li>)}</ul> : null}
-        {selected.tile.userSignals.rating !== undefined || selected.tile.userSignals.favorite ? <p className="mosaic-detail-signals">{selected.tile.userSignals.rating !== undefined && <span>★ {selected.tile.userSignals.rating.toFixed(1)}</span>}{selected.tile.userSignals.favorite && <span>Favourite</span>}</p> : null}
-        <div className="mosaic-detail-actions">
-          <Link className="button accent" href={selected.tile.href} onClick={rememberView}>Open story</Link>
-          <span className="mosaic-detail-step">
-            <button type="button" onClick={() => stepStory(-1)} disabled={selected.order === 0} aria-label="More recent story"><ChevronLeft size={16}/></button>
-            <button type="button" onClick={() => stepStory(1)} disabled={selected.order === layout.tiles.length - 1} aria-label="Earlier story"><ChevronRight size={16}/></button>
-          </span>
-        </div>
-      </aside>}
+      {selected && <StoryDetail key={selected.tile.key} ref={cardRef} tile={selected.tile} variant={narrow ? "sheet" : "beside"} isFirst={selected.order === 0} isLast={selected.order === layout.tiles.length - 1} onClose={clearSelection} onStep={stepStory} onOpen={rememberView}/>}
 
       <div className="mosaic-explorer-footer">
         <div className="mosaic-explorer-breakdown" aria-label="Media in this Mosaic">{counts.map(([type, count]) => <button key={type} type="button" data-media-type={type} className={filter === type ? "active" : ""} aria-pressed={filter === type} onClick={() => setFilter(filter === type ? undefined : type as MosaicMediaType)}>{count} {type === "series" ? "series" : `${type}${count === 1 ? "" : "s"}`}</button>)}</div>

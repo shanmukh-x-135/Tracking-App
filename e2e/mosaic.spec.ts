@@ -25,7 +25,7 @@ async function settle(page: Page) {
   await page.waitForTimeout(120);
 }
 
-test("Your Mosaic supports focus, detail, zoom, and opening a story", async ({ page }) => {
+test("2D fallback: Your Mosaic supports focus, detail, zoom, and opening a story", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
@@ -43,7 +43,7 @@ test("Your Mosaic supports focus, detail, zoom, and opening a story", async ({ p
   });
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/mosaic");
+  await page.goto("/mosaic?renderer=2d");
   await expect(page.getByRole("heading", { name: "Your Mosaic" })).toBeVisible();
   const film = page.getByRole("link", { name: "Open Mosaic Test Film" });
   await expect(film).toBeVisible();
@@ -52,7 +52,7 @@ test("Your Mosaic supports focus, detail, zoom, and opening a story", async ({ p
   await expect(film.locator(".mosaic-field-fallback strong")).toHaveText("Mosaic Test Film");
   // The first selection focuses the story and attaches its real activity beside it.
   await film.click();
-  await expect(page).toHaveURL(/\/mosaic$/);
+  await expect(page).toHaveURL(/\/mosaic\?renderer=2d$/);
   const detail = page.getByRole("complementary", { name: "Selected story" });
   await expect(detail.getByRole("heading", { name: "Mosaic Test Film" })).toBeVisible();
   await expect(detail).toContainText("1 watch logged");
@@ -81,7 +81,7 @@ test("Your Mosaic supports focus, detail, zoom, and opening a story", async ({ p
   expect(errors).toEqual([]);
 });
 
-test("Your Mosaic stays collision-free and explorable with 500 activity-backed stories", async ({ page }) => {
+test("2D fallback: Your Mosaic stays collision-free and explorable with 500 activity-backed stories", async ({ page }) => {
   await page.addInitScript(() => {
     const artwork = [
       "photo-1414235077428-338989a2e8c0", "photo-1470770841072-f978cf4d019e", "photo-1497366754035-f200968a6e72",
@@ -103,7 +103,7 @@ test("Your Mosaic stays collision-free and explorable with 500 activity-backed s
     }));
   });
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto("/mosaic");
+  await page.goto("/mosaic?renderer=2d");
   await expect(page.getByRole("link", { name: "Open Archive Story 500" })).toBeAttached();
   await expect(stage(page)).toHaveAttribute("data-zoom-level", "far");
   await expect(stage(page)).toHaveAttribute("data-entrance", "done", { timeout: 6000 });
@@ -185,6 +185,148 @@ test("Your Mosaic stays collision-free and explorable with 500 activity-backed s
     await page.close();
     await video?.saveAs("artifacts/mosaic-semantic-zoom-interaction.webm");
   }
+});
+
+/** Real stories with real artwork, newest first; types cycle so every medium is represented. */
+function seedUniverse(page: Page, count: number) {
+  return page.addInitScript((total) => {
+    const artwork = ["photo-1414235077428-338989a2e8c0", "photo-1470770841072-f978cf4d019e", "photo-1500530855697-b586d89ba3ee", "photo-1509316785289-025f5b846b35", "photo-1518709268805-4e9042af9f23", "photo-1528360983277-13d401cdc186"];
+    const types = ["movie", "tv", "game", "book"] as const;
+    const state = { library: [] as unknown[], movieWatches: [] as unknown[], episodeWatches: [] as unknown[], ratings: [], reviews: [], lists: [], seasonStates: [], seriesStates: [], tvHistory: [], gamePlaythroughs: [] as unknown[], bookReadings: [] as unknown[] };
+    for (let index = 0; index < total; index += 1) {
+      const mediaType = types[index % types.length];
+      const media = { provider: "mock", providerId: `universe-${index}`, mediaType, title: `Universe Story ${index + 1}`, genres: [], posterUrl: `https://images.unsplash.com/${artwork[index % artwork.length]}?auto=format&fit=crop&w=400&q=75` };
+      const when = new Date(Date.UTC(2026, 8, 25) - index * 3 * 86_400_000).toISOString();
+      state.library.push({ media, status: "watched", isFavorite: false, updatedAt: when });
+      if (mediaType === "movie") state.movieWatches.push({ id: `w-${index}`, media, watchedAt: when, isRewatch: false });
+      if (mediaType === "tv") state.episodeWatches.push({ id: `e-${index}`, series: media, seasonNumber: 1, episodeNumber: 1, watchedAt: when });
+      if (mediaType === "game") state.gamePlaythroughs.push({ id: `g-${index}`, media, status: "playing", playtimeMinutes: 90, progressPercent: 40, updatedAt: when });
+      if (mediaType === "book") state.bookReadings.push({ id: `b-${index}`, media, status: "reading", currentPage: 80, totalPages: 320, updatedAt: when });
+    }
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-mosaic-universe", email: "universe@example.com", displayName: "Universe Viewer" }));
+    window.localStorage.setItem("mosaic:state:mock-mosaic-universe", JSON.stringify(state));
+  }, count);
+}
+
+const universeKey = (index: number) => `mock:${["movie", "tv", "game", "book"][index % 4]}:universe-${index}`;
+const universe = (page: Page) => page.locator(".mosaic-universe");
+type Projection = { x: number; y: number; width: number; height: number; visible: boolean };
+const project = (page: Page, key: string) => page.evaluate((target) => (document.querySelector(".mosaic-universe") as HTMLElement & { mosaicProject(key: string): Projection | undefined }).mosaicProject(target), key);
+
+test("Your Mosaic is a navigable 3D scene with perspective depth", async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await seedUniverse(page, 120);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/mosaic");
+  await expect(universe(page)).toHaveAttribute("data-renderer", "3d");
+  await expect(universe(page)).toHaveAttribute("data-entrance", "done", { timeout: 20_000 });
+  await expect.poll(async () => Number(await universe(page).getAttribute("data-textures")), { timeout: 20_000 }).toBeGreaterThan(20);
+  await page.screenshot({ path: "artifacts/mosaic-3d-start-1440.png" });
+
+  // Genuine perspective: the most recent story is nearer and projects larger than a deep one.
+  const near = (await project(page, universeKey(0)))!;
+  const deep = (await project(page, universeKey(45)))!;
+  expect(near.height).toBeGreaterThan(deep.height * 3);
+
+  // Travelling forward moves the camera through depth, so a story ahead grows as it is approached.
+  const before = (await project(page, universeKey(12)))!;
+  const startZ = Number(await universe(page).getAttribute("data-camera-z"));
+  await page.mouse.move(720, 450);
+  for (let step = 0; step < 5; step += 1) { await page.mouse.wheel(0, 120); await page.waitForTimeout(60); }
+  await expect.poll(async () => Number(await universe(page).getAttribute("data-camera-z"))).toBeLessThan(startZ - 8);
+  await page.waitForTimeout(600);
+  const approached = (await project(page, universeKey(12)))!;
+  expect(approached.height).toBeGreaterThan(before.height * 1.4);
+
+  // Dragging sideways turns the vortex without selecting anything.
+  const spin = Number(await universe(page).getAttribute("data-spin"));
+  await page.mouse.move(420, 470);
+  await page.mouse.down();
+  await page.mouse.move(760, 470, { steps: 14 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.abs(Number(await universe(page).getAttribute("data-spin")) - spin)).toBeGreaterThan(.4);
+  await expect(universe(page)).not.toHaveAttribute("data-selected", /.+/);
+
+  // Selecting the nearest fully visible poster flies the camera to it and attaches its detail card.
+  let target: { key: string; box: Projection } | undefined;
+  for (let index = 0; index < 60; index += 1) {
+    const box = await project(page, universeKey(index));
+    if (box?.visible && box.x > 160 && box.x < 1280 && box.y > 160 && box.y < 760 && (!target || box.height > target.box.height)) target = { key: universeKey(index), box };
+  }
+  expect(target).toBeDefined();
+  await page.mouse.click(target!.box.x, target!.box.y);
+  await expect(universe(page)).toHaveAttribute("data-selected", target!.key);
+  const detail = page.getByRole("complementary", { name: "Selected story" });
+  await expect(detail).toBeVisible();
+  await page.waitForTimeout(1400);
+  const focused = (await project(page, target!.key))!;
+  const card = (await detail.boundingBox())!;
+  expect(focused.height).toBeGreaterThan(400);
+  const overlapX = Math.min(focused.x + focused.width / 2, card.x + card.width) - Math.max(focused.x - focused.width / 2, card.x);
+  const overlapY = Math.min(focused.y + focused.height / 2, card.y + card.height) - Math.max(focused.y - focused.height / 2, card.y);
+  expect(overlapX > 0 && overlapY > 0).toBe(false);
+  await page.screenshot({ path: "artifacts/mosaic-3d-selected-1440.png" });
+
+  // Stepping through chronology and closing the detail.
+  const title = await detail.getByRole("heading").textContent();
+  await page.keyboard.press("ArrowRight");
+  await expect(detail.getByRole("heading")).not.toHaveText(title!);
+  await page.getByRole("button", { name: "More recent story" }).click();
+  await expect(detail.getByRole("heading")).toHaveText(title!);
+
+  // Selecting the focused story again opens its real route; returning restores the selection.
+  await page.waitForTimeout(1300);
+  const again = (await project(page, target!.key))!;
+  await page.mouse.click(again.x, again.y);
+  await expect(page).toHaveURL(/\/(movie|series|game|book)\//);
+  await page.goBack();
+  await expect(detail.getByRole("heading")).toHaveText(title!, { timeout: 20_000 });
+  await page.keyboard.press("Escape");
+  await expect(detail).toHaveCount(0);
+
+  // Keyboard: each story is a real link in chronological order; focus frames it and Enter focuses it.
+  const link = page.getByRole("link", { name: "Open Universe Story 21" });
+  await link.focus();
+  await expect.poll(async () => (await project(page, universeKey(20)))?.visible).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(detail.getByRole("heading")).toHaveText("Universe Story 21");
+  await page.keyboard.press("Escape");
+
+  // The time rail jumps to a recorded month.
+  const railStart = Number(await universe(page).getAttribute("data-camera-z"));
+  await page.locator(".mosaic-time-rail button").last().click();
+  await expect.poll(async () => Number(await universe(page).getAttribute("data-camera-z"))).toBeLessThan(railStart - 20);
+  await page.getByRole("button", { name: "Return to start" }).click();
+  await expect.poll(async () => Number(await universe(page).getAttribute("data-camera-z"))).toBeGreaterThan(startZ - .5);
+  expect(errors).toEqual([]);
+});
+
+test("Your Mosaic 3D works on mobile with reduced motion", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await seedUniverse(page, 87);
+  await page.goto("/mosaic");
+  // Reduced motion: no opening flight and no ambient rotation.
+  await expect(universe(page)).toHaveAttribute("data-entrance", "done", { timeout: 20_000 });
+  await expect.poll(async () => Number(await universe(page).getAttribute("data-textures")), { timeout: 20_000 }).toBeGreaterThan(10);
+  const spin = await universe(page).getAttribute("data-spin");
+  await page.waitForTimeout(1200);
+  await expect(universe(page)).toHaveAttribute("data-spin", spin!);
+  let target: { key: string; box: Projection } | undefined;
+  for (let index = 0; index < 40; index += 1) {
+    const box = await project(page, universeKey(index));
+    if (box?.visible && box.x > 40 && box.x < 350 && box.y > 180 && box.y < 620 && (!target || box.height > target.box.height)) target = { key: universeKey(index), box };
+  }
+  await page.touchscreen.tap(target!.box.x, target!.box.y);
+  await expect(universe(page)).toHaveAttribute("data-selected", target!.key);
+  const sheet = (await page.getByRole("complementary", { name: "Selected story" }).boundingBox())!;
+  const focused = (await project(page, target!.key))!;
+  expect(focused.y + focused.height / 2).toBeLessThanOrEqual(sheet.y + 2);
+  await page.screenshot({ path: "artifacts/mosaic-3d-mobile-selected-390.png" });
+  await context.close();
 });
 
 test("a recap uses its real period data and can hand off into the Mosaic", async ({ page }) => {
