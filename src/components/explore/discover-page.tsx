@@ -26,7 +26,7 @@ function uniqueMedia(items: CatalogMedia[]): CatalogMedia[] {
 function SpotlightSave({ media }: { media: CatalogMedia }): React.JSX.Element {
   const { isSaved, pending, error, save } = useLibrarySave(media, saveForLaterStatus(media));
   if (isSaved) return <span className="button ghost" role="status"><BookmarkCheck size={16}/> In your library</span>;
-  return <><button type="button" className="button ghost" disabled={pending} onClick={() => void save()}>{pending ? "Saving…" : "Save for later"}</button>{error && <p className="search-notice" role="alert">{error}</p>}</>;
+  return <><button type="button" className="button ghost" disabled={pending} onClick={() => void save()}>{pending ? "Saving…" : "Save for later"}</button>{error && <p className="form-error" role="alert">{error}</p>}</>;
 }
 
 export function DiscoverPage({ initialSections = [] }: { initialSections?: CatalogDiscoverySection[] }): React.JSX.Element {

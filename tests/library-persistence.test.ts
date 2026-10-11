@@ -3,6 +3,7 @@ import test from "node:test";
 import Module from "node:module";
 import { applyMutation } from "../src/lib/persistence/domain";
 import { emptyMosaicState } from "../src/lib/persistence/types";
+import { persistenceMutationSchema } from "../src/lib/persistence/validation";
 import type { CatalogMovie, CatalogSeries } from "../src/lib/media/types";
 
 const movie: CatalogMovie = { provider: "mock", providerId: "keep", mediaType: "movie", title: "Keep", genres: [] };
@@ -43,6 +44,30 @@ test("live library.upsert leaves is_favorite untouched unless it is explicitly s
   const explicit = recordingClient();
   await applySupabaseMutation(explicit.client as never, "user-1", { type: "library.upsert", media: movie, status: "watched", isFavorite: false });
   assert.equal((explicit.calls.find((call) => call.op === "upsert")!.args[0] as { is_favorite?: boolean }).is_favorite, false);
+});
+
+test("add-if-untracked never overwrites a tracked entry, while explicit upserts still do", async () => {
+  // Live: the add becomes ON CONFLICT DO NOTHING; owner and status validation are unchanged.
+  const { applySupabaseMutation } = await loadLive();
+  const { calls, client } = recordingClient();
+  await applySupabaseMutation(client as never, "user-1", { type: "library.upsert", media: movie, status: "watchlist", onlyIfUntracked: true });
+  const upsert = calls.find((call) => call.table === "library_entries" && call.op === "upsert")!;
+  assert.deepEqual(upsert.args[0], { user_id: "user-1", media_id: "media-1", status: "watchlist" });
+  assert.deepEqual(upsert.args[1], { onConflict: "user_id,media_id", ignoreDuplicates: true });
+  await assert.rejects(applySupabaseMutation(recordingClient().client as never, "user-1", { type: "library.upsert", media: movie, status: "backlog", onlyIfUntracked: true }), /does not apply/);
+
+  // Mock: same semantics through the shared domain reducer.
+  let state = applyMutation(emptyMosaicState(), { type: "library.upsert", media: movie, status: "watched", isFavorite: true }, "2026-09-01T00:00:00.000Z");
+  state = applyMutation(state, { type: "library.upsert", media: movie, status: "watchlist", onlyIfUntracked: true });
+  assert.deepEqual(state.library.map(({ status, isFavorite, updatedAt }) => [status, isFavorite, updatedAt]), [["watched", true, "2026-09-01T00:00:00.000Z"]]);
+  state = applyMutation(state, { type: "library.upsert", media: series, status: "watchlist", onlyIfUntracked: true });
+  assert.equal(state.library.length, 2);
+  state = applyMutation(state, { type: "library.upsert", media: movie, status: "watchlist" });
+  assert.equal(state.library.find((entry) => entry.media.providerId === "keep")!.status, "watchlist");
+
+  // The server schema keeps the flag instead of stripping it.
+  const parsed = persistenceMutationSchema.parse({ type: "library.upsert", media: movie, status: "watchlist", onlyIfUntracked: true });
+  assert.equal((parsed as { onlyIfUntracked?: boolean }).onlyIfUntracked, true);
 });
 
 test("live library.remove deletes only the caller's library row, never history", async () => {

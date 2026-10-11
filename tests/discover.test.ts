@@ -103,7 +103,7 @@ test("save for later adds untracked media through library.upsert", async () => {
   let state = emptyMosaicState();
   const result = await addIfUntracked(state, media, saveForLaterStatus(media), async (mutation) => { sent.push(mutation); state = applyMutation(state, mutation); });
   assert.equal(result, "added");
-  assert.deepEqual(sent, [{ type: "library.upsert", media, status: "watchlist" }]);
+  assert.deepEqual(sent, [{ type: "library.upsert", media, status: "watchlist", onlyIfUntracked: true }]);
   assert.deepEqual(state.library.map(({ status, isFavorite }) => [status, isFavorite]), [["watchlist", false]]);
 });
 

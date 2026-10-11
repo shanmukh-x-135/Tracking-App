@@ -49,6 +49,19 @@ test("a failed save is announced, saves nothing, and can be retried", async ({ p
   const title = await spotlight(page).getByRole("heading", { level: 1 }).textContent();
   await spotlight(page).getByRole("button", { name: "Save for later" }).click();
   await expect(spotlight(page).getByRole("alert")).toHaveText(`Couldn't add ${title}. Try again.`);
+  // Readable over artwork and on its own row below the actions, at desktop and phone widths.
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const alert = spotlight(page).getByRole("alert");
+    const style = await alert.evaluate((node) => { const css = getComputedStyle(node); return { background: css.backgroundColor, clamp: css.webkitLineClamp }; });
+    expect(style.background).not.toBe("rgba(0, 0, 0, 0)");
+    expect(style.clamp).toBe("none");
+    const button = (await spotlight(page).getByRole("button", { name: "Save for later" }).boundingBox())!;
+    const box = (await alert.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(button.y + button.height);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await expect(spotlight(page).getByRole("button", { name: "Save for later" })).toBeEnabled();
+  }
   await expect(spotlight(page).getByText("In your library")).toHaveCount(0);
   expect((await stored(page)).library).toHaveLength(0);
   await page.evaluate(() => window.sessionStorage.removeItem("fail-save"));

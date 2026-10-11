@@ -22,12 +22,13 @@ export function saveForLaterStatus(media: CatalogMedia): LibraryStatus {
 }
 
 /**
- * Adds untracked media through the canonical `library.upsert` mutation. `library.upsert` overwrites an
- * existing status, so tracked media is left untouched. Rejects when the mutation fails.
+ * Adds untracked media through the canonical `library.upsert` mutation. The local check skips a needless
+ * request; `onlyIfUntracked` makes the persistence layer keep an existing entry if local state was stale.
+ * Rejects when the mutation fails.
  */
 export async function addIfUntracked(state: MosaicState, media: CatalogMedia, status: LibraryStatus, mutate: (mutation: PersistenceMutation) => Promise<void>): Promise<"added" | "already-tracked"> {
   if (state.library.some((entry) => mediaKey(entry.media) === mediaKey(media))) return "already-tracked";
-  await mutate({ type: "library.upsert", media, status });
+  await mutate({ type: "library.upsert", media, status, onlyIfUntracked: true });
   return "added";
 }
 
@@ -74,7 +75,7 @@ export function applyMutation(state: MosaicState, mutation: PersistenceMutation,
       break;
     case "library.upsert": {
       const existing = next.library.find((entry) => mediaKey(entry.media) === key);
-      if (existing) Object.assign(existing, { status: mutation.status, isFavorite: mutation.isFavorite ?? existing.isFavorite, updatedAt: now });
+      if (existing) { if (!mutation.onlyIfUntracked) Object.assign(existing, { status: mutation.status, isFavorite: mutation.isFavorite ?? existing.isFavorite, updatedAt: now }); }
       else next.library.unshift({ media: mutation.media, status: mutation.status, isFavorite: mutation.isFavorite ?? false, updatedAt: now });
       break;
     }

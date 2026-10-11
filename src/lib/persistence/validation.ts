@@ -23,7 +23,7 @@ const libraryStatus = z.enum(["watchlist", "watched", "watching", "completed", "
 
 export const sharedMutationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("settings.watchRegion"), value: z.string().regex(/^[A-Z]{2}$/).nullable() }),
-  z.object({ type: z.literal("library.upsert"), media: catalogMediaSchema, status: libraryStatus, isFavorite: z.boolean().optional() }),
+  z.object({ type: z.literal("library.upsert"), media: catalogMediaSchema, status: libraryStatus, isFavorite: z.boolean().optional(), onlyIfUntracked: z.boolean().optional() }),
   z.object({ type: z.literal("library.remove"), media: catalogMediaSchema }),
   z.object({ type: z.literal("rating.set"), media: catalogMediaSchema, value: rating.nullable() }),
   z.object({ type: z.literal("review.save"), id: z.uuid().optional(), media: catalogMediaSchema, body: z.string().trim().min(1).max(10_000), containsSpoilers: z.boolean(), rating: rating.optional() }),

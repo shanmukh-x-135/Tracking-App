@@ -141,7 +141,7 @@ export const emptyMosaicState = (): MosaicState => ({
 
 export type SharedMutation =
   | { type: "settings.watchRegion"; value: string | null }
-  | { type: "library.upsert"; media: CatalogMedia; status: LibraryStatus; isFavorite?: boolean }
+  | { type: "library.upsert"; media: CatalogMedia; status: LibraryStatus; isFavorite?: boolean; /** Insert only; an existing entry is left untouched. */ onlyIfUntracked?: boolean }
   | { type: "library.remove"; media: CatalogMedia }
   | { type: "rating.set"; media: CatalogMedia; value: number | null }
   | { type: "review.save"; id?: string; media: CatalogMedia; body: string; containsSpoilers: boolean; rating?: number }
