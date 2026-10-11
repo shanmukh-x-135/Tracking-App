@@ -38,7 +38,7 @@ test("profile fallback avatar and Edit Profile persist after refresh", async ({ 
   await page.getByLabel("Display name").fill("River Archive");
   await page.getByLabel("Username").fill("river_archive");
   await page.getByLabel("Bio").fill("Books, games, and slow cinema.");
-  await page.getByRole("button", { name: "Save profile" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Profile saved.")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "River Archive" })).toBeVisible();

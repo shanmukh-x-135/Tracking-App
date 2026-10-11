@@ -1,8 +1,8 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { users } from "@/data/media";
 import { getPublicEnvironment } from "@/lib/config/env";
 import { createClient } from "@/lib/supabase/server";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface PublicProfile {
   id: string;
@@ -48,7 +48,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
 
   return <div className="page"><div className="page-narrow">
     <header className="profile-header">
-      {profile.avatarUrl ? <Image className="avatar" src={profile.avatarUrl} alt={profile.displayName} width={96} height={96}/> : <span className="avatar avatar-fallback profile-avatar">{profile.displayName.slice(0, 1).toUpperCase()}</span>}
+      <UserAvatar className="avatar profile-avatar" name={profile.displayName} avatarUrl={profile.avatarUrl} size={96}/>
       <div><h1>{profile.displayName}</h1><span className="muted">@{profile.username}</span><p>{profile.bio ?? "Tracking stories across every medium."}</p></div>
       <div className="profile-counts"><div><strong>{profile.ratings}</strong><span>Ratings</span></div><div><strong>{profile.reviews}</strong><span>Reviews</span></div><div><strong>{profile.lists}</strong><span>Public lists</span></div></div>
     </header>

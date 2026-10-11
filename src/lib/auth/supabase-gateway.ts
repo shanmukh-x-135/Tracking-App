@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { createOAuthCallbackUrl } from "@/lib/auth/return-path";
 import type { AuthGateway, AuthResult, AuthUser, ProfileUpdate } from "@/lib/auth/types";
+import { avatarUrlProblem } from "@/lib/profile/avatars";
 
 function normalizeUser(user: User): AuthUser {
   return {
@@ -55,6 +56,8 @@ export const supabaseAuthGateway: AuthGateway = {
     const displayName = profile.displayName.trim();
     if (!displayName || displayName.length > 80) throw new Error("Display names must be between 1 and 80 characters.");
     if ((profile.bio?.length ?? 0) > 500) throw new Error("Bios can be at most 500 characters.");
+    const avatarProblem = avatarUrlProblem(profile.avatarUrl);
+    if (avatarProblem) throw new Error(avatarProblem);
     const { data, error } = await client.from("profiles").update({
       username,
       display_name: displayName,

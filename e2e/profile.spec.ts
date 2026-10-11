@@ -24,6 +24,8 @@ async function seedProfile(page: Page, options: { empty?: boolean } = {}) {
       gamePlaythroughs: [{ id: "game-1", media: game, status: "playing", playtimeMinutes: 300, progressPercent: 40, updatedAt: day(7) }],
       bookReadings: [{ id: "book-1", media: book, status: "finished", currentPage: 320, totalPages: 320, updatedAt: day(8) }],
     };
+    // Seed once per test context so saved edits survive a reload.
+    if (window.localStorage.getItem("mosaic:mock-user")) return;
     window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-profile-overview", email: "overview@example.com", displayName: "Overview Viewer", username: "overview" }));
     window.localStorage.setItem("mosaic:state:mock-profile-overview", JSON.stringify(state));
   }, { empty: Boolean(options.empty), posters: [0, 1, 2, 3].map(artwork) });
@@ -182,5 +184,75 @@ test("Stats stay honest and usable when empty on mobile", async ({ browser }) =>
   await expect(page.getByText("No film watches recorded so far.")).toBeVisible();
   await expect(page.getByText("Rate a story from its page and your rating pattern will appear here.")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await context.close();
+});
+
+test("Edit profile picks a Mosaic avatar, validates links and persists after reload", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await seedProfile(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/profile");
+  await page.getByRole("button", { name: "Edit profile" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit profile" });
+  await expect(dialog.getByRole("heading", { name: "Edit profile" })).toBeVisible();
+  await expect(dialog.getByText("Mosaic storage is not enabled", { exact: false })).toHaveCount(0);
+  const save = dialog.getByRole("button", { name: "Save changes" });
+  await expect(save).toBeDisabled();
+  // Choosing a preset updates the live preview immediately.
+  const eclipse = dialog.getByRole("radio", { name: "Eclipse" });
+  await eclipse.check({ force: true });
+  await expect(eclipse).toBeChecked();
+  await expect(dialog.locator(".profile-editor-preview img")).toHaveAttribute("src", /\/brand\/mosaic\/avatars\/eclipse\.svg$/);
+  await expect(dialog.locator(".profile-editor-preview-copy em")).toHaveText("Eclipse");
+  // Arrow keys move through the presets.
+  await eclipse.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByRole("radio", { name: "Nebula" })).toBeChecked();
+  // An invalid link is explained and blocks saving.
+  await dialog.getByRole("button", { name: "Use an image link instead" }).click();
+  const link = dialog.getByRole("textbox", { name: "Image link" });
+  await link.fill("http://example.com/me.png");
+  await expect(dialog.getByText("Image links must use https://.")).toBeVisible();
+  await expect(save).toBeDisabled();
+  await dialog.getByRole("radio", { name: "Portal" }).check({ force: true });
+  await dialog.getByLabel("Bio").fill("Slow cinema.");
+  await expect(dialog.getByText("12/500")).toBeVisible();
+  await page.screenshot({ path: "artifacts/profile-editor-1280.png" });
+  await save.click();
+  await expect(dialog.getByText("Profile saved.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.reload();
+  // The chosen avatar renders in the header and navigation after reload.
+  await expect(page.locator("main .profile-avatar")).toHaveAttribute("src", /\/brand\/mosaic\/avatars\/portal\.svg$/);
+  await expect(page.getByRole("link", { name: "Your profile" }).locator("img")).toHaveAttribute("src", /\/brand\/mosaic\/avatars\/portal\.svg$/);
+  await expect(page.getByText("Slow cinema.")).toBeVisible();
+  // Reopening starts from the saved state with the preset selected.
+  await page.getByRole("button", { name: "Edit profile" }).click();
+  await expect(page.getByRole("radio", { name: "Portal" })).toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test("a legacy custom avatar link is kept and falls back gracefully when it fails", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await seedProfile(page);
+  await page.addInitScript(() => {
+    const user = JSON.parse(window.localStorage.getItem("mosaic:mock-user")!);
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ ...user, avatarUrl: "https://invalid.example.invalid/missing.png" }));
+  });
+  await page.goto("/profile");
+  // A broken link shows the Mosaic fallback rather than a broken image.
+  await expect(page.locator("main .profile-avatar")).toHaveAttribute("src", /avatar-placeholder/);
+  await page.getByRole("button", { name: "Edit profile" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit profile" });
+  await expect(dialog.getByRole("textbox", { name: "Image link" })).toHaveValue("https://invalid.example.invalid/missing.png");
+  await expect(dialog.getByRole("radio", { name: "Your link" })).toBeChecked();
+  const box = (await dialog.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "artifacts/profile-editor-390.png" });
   await context.close();
 });

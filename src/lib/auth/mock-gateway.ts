@@ -1,4 +1,5 @@
 import type { AuthGateway, AuthResult, AuthUser, ProfileUpdate } from "@/lib/auth/types";
+import { avatarUrlProblem } from "@/lib/profile/avatars";
 
 const storageKey = "mosaic:mock-user";
 
@@ -54,6 +55,8 @@ export const mockAuthGateway: AuthGateway = {
     const displayName = profile.displayName.trim();
     const username = usernameFor(profile.username);
     if (!displayName || profile.username !== username) throw new Error("Use a display name and a username with 3–30 lowercase letters, numbers, or underscores.");
+    const avatarProblem = avatarUrlProblem(profile.avatarUrl);
+    if (avatarProblem) throw new Error(avatarProblem);
     const next = { ...user, displayName, username, bio: profile.bio?.trim() || undefined, avatarUrl: profile.avatarUrl?.trim() || undefined };
     saveUser(next);
     return next;
