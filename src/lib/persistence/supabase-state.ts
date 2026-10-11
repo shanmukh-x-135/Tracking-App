@@ -292,7 +292,11 @@ export async function applySharedSupabaseMutation(client: Client, userId: string
     assertResult(error);
   } else if (mutation.type === "library.upsert") {
     if (!statusMatchesMedia(mutation.media.mediaType, mutation.status)) throw new Error("That status does not apply to this media type.");
-    const { error } = await client.from("library_entries").upsert({ user_id: userId, media_id: mediaId, status: mutation.status, is_favorite: mutation.isFavorite ?? false }, { onConflict: "user_id,media_id" });
+    const { error } = await client.from("library_entries").upsert({
+      user_id: userId, media_id: mediaId, status: mutation.status,
+      // Omitted means "unchanged": merge-duplicates only updates sent columns, and inserts use the column default.
+      ...(mutation.isFavorite === undefined ? {} : { is_favorite: mutation.isFavorite }),
+    }, { onConflict: "user_id,media_id" });
     assertResult(error);
   } else if (mutation.type === "rating.set") {
     const query = mutation.value === null

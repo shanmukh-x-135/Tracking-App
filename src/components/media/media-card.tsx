@@ -35,11 +35,16 @@ export function MediaCard({ media, showType = false, priority = false, linkLabel
   const isSaved = state.library.some((entry) => mediaKey(entry.media) === mediaKey(catalogMedia));
   const signIn = () => router.push(`/login?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
 
+  const [saveError, setSaveError] = useState<string>();
   async function save(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     if (!user) { signIn(); return; }
-    await mutate({ type: "library.upsert", media: catalogMedia, status: defaultLibraryStatus(catalogMedia) });
+    // Only untracked items are added here; a tracked item's status is never overwritten from a card.
+    if (isSaved) return;
+    setSaveError(undefined);
+    try { await mutate({ type: "library.upsert", media: catalogMedia, status: defaultLibraryStatus(catalogMedia) }); }
+    catch { setSaveError(`Couldn't add ${media.title}. Try again.`); }
   }
 
   function openQuickLog(event: React.MouseEvent<HTMLButtonElement>) {
@@ -52,7 +57,7 @@ export function MediaCard({ media, showType = false, priority = false, linkLabel
   const isBook = media.mediaType === "book";
   const author = media.mediaType === "book" ? media.authors.join(", ") : undefined;
   const reducedMotion = useReducedMotion();
-  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}><button aria-label={isSaved ? `${media.title} is in your library` : `Add ${media.title} to library`} onClick={(event) => void save(event)}>{isSaved ? <BookmarkCheck size={15}/> : <Plus size={15}/>}</button><button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div></div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
+  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}>{isSaved ? <Link href={mediaHref(media)} aria-label={`${media.title} is in your library. Open it`}><BookmarkCheck size={15}/></Link> : <button aria-label={`Add ${media.title} to library`} onClick={(event) => void save(event)}><Plus size={15}/></button>}<button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div>{saveError && <p className="card-error" role="alert">{saveError}</p>}</div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
 }
 
 export function MediaShelf({ items, showType = false, label = "Media rail", linkLabelSuffix }: { items: CardMedia[]; showType?: boolean; label?: string; linkLabelSuffix?: string }) {

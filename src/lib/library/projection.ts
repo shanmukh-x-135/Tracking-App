@@ -1,6 +1,8 @@
-import type { MediaProvider } from "@/lib/media/types";
+import type { CatalogSeries, MediaProvider } from "@/lib/media/types";
+import { mediaStatuses } from "@/lib/persistence/validation";
 import { calculateBookProgress, mediaKey } from "@/lib/persistence/domain";
 import type { LibraryStatus, MosaicState } from "@/lib/persistence/types";
+import { deriveSeriesCurrentStatus } from "@/lib/current-media/projection";
 import { deriveSeriesProgress } from "@/lib/tv/series-progress";
 import type { MediaType } from "@/types/media";
 
@@ -48,10 +50,18 @@ export interface LibraryProjectionOptions {
   mediaType?: MediaType;
   status?: LibraryStatus;
   sort?: LibrarySort;
+  /** Case-insensitive match on title, original title and book authors. */
+  query?: string;
 }
 
 function latestByMedia<T extends { media: { provider: MediaProvider; mediaType: MediaType; providerId: string }; updatedAt: string }>(items: T[], id: string): T | undefined {
   return items.filter((item) => `${item.media.provider}:${item.media.mediaType}:${item.media.providerId}` === id).sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))[0];
+}
+
+function seriesStatus(state: MosaicState, series: CatalogSeries, stored: LibraryStatus): LibraryStatus {
+  const derived = deriveSeriesCurrentStatus(state, series).status;
+  // Imported history-only facts ("watched") are not a series status; keep the stored one then.
+  return derived && (mediaStatuses.tv as readonly string[]).includes(derived) ? derived : stored;
 }
 
 function compareEntries(first: MobileLibraryEntry, second: MobileLibraryEntry, sort: LibrarySort): number {
@@ -63,7 +73,9 @@ function compareEntries(first: MobileLibraryEntry, second: MobileLibraryEntry, s
 
 export function projectLibraryEntries(state: MosaicState, options: LibraryProjectionOptions = {}): MobileLibraryEntry[] {
   const ratings = new Map(state.ratings.map((rating) => [rating.mediaKey, rating.value]));
-  const entries = state.library.map((entry): MobileLibraryEntry => {
+  const query = options.query?.trim().toLocaleLowerCase();
+  const library = query ? state.library.filter(({ media }) => [media.title, media.originalTitle, ...("authors" in media ? media.authors : [])].some((text) => text?.toLocaleLowerCase().includes(query))) : state.library;
+  const entries = library.map((entry): MobileLibraryEntry => {
     const id = mediaKey(entry.media);
     const base = {
       id,
@@ -74,7 +86,8 @@ export function projectLibraryEntries(state: MosaicState, options: LibraryProjec
       posterUrl: entry.media.posterUrl,
       backdropUrl: entry.media.backdropUrl,
       releaseYear: entry.media.releaseYear,
-      status: entry.status,
+      // Series use the same derived status as the rest of Mosaic (imported series state wins).
+      status: entry.media.mediaType === "tv" ? seriesStatus(state, entry.media, entry.status) : entry.status,
       userRating: ratings.get(id) ?? null,
       isFavorite: entry.isFavorite,
       updatedAt: entry.updatedAt,

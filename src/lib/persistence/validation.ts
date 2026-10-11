@@ -49,12 +49,14 @@ export const domainMutationSchema = z.discriminatedUnion("type", [
 
 export const persistenceMutationSchema = z.union([sharedMutationSchema, domainMutationSchema]);
 
+/** The library statuses each medium accepts; the single source for validation and Library filters. */
+export const mediaStatuses = {
+  movie: ["watchlist", "watched"],
+  tv: ["watchlist", "watching", "completed", "paused", "dropped"],
+  game: ["backlog", "playing", "paused", "completed", "dropped"],
+  book: ["want_to_read", "reading", "paused", "finished", "dnf"],
+} as const;
+
 export function statusMatchesMedia(mediaType: "movie" | "tv" | "game" | "book", status: string): boolean {
-  const allowed = {
-    movie: ["watchlist", "watched"],
-    tv: ["watchlist", "watching", "completed", "paused", "dropped"],
-    game: ["backlog", "playing", "paused", "completed", "dropped"],
-    book: ["want_to_read", "reading", "paused", "finished", "dnf"],
-  } as const;
-  return (allowed[mediaType] as readonly string[]).includes(status);
+  return (mediaStatuses[mediaType] as readonly string[]).includes(status);
 }
