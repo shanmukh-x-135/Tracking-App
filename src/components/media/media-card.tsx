@@ -10,7 +10,8 @@ import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { createProviderKey } from "@/lib/media/identity";
 import { normalizeMock } from "@/lib/media/providers/mock";
 import type { CatalogMedia } from "@/lib/media/types";
-import { defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
+import { addIfUntracked, defaultLibraryStatus, mediaKey } from "@/lib/persistence/domain";
+import type { LibraryStatus } from "@/lib/persistence/types";
 import type { Media } from "@/types/media";
 import { motion, motionTokens, useReducedMotion } from "@/components/motion/motion";
 
@@ -26,25 +27,41 @@ export function mediaHref(media: CardMedia): string {
   return `/${type}/${encodeURIComponent(createProviderKey({ provider: media.provider, mediaType: media.mediaType, providerId: media.providerId }))}`;
 }
 
+function useSignIn(): () => void {
+  const router = useRouter();
+  return () => router.push(`/login?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
+}
+
+/** Shared "add to Library" action: signed-out users go to sign-in; tracked media is never reset. */
+export function useLibrarySave(media: CatalogMedia, status: LibraryStatus) {
+  const { user } = useAuth();
+  const { state, mutate } = useMosaicState();
+  const signIn = useSignIn();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const isSaved = state.library.some((entry) => mediaKey(entry.media) === mediaKey(media));
+  async function save(): Promise<void> {
+    if (!user) { signIn(); return; }
+    if (pending) return;
+    setPending(true);
+    setError(undefined);
+    try { await addIfUntracked(state, media, status, mutate); }
+    catch { setError(`Couldn't add ${media.title}. Try again.`); }
+    finally { setPending(false); }
+  }
+  return { isSaved, pending, error, save };
+}
+
 export function MediaCard({ media, showType = false, priority = false, linkLabelSuffix }: { media: CardMedia; showType?: boolean; priority?: boolean; linkLabelSuffix?: string }) {
   const catalogMedia = asCatalogMedia(media);
   const rating = ratingFor(media);
   const { user } = useAuth();
-  const { state, mutate } = useMosaicState();
-  const router = useRouter();
-  const isSaved = state.library.some((entry) => mediaKey(entry.media) === mediaKey(catalogMedia));
-  const signIn = () => router.push(`/login?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
-
-  const [saveError, setSaveError] = useState<string>();
-  async function save(event: React.MouseEvent<HTMLButtonElement>) {
+  const signIn = useSignIn();
+  const { isSaved, error: saveError, save: saveMedia } = useLibrarySave(catalogMedia, defaultLibraryStatus(catalogMedia));
+  function save(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
-    if (!user) { signIn(); return; }
-    // Only untracked items are added here; a tracked item's status is never overwritten from a card.
-    if (isSaved) return;
-    setSaveError(undefined);
-    try { await mutate({ type: "library.upsert", media: catalogMedia, status: defaultLibraryStatus(catalogMedia) }); }
-    catch { setSaveError(`Couldn't add ${media.title}. Try again.`); }
+    void saveMedia();
   }
 
   function openQuickLog(event: React.MouseEvent<HTMLButtonElement>) {
@@ -57,7 +74,7 @@ export function MediaCard({ media, showType = false, priority = false, linkLabel
   const isBook = media.mediaType === "book";
   const author = media.mediaType === "book" ? media.authors.join(", ") : undefined;
   const reducedMotion = useReducedMotion();
-  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}>{isSaved ? <Link href={mediaHref(media)} aria-label={`${media.title} is in your library. Open it`}><BookmarkCheck size={15}/></Link> : <button aria-label={`Add ${media.title} to library`} onClick={(event) => void save(event)}><Plus size={15}/></button>}<button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div>{saveError && <p className="card-error" role="alert">{saveError}</p>}</div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
+  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}>{isSaved ? <Link href={mediaHref(media)} aria-label={`${media.title} is in your library. Open it`}><BookmarkCheck size={15}/></Link> : <button aria-label={`Add ${media.title} to library`} onClick={save}><Plus size={15}/></button>}<button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div>{saveError && <p className="card-error" role="alert">{saveError}</p>}</div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
 }
 
 export function MediaShelf({ items, showType = false, label = "Media rail", linkLabelSuffix }: { items: CardMedia[]; showType?: boolean; label?: string; linkLabelSuffix?: string }) {

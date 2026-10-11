@@ -208,7 +208,7 @@ export class TmdbProvider implements CatalogProvider {
 
   async discoverSections(): Promise<CatalogDiscoverySection[]> {
     const definitions = [
-      ["movie-trending", "Trending now", "movie", "/trending/movie/week?language=en-US"],
+      ["movie-trending", "Trending movies", "movie", "/trending/movie/week?language=en-US"],
       ["movie-popular", "Popular movies", "movie", "/movie/popular?language=en-US&page=1"],
       ["movie-now-playing", "Now playing", "movie", "/movie/now_playing?language=en-US&page=1"],
       ["movie-upcoming", "Upcoming movies", "movie", "/movie/upcoming?language=en-US&page=1"],

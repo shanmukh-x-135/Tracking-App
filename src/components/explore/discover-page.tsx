@@ -2,23 +2,31 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Compass, Sparkles } from "lucide-react";
+import { BookmarkCheck, ChevronLeft, ChevronRight, Compass, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { MediaShelf, mediaHref } from "@/components/media/media-card";
+import { MediaShelf, mediaHref, useLibrarySave } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { AnimatePresence, motion, useReducedMotion } from "@/components/motion/motion";
 import { projectActivity } from "@/lib/activity/projection";
+import { discoveryRails, mediaPluralLabels, spotlightPosition } from "@/lib/media/discovery";
 import { mediaThemes } from "@/lib/media/themes";
 import { tmdbGenres } from "@/lib/media/providers/tmdb";
 import type { CatalogDiscoverySection, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
+import { mediaKey, saveForLaterStatus } from "@/lib/persistence/domain";
 import type { MediaType } from "@/types/media";
 
 const filters: ReadonlyArray<[string, MediaType | null]> = [["All", null], ["Movies", "movie"], ["Series", "tv"], ["Games", "game"], ["Books", "book"]];
 
 function uniqueMedia(items: CatalogMedia[]): CatalogMedia[] {
   return [...new Map(items.map((item) => [`${item.provider}:${item.mediaType}:${item.providerId}`, item])).values()];
+}
+
+function SpotlightSave({ media }: { media: CatalogMedia }): React.JSX.Element {
+  const { isSaved, pending, error, save } = useLibrarySave(media, saveForLaterStatus(media));
+  if (isSaved) return <span className="button ghost" role="status"><BookmarkCheck size={16}/> In your library</span>;
+  return <><button type="button" className="button ghost" disabled={pending} onClick={() => void save()}>{pending ? "Saving…" : "Save for later"}</button>{error && <p className="search-notice" role="alert">{error}</p>}</>;
 }
 
 export function DiscoverPage({ initialSections = [] }: { initialSections?: CatalogDiscoverySection[] }): React.JSX.Element {
@@ -74,8 +82,10 @@ export function DiscoverPage({ initialSections = [] }: { initialSections?: Catal
 
   const filteredSections = sections.filter((section) => !type || section.mediaType === type);
   const discovery = useMemo(() => uniqueMedia(filteredSections.flatMap((section) => section.items)), [filteredSections]);
+  const rails = discoveryRails(sections, type);
   const spotlight = discovery.slice(0, 4);
-  const activeSpotlight = spotlight[Math.min(spotlightIndex, Math.max(spotlight.length - 1, 0))];
+  const activeIndex = spotlightPosition(spotlightIndex, spotlight.length);
+  const activeSpotlight = spotlight[activeIndex];
   const recentGenres = useMemo(() => new Set(projectActivity(state).flatMap((event) => event.media.genres.map((genre) => genre.toLowerCase()))), [state]);
   const becauseYouWatched = useMemo(() => discovery.filter((item) => item.genres.some((genre) => recentGenres.has(genre.toLowerCase()))).slice(0, 12), [discovery, recentGenres]);
 
@@ -85,9 +95,9 @@ export function DiscoverPage({ initialSections = [] }: { initialSections?: Catal
     return () => window.clearInterval(timer);
   }, [reducedMotion, spotlight.length, spotlightPaused]);
 
-  function selectSpotlight(index: number): void { if (spotlight.length) setSpotlightIndex((index + spotlight.length) % spotlight.length); }
-  function finishSwipe(endX: number): void { const startX = touchStartX.current; touchStartX.current = undefined; if (startX !== undefined && Math.abs(startX - endX) >= 36) selectSpotlight(spotlightIndex + (startX > endX ? 1 : -1)); }
-  function chooseType(next: MediaType | null): void { setType(next); setSelectedGenre(undefined); setGenreItems(undefined); setThemeItems(undefined); }
+  function selectSpotlight(index: number): void { setSpotlightIndex(spotlightPosition(index, spotlight.length)); }
+  function finishSwipe(endX: number): void { const startX = touchStartX.current; touchStartX.current = undefined; if (startX !== undefined && Math.abs(startX - endX) >= 36) selectSpotlight(activeIndex + (startX > endX ? 1 : -1)); }
+  function chooseType(next: MediaType | null): void { setType(next); setSpotlightIndex(0); setSelectedGenre(undefined); setGenreItems(undefined); setThemeItems(undefined); }
   function chooseTheme(next: string): void { setSelectedTheme((current) => current === next ? undefined : next); setThemeItems(undefined); }
   function chooseGenre(next: number): void { setSelectedGenre((current) => current === next ? undefined : next); setGenreItems(undefined); }
 
@@ -95,8 +105,8 @@ export function DiscoverPage({ initialSections = [] }: { initialSections?: Catal
     {activeSpotlight && <section className="discover-spotlight" onMouseEnter={() => setSpotlightPaused(true)} onMouseLeave={() => setSpotlightPaused(false)} onFocusCapture={() => setSpotlightPaused(true)} onBlurCapture={() => setSpotlightPaused(false)} onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX; }} onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}>
       <div className="spotlight-ambient" aria-hidden="true"><Image src={activeSpotlight.backdropUrl ?? activeSpotlight.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="100vw"/></div>
       <div className="spotlight-art"><AnimatePresence mode="sync"><motion.div key={`${activeSpotlight.provider}:${activeSpotlight.providerId}`} className="spotlight-image" initial={reducedMotion ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -12 }} transition={{ duration: reducedMotion ? 0 : .46, ease: [0.22, 1, 0.36, 1] }}><Image src={activeSpotlight.backdropUrl ?? activeSpotlight.posterUrl ?? "/media-placeholder.svg"} alt="" fill priority sizes="100vw"/></motion.div></AnimatePresence></div>
-      <div className="spotlight-copy"><span className="eyebrow">Mosaic spotlight · {spotlightIndex + 1} of {spotlight.length}</span><h1>{activeSpotlight.title}</h1><p>{activeSpotlight.description ?? "A fresh story from the providers Mosaic has connected."}</p><div className="spotlight-meta"><span>{activeSpotlight.releaseYear ?? "New"}</span>{activeSpotlight.genres.slice(0, 2).map((genre) => <span key={genre}>{genre}</span>)}</div><div className="actions"><Link className="button primary" href={mediaHref(activeSpotlight)}>View story</Link><Link className="button ghost" href="/library">Save for later</Link></div></div>
-      {spotlight.length > 1 && <div className="spotlight-nav"><button type="button" className="icon-button" aria-label="Previous spotlight" onClick={() => selectSpotlight(spotlightIndex - 1)}><ChevronLeft size={18}/></button><div role="tablist" aria-label="Choose spotlight">{spotlight.map((item, index) => <button key={`${item.provider}:${item.providerId}`} type="button" className={`spotlight-dot ${index === spotlightIndex ? "active" : ""}`} role="tab" aria-selected={index === spotlightIndex} aria-label={`Show ${item.title}`} onClick={() => selectSpotlight(index)}/>)}</div><button type="button" className="icon-button" aria-label="Next spotlight" onClick={() => selectSpotlight(spotlightIndex + 1)}><ChevronRight size={18}/></button></div>}
+      <div className="spotlight-copy"><span className="eyebrow">Mosaic spotlight · {activeIndex + 1} of {spotlight.length}</span><h1>{activeSpotlight.title}</h1><p>{activeSpotlight.description ?? "A fresh story from the providers Mosaic has connected."}</p><div className="spotlight-meta"><span>{activeSpotlight.releaseYear ?? "New"}</span>{activeSpotlight.genres.slice(0, 2).map((genre) => <span key={genre}>{genre}</span>)}</div><div className="actions"><Link className="button primary" href={mediaHref(activeSpotlight)}>View story</Link><SpotlightSave key={mediaKey(activeSpotlight)} media={activeSpotlight}/></div></div>
+      {spotlight.length > 1 && <div className="spotlight-nav"><button type="button" className="icon-button" aria-label="Previous spotlight" onClick={() => selectSpotlight(activeIndex - 1)}><ChevronLeft size={18}/></button><div role="group" aria-label="Choose spotlight">{spotlight.map((item, index) => <button key={`${item.provider}:${item.providerId}`} type="button" className={`spotlight-dot ${index === activeIndex ? "active" : ""}`} aria-current={index === activeIndex ? "true" : undefined} aria-label={`Show ${item.title}`} onClick={() => selectSpotlight(index)}/>)}</div><button type="button" className="icon-button" aria-label="Next spotlight" onClick={() => selectSpotlight(activeIndex + 1)}><ChevronRight size={18}/></button></div>}
     </section>}
 
     <div className="discover-bridge-content">
@@ -109,7 +119,7 @@ export function DiscoverPage({ initialSections = [] }: { initialSections?: Catal
 
       <section className="discover-module theme-module" aria-labelledby="mosaic-themes"><div className="section-head"><div><span className="eyebrow"><Sparkles size={12}/> Mosaic themes</span><h2 id="mosaic-themes">Browse by a feeling</h2></div>{selectedTheme && <button type="button" className="text-link" onClick={() => { setSelectedTheme(undefined); setThemeItems(undefined); }}>Clear theme</button>}</div><div className="theme-chips">{mediaThemes.slice(0, 12).map((theme) => <button key={theme.id} type="button" className={selectedTheme === theme.id ? "active" : ""} onClick={() => chooseTheme(theme.id)}>{theme.label}</button>)}</div>{selectedTheme && <div className="theme-results">{themeItems === undefined ? <p className="muted">Building this shelf from provider metadata…</p> : themeItems.length ? <MediaShelf items={themeItems} showType label="Mosaic theme results"/> : <p className="muted">No reliable results are available for this theme right now.</p>}</div>}</section>
 
-      {filteredSections.slice(0, 4).map((section, index) => <section className={`discover-section discover-module discovery-rail rail-${index}`} key={section.id}><div className="section-head"><div><span className="eyebrow">{section.mediaType === "tv" ? "Series" : section.mediaType}</span><h2>{index === 0 ? "Trending now" : section.label}</h2></div></div>{section.items.length ? <MediaShelf items={section.items} showType={!type} label={section.label}/> : <p className="muted">{section.error ?? "No stories are available in this section right now."}</p>}</section>)}
+      {rails.map((section, index) => <section className={`discover-section discover-module discovery-rail rail-${index}`} key={section.id}><div className="section-head"><div><span className="eyebrow">{mediaPluralLabels[section.mediaType]}</span><h2>{section.label}</h2></div></div>{section.items.length ? <MediaShelf items={section.items} showType={!type} label={section.label}/> : <p className="muted">{section.error ?? "No stories are available in this section right now."}</p>}</section>)}
       {user && becauseYouWatched.length > 0 && <section className="discover-module because-module"><div className="section-head"><div><span className="eyebrow"><Compass size={12}/> Your history</span><h2>Because you watched</h2></div></div><MediaShelf items={becauseYouWatched} showType label="Because you watched"/></section>}
       {discovery.length > 0 && <section className="discover-module cross-media-module"><div className="section-head"><div><span className="eyebrow">Across Mosaic</span><h2>More than one kind of story</h2></div></div><MediaShelf items={discovery} showType label="Cross-media discovery"/></section>}
     </div>

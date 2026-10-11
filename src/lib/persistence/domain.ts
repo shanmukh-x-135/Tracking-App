@@ -1,6 +1,7 @@
 import { createProviderKey } from "@/lib/media/identity";
 import type { CatalogMedia } from "@/lib/media/types";
 import type { BookReading, LibraryStatus, MosaicState, PersistenceMutation } from "@/lib/persistence/types";
+import { mediaStatuses } from "@/lib/persistence/validation";
 
 export function mediaKey(media: CatalogMedia): string {
   return createProviderKey({ provider: media.provider, mediaType: media.mediaType, providerId: media.providerId });
@@ -13,6 +14,21 @@ export function defaultLibraryStatus(media: CatalogMedia): LibraryStatus {
     case "game": return "backlog";
     case "book": return "want_to_read";
   }
+}
+
+/** The medium's planned state (the first status each medium accepts): "save for later" never starts a series. */
+export function saveForLaterStatus(media: CatalogMedia): LibraryStatus {
+  return mediaStatuses[media.mediaType][0];
+}
+
+/**
+ * Adds untracked media through the canonical `library.upsert` mutation. `library.upsert` overwrites an
+ * existing status, so tracked media is left untouched. Rejects when the mutation fails.
+ */
+export async function addIfUntracked(state: MosaicState, media: CatalogMedia, status: LibraryStatus, mutate: (mutation: PersistenceMutation) => Promise<void>): Promise<"added" | "already-tracked"> {
+  if (state.library.some((entry) => mediaKey(entry.media) === mediaKey(media))) return "already-tracked";
+  await mutate({ type: "library.upsert", media, status });
+  return "added";
 }
 
 export function calculateBookProgress(currentPage?: number, totalPages?: number, explicitPercent?: number): number | undefined {

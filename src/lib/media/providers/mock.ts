@@ -51,7 +51,8 @@ export const mockCatalogProvider: CatalogProvider = {
   },
   async discoverSections(): Promise<CatalogDiscoverySection[]> {
     return (["movie", "tv", "game", "book"] as const).map((mediaType) => ({
-      id: `mock-${mediaType}`, mediaType, label: mediaType === "tv" ? "Series" : `${mediaType[0].toUpperCase()}${mediaType.slice(1)}s`,
+      // The whole fixture catalog per medium, so the label says exactly that rather than implying a trend.
+      id: `mock-${mediaType}`, mediaType, label: `${{ movie: "Movie", tv: "Series", game: "Game", book: "Book" }[mediaType]} catalog`,
       items: allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock),
     }));
   },
