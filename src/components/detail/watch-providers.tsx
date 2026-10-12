@@ -4,11 +4,11 @@ import Image from "next/image";
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
+import { regionStorageKey } from "@/lib/media/region";
 import type { CatalogMedia, WatchAvailability, WatchProviderKind } from "@/lib/media/types";
 
 const regions = [{ code: "IN", label: "India" }, { code: "US", label: "United States" }, { code: "GB", label: "United Kingdom" }, { code: "CA", label: "Canada" }, { code: "AU", label: "Australia" }];
 const labels: Record<WatchProviderKind, string> = { flatrate: "Stream", free: "Free", ads: "Free with ads", rent: "Rent", buy: "Buy" };
-const regionStorageKey = "mosaic.watch-region";
 
 export function WatchProviders({ media }: { media: Extract<CatalogMedia, { mediaType: "movie" | "tv" }> }) {
   const { state, mutate } = useMosaicState();

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { CommunityRating } from "@/components/media/community-rating";
 import Link from "next/link";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -63,7 +64,7 @@ function BookHero({ media, franchise }: { media: CatalogBook; franchise?: Franch
       <div className="book-cover"><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt={`${media.title} cover`} fill loading="eager" sizes="(max-width: 560px) 150px, 240px"/></div>
       <div className="book-copy"><span className="type-badge">Book</span><h1>{media.title}</h1>{media.subtitle && <p className="book-subtitle">{media.subtitle}</p>}
         {media.authors.length > 0 && <p className="book-author-detail">{media.authors.join(", ")}</p>}
-        <div className="book-meta">{media.releaseYear && <span>Published {media.releaseYear}</span>}{media.pageCount && <span>{media.pageCount} pages</span>}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        <div className="book-meta">{media.releaseYear && <span>Published {media.releaseYear}</span>}{media.pageCount && <span>{media.pageCount} pages</span>}<CommunityRating media={media}/></div>
         {categories.length > 0 && <div className="book-categories">{visibleCategories.map((category) => <span key={category}>{category}</span>)}{!isExpanded && categories.length > visibleCategories.length && <button type="button" onClick={() => setIsExpanded(true)}>+{categories.length - visibleCategories.length} more</button>}</div>}
         <div className={`book-synopsis ${isExpanded ? "expanded" : ""}`}><p>{synopsis}</p>{hasLongSynopsis && <button type="button" className="text-link" onClick={() => setIsExpanded((value) => !value)}>{isExpanded ? "Show less" : "Read more"}</button>}</div>
         {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>
@@ -229,7 +230,7 @@ export function DetailPage({ media }: { media: CatalogMedia }) {
     <section className="detail-hero"><div className="detail-backdrop"><Image src={backdrop} alt="" fill loading="eager" sizes="100vw"/></div><div className="detail-content">
       <div className="detail-poster"><Image src={poster} alt={`${media.title} artwork`} fill loading="eager" sizes="190px"/></div>
       <div className="detail-copy"><span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span><h1>{media.title}</h1>
-        <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}{media.communityRating !== undefined && <span className="rating">★ {media.communityRating.toFixed(1)}</span>}</div>
+        <div className="hero-meta">{heroMetadata.map((value, index) => <span key={value}>{index > 0 ? `· ${value}` : value}</span>)}<CommunityRating media={media}/></div>
         <BrandMark media={media}/>
         <p>{media.description || "A description is not available for this title yet."}</p>
         {franchise && <Link className="franchise-link" href={`/franchise/${franchise.slug}`}>Part of {franchise.title} →</Link>}<PersistentMediaActions media={media}/>

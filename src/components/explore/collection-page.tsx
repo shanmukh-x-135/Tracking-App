@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MediaCard, MediaShelf, MediaShelfSkeleton } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
-import { findTheme, themesForMediaType } from "@/lib/media/themes";
+import { findTheme, themeSupports, themesForMediaType } from "@/lib/media/themes";
 import type { CatalogDiscoverySection, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import type { LibraryStatus } from "@/lib/persistence/types";
 import type { MediaType } from "@/types/media";
@@ -79,7 +79,7 @@ export function CollectionPage({ mode }: { mode: "discover" | "library" }) {
   function selectType(value: MediaType | null) {
     const next = new URLSearchParams();
     if (value) next.set("type", value);
-    if (theme && (!value || theme.rules[value])) next.set("theme", theme.id);
+    if (theme && (!value || themeSupports(theme, value))) next.set("theme", theme.id);
     const nextUrl = `${window.location.pathname}${next.size ? `?${next}` : ""}`;
     window.history.pushState(null, "", nextUrl);
     setStatus(undefined);

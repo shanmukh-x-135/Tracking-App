@@ -3,7 +3,8 @@ import test from "node:test";
 import { createProviderKey, isProviderKey, parseProviderKey } from "../src/lib/media/identity";
 import { GoogleBooksProvider, normalizeGoogleBook } from "../src/lib/media/providers/google-books";
 import { IgdbProvider, normalizeIgdb } from "../src/lib/media/providers/igdb";
-import { normalizeTmdb, tmdbGenres, TmdbProvider } from "../src/lib/media/providers/tmdb";
+import { normalizeTmdb, TmdbProvider } from "../src/lib/media/providers/tmdb";
+import { tmdbMovieGenres } from "../src/lib/media/genres";
 import { mockCatalogProvider } from "../src/lib/media/providers/mock";
 import { aggregateProviderSearch } from "../src/lib/media/search";
 import { franchises } from "../src/lib/media/franchises";
@@ -102,7 +103,7 @@ test("TMDB provider genre discovery uses a stable numeric with_genres filter", a
   const items = await provider.discoverByGenre("movie", 28);
   assert.match(endpoint, /\/discover\/movie\?with_genres=28/);
   assert.deepEqual(items.map(({ title }) => title), ["Genre result"]);
-  assert.ok(tmdbGenres.some((genre) => genre.id === 28 && genre.name === "Action"));
+  assert.ok(tmdbMovieGenres.some((genre) => genre.id === 28 && genre.name === "Action"));
   assert.deepEqual(await provider.discoverByGenre("movie", 123_456), []);
 });
 
@@ -170,7 +171,7 @@ test("Google Books retries transient discovery failures without parallel shelf f
   const provider = new GoogleBooksProvider("key", async () => {
     calls += 1;
     if (calls === 1) return new Response("temporarily unavailable", { status: 503 });
-    return new Response(JSON.stringify({ items: [{ id: "fiction", volumeInfo: { title: "Fiction Shelf" } }] }), { status: 200 });
+    return new Response(JSON.stringify({ items: [{ id: "fiction", volumeInfo: { title: "Fiction Shelf", categories: ["Fiction"] } }] }), { status: 200 });
   });
   const sections = await provider.discoverSections();
   assert.equal(calls, 2);

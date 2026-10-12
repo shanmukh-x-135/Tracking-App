@@ -1,4 +1,7 @@
 import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider, WatchAvailability, WatchProvider, WatchProviderKind } from "@/lib/media/types";
+import { isGenreFor, tmdbGenreNames } from "@/lib/media/genres";
+import { fallbackRegion, releaseWindows, utcDay, type DiscoveryOptions } from "@/lib/media/region";
+import type { MediaTheme } from "@/lib/media/themes";
 import { providerJson, ProviderUnavailableError } from "@/lib/media/providers/errors";
 
 const apiBase = "https://api.themoviedb.org/3";
@@ -18,6 +21,7 @@ export interface TmdbMedia {
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
+  vote_count?: number;
   genres?: TmdbGenre[];
   genre_ids?: number[];
   runtime?: number;
@@ -46,21 +50,6 @@ interface TmdbSeason { episodes?: TmdbSeasonEpisode[] }
 interface TmdbWatchProvider { provider_id?: number; provider_name?: string; logo_path?: string | null }
 interface TmdbWatchResults { results?: Record<string, { link?: string; flatrate?: TmdbWatchProvider[]; free?: TmdbWatchProvider[]; ads?: TmdbWatchProvider[]; rent?: TmdbWatchProvider[]; buy?: TmdbWatchProvider[] }> }
 
-export const tmdbGenres: ReadonlyArray<{ id: number; name: string }> = [
-  { id: 28, name: "Action" }, { id: 12, name: "Adventure" }, { id: 16, name: "Animation" },
-  { id: 35, name: "Comedy" }, { id: 80, name: "Crime" }, { id: 99, name: "Documentary" },
-  { id: 18, name: "Drama" }, { id: 10751, name: "Family" }, { id: 14, name: "Fantasy" },
-  { id: 36, name: "History" }, { id: 27, name: "Horror" }, { id: 10402, name: "Music" },
-  { id: 9648, name: "Mystery" }, { id: 10749, name: "Romance" }, { id: 878, name: "Science Fiction" },
-  { id: 53, name: "Thriller" }, { id: 10752, name: "War" }, { id: 37, name: "Western" },
-];
-
-const genreNames: Record<number, string> = {
-  12: "Adventure", 14: "Fantasy", 16: "Animation", 18: "Drama", 27: "Horror",
-  28: "Action", 35: "Comedy", 36: "History", 53: "Thriller", 80: "Crime",
-  878: "Science Fiction", 9648: "Mystery", 10749: "Romance", 10765: "Sci-Fi & Fantasy",
-};
-
 function image(path: string | null | undefined, size: "w500" | "w1280"): string | undefined {
   return path ? `${imageBase}/${size}${path}` : undefined;
 }
@@ -70,7 +59,7 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
   if (mediaType !== "movie" && mediaType !== "tv") return null;
   const releaseDate = mediaType === "movie" ? item.release_date : item.first_air_date;
   const genres = item.genres?.map((genre) => genre.name)
-    ?? item.genre_ids?.map((id) => genreNames[id]).filter((name): name is string => Boolean(name))
+    ?? item.genre_ids?.map((id) => tmdbGenreNames[id]).filter((name): name is string => Boolean(name))
     ?? [];
   const base = {
     providerId: String(item.id), provider: "tmdb" as const, mediaType,
@@ -79,7 +68,7 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
     description: item.overview || undefined, posterUrl: image(item.poster_path, "w500"),
     backdropUrl: image(item.backdrop_path, "w1280"), releaseDate: releaseDate || undefined,
     releaseYear: releaseDate && /^\d{4}/.test(releaseDate) ? Number(releaseDate.slice(0, 4)) : undefined,
-    genres, communityRating: item.vote_average || undefined,
+    genres, communityRating: item.vote_average || undefined, communityRatingCount: item.vote_count || undefined,
   };
   if (mediaType === "movie") return {
     ...base, mediaType, runtimeMinutes: item.runtime,
@@ -116,6 +105,16 @@ export function normalizeTmdb(item: TmdbMedia, forcedType?: "movie" | "tv"): Cat
     }] : []),
     network: item.networks?.[0]?.name, networkLogoUrl: image(item.networks?.[0]?.logo_path, "w500"),
   };
+}
+
+/**
+ * With `region` set, TMDB returns the earliest regional release date. A limited release can precede the wide
+ * one, so this guard keeps titles already out in the region off Upcoming and unreleased ones off Now playing.
+ */
+export function releaseFits(sectionId: string, releaseDate: string | undefined, today: string): boolean {
+  if (sectionId === "movie-upcoming") return Boolean(releaseDate && /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) && releaseDate > today);
+  if (sectionId === "movie-now-playing") return Boolean(releaseDate && /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) && releaseDate <= today);
+  return true;
 }
 
 export class TmdbProvider implements CatalogProvider {
@@ -200,30 +199,45 @@ export class TmdbProvider implements CatalogProvider {
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12);
   }
 
-  async discoverByGenre(mediaType: "movie" | "tv", genreId: number): Promise<CatalogMedia[]> {
-    if (!tmdbGenres.some((genre) => genre.id === genreId)) return [];
+  async discoverByGenre(mediaType: "movie" | "tv" | "game", genreId: number): Promise<CatalogMedia[]> {
+    // Movie and TV genre IDs differ; an ID from the other list is never sent.
+    if (mediaType === "game" || !isGenreFor(mediaType, genreId)) return [];
     const data = await this.request<{ results?: TmdbMedia[] }>(`/discover/${mediaType}?with_genres=${genreId}&include_adult=false&include_video=false&language=en-US&sort_by=popularity.desc&page=1`);
     return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 18);
   }
 
-  async discoverSections(): Promise<CatalogDiscoverySection[]> {
+  async discoverByTheme(mediaType: "movie" | "tv" | "game" | "book", theme: MediaTheme): Promise<CatalogMedia[]> {
+    const keywords = theme.rules.tmdbKeywords;
+    if ((mediaType !== "movie" && mediaType !== "tv") || !keywords?.length) return [];
+    // "|" is TMDB's OR between keyword IDs.
+    const data = await this.request<{ results?: TmdbMedia[] }>(`/discover/${mediaType}?with_keywords=${keywords.join("%7C")}&sort_by=popularity.desc&include_adult=false&include_video=false&language=en-US&page=1`);
+    return (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 18);
+  }
+
+  async discoverSections(options: DiscoveryOptions = { region: fallbackRegion, today: utcDay() }): Promise<CatalogDiscoverySection[]> {
+    // Release rails use explicit regional theatrical release-date windows (types 2|3) instead of TMDB's
+    // now_playing/upcoming lists, whose own windows overlap and can list titles already out in the region.
+    const { nowPlaying, upcoming } = releaseWindows(options.today);
+    const regional = (from: string, to: string, sort: string) => `/discover/movie?region=${options.region}&with_release_type=2%7C3&release_date.gte=${from}&release_date.lte=${to}&sort_by=${sort}&include_adult=false&include_video=false&language=en-US&page=1`;
     const definitions = [
       ["movie-trending", "Trending movies", "movie", "/trending/movie/week?language=en-US"],
       ["movie-popular", "Popular movies", "movie", "/movie/popular?language=en-US&page=1"],
-      ["movie-now-playing", "Now playing", "movie", "/movie/now_playing?language=en-US&page=1"],
-      ["movie-upcoming", "Upcoming movies", "movie", "/movie/upcoming?language=en-US&page=1"],
+      ["movie-now-playing", "Now playing", "movie", regional(nowPlaying.from, nowPlaying.to, "popularity.desc")],
+      ["movie-upcoming", "Upcoming movies", "movie", regional(upcoming.from, upcoming.to, "popularity.desc")],
       ["movie-top-rated", "Top rated movies", "movie", "/movie/top_rated?language=en-US&page=1"],
       ["tv-trending", "Trending series", "tv", "/trending/tv/week?language=en-US"],
       ["tv-popular", "Popular series", "tv", "/tv/popular?language=en-US&page=1"],
       ["tv-on-the-air", "Currently airing", "tv", "/tv/on_the_air?language=en-US&page=1"],
       ["tv-top-rated", "Top rated series", "tv", "/tv/top_rated?language=en-US&page=1"],
     ] as const;
+    const regionOf = (id: string) => id === "movie-now-playing" || id === "movie-upcoming" ? { region: options.region } : {};
     const settled = await Promise.allSettled(definitions.map(async ([id, label, mediaType, path]) => {
       const data = await this.request<{ results?: TmdbMedia[] }>(path);
-      return { id: `tmdb-${id}`, label, mediaType, items: (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null).slice(0, 12) } satisfies CatalogDiscoverySection;
+      const items = (data.results ?? []).map((item) => normalizeTmdb(item, mediaType)).filter((item): item is CatalogMedia => item !== null);
+      return { id: `tmdb-${id}`, label, mediaType, ...regionOf(id), items: items.filter((item) => releaseFits(id, item.releaseDate, options.today)).slice(0, 12) } satisfies CatalogDiscoverySection;
     }));
     return settled.map((outcome, index) => outcome.status === "fulfilled" ? outcome.value : {
-      id: `tmdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: definitions[index][2], items: [], error: "This provider section is temporarily unavailable.",
+      id: `tmdb-${definitions[index][0]}`, label: definitions[index][1], mediaType: definitions[index][2], ...regionOf(definitions[index][0]), items: [], error: "This provider section is temporarily unavailable.",
     });
   }
 

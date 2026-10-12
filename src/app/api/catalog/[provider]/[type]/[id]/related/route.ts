@@ -9,5 +9,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ provider: 
   if (!isMediaProvider(provider) || !mediaTypes.has(type as MediaType)) return NextResponse.json({ error: "Unknown catalog route." }, { status: 404 });
   const media = await getCatalogItem({ provider, mediaType: type as MediaType, providerId: id }).catch(() => null);
   if (!media) return NextResponse.json({ error: "This title is unavailable." }, { status: 404 });
-  return NextResponse.json(await relatedCatalog(media));
+  const result = await relatedCatalog(media);
+  return NextResponse.json(result, result.failures.length ? undefined : { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } });
 }

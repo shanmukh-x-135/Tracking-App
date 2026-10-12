@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight, Plus, Star } from "lucide-react";
+import { BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { CommunityRating } from "@/components/media/community-rating";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
 import { createProviderKey } from "@/lib/media/identity";
 import { normalizeMock } from "@/lib/media/providers/mock";
@@ -19,7 +20,6 @@ type CardMedia = Media | CatalogMedia;
 
 function isCatalogMedia(media: CardMedia): media is CatalogMedia { return "providerId" in media; }
 function asCatalogMedia(media: CardMedia): CatalogMedia { return isCatalogMedia(media) ? media : normalizeMock(media); }
-function ratingFor(media: CardMedia): number | undefined { return isCatalogMedia(media) ? media.communityRating : media.averageRating; }
 
 export function mediaHref(media: CardMedia): string {
   const type = media.mediaType === "tv" ? "series" : media.mediaType;
@@ -54,7 +54,6 @@ export function useLibrarySave(media: CatalogMedia, status: LibraryStatus) {
 
 export function MediaCard({ media, showType = false, priority = false, linkLabelSuffix }: { media: CardMedia; showType?: boolean; priority?: boolean; linkLabelSuffix?: string }) {
   const catalogMedia = asCatalogMedia(media);
-  const rating = ratingFor(media);
   const { user } = useAuth();
   const signIn = useSignIn();
   const { isSaved, error: saveError, save: saveMedia } = useLibrarySave(catalogMedia, defaultLibraryStatus(catalogMedia));
@@ -74,7 +73,7 @@ export function MediaCard({ media, showType = false, priority = false, linkLabel
   const isBook = media.mediaType === "book";
   const author = media.mediaType === "book" ? media.authors.join(", ") : undefined;
   const reducedMotion = useReducedMotion();
-  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}>{isSaved ? <Link href={mediaHref(media)} aria-label={`${media.title} is in your library. Open it`}><BookmarkCheck size={15}/></Link> : <button aria-label={`Add ${media.title} to library`} onClick={save}><Plus size={15}/></button>}<button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div>{rating !== undefined && <span className="rating"><Star size={12} fill="currentColor"/> {rating.toFixed(1)}</span>}</div>{saveError && <p className="card-error" role="alert">{saveError}</p>}</div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span>{rating !== undefined && <span className="rating">★ {rating.toFixed(1)}</span>}</div></Link></motion.article>;
+  return <motion.article className={`media-card ${isBook ? "book-card" : ""}`} whileHover={reducedMotion ? undefined : { y: -4 }} transition={motionTokens.normal}><div className="poster-wrap"><Link className="poster-link" href={mediaHref(media)} aria-label={linkLabelSuffix ? `${linkLabelSuffix}: ${media.title}` : `View ${media.title}`}><Image src={media.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="(max-width: 560px) 42vw, (max-width: 1100px) 20vw, 15vw" priority={priority}/></Link><div className="poster-overlay"><div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>{showType && <span className="type-badge">{media.mediaType === "tv" ? "Series" : media.mediaType}</span>}<div className="card-actions" style={{ marginLeft: "auto" }}>{isSaved ? <Link href={mediaHref(media)} aria-label={`${media.title} is in your library. Open it`}><BookmarkCheck size={15}/></Link> : <button aria-label={`Add ${media.title} to library`} onClick={save}><Plus size={15}/></button>}<button aria-label={`Log ${media.title}`} onClick={openQuickLog}><BookmarkPlus size={14}/></button></div></div><CommunityRating media={catalogMedia} compact/></div>{saveError && <p className="card-error" role="alert">{saveError}</p>}</div><Link className="card-info" href={mediaHref(media)}><div className="card-title">{media.title}</div>{author && <div className="book-author">{author}</div>}<div className="card-meta"><span>{media.releaseYear ?? "Year unknown"}</span><CommunityRating media={catalogMedia}/></div></Link></motion.article>;
 }
 
 export function MediaShelf({ items, showType = false, label = "Media rail", linkLabelSuffix }: { items: CardMedia[]; showType?: boolean; label?: string; linkLabelSuffix?: string }) {

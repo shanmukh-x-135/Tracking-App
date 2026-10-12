@@ -1,4 +1,6 @@
 import { allMedia } from "@/data/media";
+import { genreCatalogs } from "@/lib/media/genres";
+import { scoreThemeMatch, themeSupports } from "@/lib/media/themes";
 import type { CatalogDiscoverySection, CatalogEpisode, CatalogMedia, CatalogProvider } from "@/lib/media/types";
 import type { Media, TvSeries } from "@/types/media";
 
@@ -48,6 +50,19 @@ export const mockCatalogProvider: CatalogProvider = {
   },
   async discover(mediaType) {
     return allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock);
+  },
+  async discoverByGenre(mediaType, genreId) {
+    const genre = genreCatalogs[mediaType].genres.find(({ id }) => id === genreId);
+    if (!genre) return [];
+    // Fixtures carry plain names: "Role-playing (RPG)" matches "RPG", "Action & Adventure" matches either half.
+    const names = new Set([genre.name, ...genre.name.split(" & "), ...(genre.name.match(/\(([^)]+)\)/)?.slice(1) ?? [])].map((name) => name.toLowerCase()));
+    return allMedia.filter((item) => item.mediaType === mediaType && item.genres.some((name) => names.has(name.toLowerCase()))).map(normalizeMock);
+  },
+  async discoverByTheme(mediaType, theme) {
+    if (!themeSupports(theme, mediaType)) return [];
+    return allMedia.filter((item) => item.mediaType === mediaType).map(normalizeMock)
+      .map((item) => ({ item, score: scoreThemeMatch(item, theme) })).filter(({ score }) => score > 0)
+      .sort((first, second) => second.score - first.score || first.item.title.localeCompare(second.item.title)).map(({ item }) => item);
   },
   async discoverSections(): Promise<CatalogDiscoverySection[]> {
     return (["movie", "tv", "game", "book"] as const).map((mediaType) => ({

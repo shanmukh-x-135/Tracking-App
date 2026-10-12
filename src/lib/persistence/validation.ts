@@ -7,7 +7,7 @@ const base = {
   title: z.string().trim().min(1).max(500), originalTitle: optionalText,
   description: z.string().max(20_000).optional(), posterUrl: z.url().optional(), backdropUrl: z.url().optional(),
   releaseDate: z.string().max(30).optional(), releaseYear: z.number().int().min(1000).max(3000).optional(),
-  genres: z.array(z.string().trim().min(1).max(100)).max(30), communityRating: z.number().min(0).max(10).optional(),
+  genres: z.array(z.string().trim().min(1).max(100)).max(30), communityRating: z.number().min(0).max(10).optional(), communityRatingCount: z.number().int().nonnegative().optional(),
 };
 
 export const catalogMediaSchema = z.discriminatedUnion("mediaType", [

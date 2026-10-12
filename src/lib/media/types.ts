@@ -1,3 +1,6 @@
+import type { GenreMediaType } from "@/lib/media/genres";
+import type { DiscoveryOptions } from "@/lib/media/region";
+import type { MediaTheme } from "@/lib/media/themes";
 import type { MediaType } from "@/types/media";
 
 export type MediaProvider = "tmdb" | "igdb" | "googlebooks" | "mock";
@@ -14,7 +17,9 @@ interface CatalogMediaBase {
   releaseDate?: string;
   releaseYear?: number;
   genres: string[];
+  /** Provider community score in the provider's stored scale; display via `communityRatingFor`. */
   communityRating?: number;
+  communityRatingCount?: number;
 }
 
 export interface CatalogMovie extends CatalogMediaBase {
@@ -110,9 +115,11 @@ export interface CatalogProvider {
   getById(providerId: string, mediaType?: MediaType): Promise<CatalogMedia | null>;
   getSeasonEpisodes?(providerId: string, seasonNumber: number): Promise<CatalogEpisode[]>;
   discover?(mediaType: MediaType): Promise<CatalogMedia[]>;
-  /** Provider-native genre discovery. Only implemented where the provider has stable IDs. */
-  discoverByGenre?(mediaType: "movie" | "tv", genreId: number): Promise<CatalogMedia[]>;
-  discoverSections?(): Promise<CatalogDiscoverySection[]>;
+  /** Provider-native genre discovery with the medium's own genre IDs (see `genreCatalogs`). */
+  discoverByGenre?(mediaType: GenreMediaType, genreId: number): Promise<CatalogMedia[]>;
+  discoverSections?(options?: DiscoveryOptions): Promise<CatalogDiscoverySection[]>;
+  /** Titles carrying a theme's provider metadata (see `ThemeRules`); [] when the medium is unsupported. */
+  discoverByTheme?(mediaType: MediaType, theme: MediaTheme): Promise<CatalogMedia[]>;
   related?(media: CatalogMedia): Promise<CatalogMedia[]>;
   getWatchAvailability?(providerId: string, mediaType: "movie" | "tv", country: string): Promise<WatchAvailability | null>;
 }
@@ -129,6 +136,8 @@ export interface CatalogDiscoverySection {
   mediaType: MediaType;
   items: CatalogMedia[];
   error?: string;
+  /** Set when the section's content depends on a release region. */
+  region?: string;
 }
 
 export interface CatalogSearchResult {

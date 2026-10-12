@@ -1,38 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findTheme, scoreThemeMatch, themeSearchTerms, themesForMediaType } from "../src/lib/media/themes";
+import { mockCatalogProvider } from "../src/lib/media/providers/mock";
+import { findTheme, mediaThemes, scoreThemeMatch, themeMediaTypes, themesForMediaType, themeSupports } from "../src/lib/media/themes";
 
-test("theme registry exposes deterministic semantic provider-backed mappings", () => {
-  const cyberpunk = findTheme("cyberpunk");
-  assert.ok(cyberpunk);
-  assert.deepEqual(themeSearchTerms(cyberpunk, "game"), ["science fiction", "futuristic action"]);
-  assert.ok(!themeSearchTerms(cyberpunk, "game").includes("cyberpunk"));
-  assert.ok(cyberpunk.rules.game?.providerSignals.includes("igdb.theme"));
+test("every theme maps to provider metadata, never to a bare genre alias", () => {
+  for (const theme of mediaThemes) {
+    assert.ok(theme.rules.tmdbKeywords?.length, `${theme.id} needs TMDB keywords`);
+    assert.ok(theme.rules.tmdbKeywords.every((id) => Number.isInteger(id) && id > 0));
+  }
+  const cyberpunk = findTheme("cyberpunk")!;
+  assert.deepEqual(cyberpunk.rules.tmdbKeywords, [12190]);
+  assert.deepEqual(cyberpunk.rules.igdb, { keywords: [103] });
   assert.equal(findTheme("made-up-theme"), undefined);
 });
 
-test("Slow Burn never becomes a literal title search", () => {
-  const slowBurn = findTheme("slow-burn");
-  assert.ok(slowBurn);
-  for (const mediaType of ["movie", "tv", "book"] as const) {
-    const terms = themeSearchTerms(slowBurn, mediaType);
-    assert.ok(terms.length > 0);
-    assert.ok(!terms.some((term) => term.toLowerCase() === "slow burn"));
-  }
+test("different themes query different provider metadata", () => {
+  const signatures = mediaThemes.map((theme) => JSON.stringify(theme.rules.tmdbKeywords));
+  assert.equal(new Set(signatures).size, mediaThemes.length);
 });
 
-test("theme registry defers unsupported domain combinations", () => {
-  const basedOnBook = findTheme("based-on-a-book");
-  assert.ok(basedOnBook);
-  assert.deepEqual(themeSearchTerms(basedOnBook, "book"), []);
+test("unsupported medium combinations are explicit", () => {
+  const slowBurn = findTheme("slow-burn")!;
+  assert.deepEqual(themeMediaTypes(slowBurn), ["movie", "tv"]);
+  assert.equal(themeSupports(findTheme("found-family")!, "game"), false);
+  assert.equal(themeSupports(findTheme("based-on-a-book")!, "book"), false);
   assert.equal(themesForMediaType("book").some((theme) => theme.id === "based-on-a-book"), false);
+  assert.equal(themesForMediaType(null).length, mediaThemes.length);
 });
 
-test("theme scoring ranks provider metadata without assigning a theme to unmatched media", () => {
-  const slowBurn = findTheme("slow-burn");
-  assert.ok(slowBurn?.rules.movie);
-  const match = { provider: "mock" as const, providerId: "one", mediaType: "movie" as const, title: "A quiet character study", genres: ["Drama"], description: "A psychological portrait." };
-  const unrelated = { ...match, providerId: "two", title: "Space battle", genres: ["Action"], description: "" };
-  assert.ok(scoreThemeMatch(match, slowBurn.rules.movie) > 0);
-  assert.equal(scoreThemeMatch(unrelated, slowBurn.rules.movie), 0);
+test("Slow Burn never becomes a literal book title search", () => {
+  assert.equal(findTheme("slow-burn")!.rules.bookQuery, undefined);
+});
+
+test("mock theme ranking uses fixture text and assigns nothing to unmatched media", async () => {
+  const mystery = findTheme("mystery")!;
+  const match = { provider: "mock" as const, providerId: "one", mediaType: "movie" as const, title: "The detective", genres: ["Mystery"], description: "A whodunit." };
+  assert.ok(scoreThemeMatch(match, mystery) > 0);
+  assert.equal(scoreThemeMatch({ ...match, title: "Space battle", genres: ["Action"], description: "" }, mystery), 0);
+  assert.deepEqual(await mockCatalogProvider.discoverByTheme!("game", findTheme("found-family")!), []);
 });

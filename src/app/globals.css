@@ -86,6 +86,10 @@ button { color: inherit; }
 .hero h1 { margin:16px 0 14px; font-size:clamp(48px,7vw,92px); line-height:.9; letter-spacing:-.075em; max-width:620px; }
 .hero-meta { display:flex; align-items:center; flex-wrap:wrap; gap:11px; font-size:14px; color:var(--foreground-secondary); }
 .rating { color:var(--rating); font-weight:750; }
+.community-rating { white-space:nowrap; }
+.community-rating small { margin-left:2px; color:var(--foreground-muted); font-size:.82em; font-weight:650; }
+/* On narrow cards the score drops below the year as one unit instead of breaking inside it. */
+.card-meta { flex-wrap:wrap; row-gap:2px; }
 .hero-copy { color:var(--foreground-secondary); max-width:570px; line-height:1.65; font-size:15px; margin:18px 0 24px; }
 .actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
 .button { min-height:43px; padding:0 17px; border-radius:12px; border:1px solid var(--glass-border); background:rgba(255,255,255,.075); font-weight:720; font-size:13px; display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; transition:transform var(--motion-fast) var(--ease-standard),background var(--motion-fast) var(--ease-standard),border-color var(--motion-fast) var(--ease-standard); }
