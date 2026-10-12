@@ -14,7 +14,9 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:status": "supabase status"
+    "supabase:status": "supabase status",
+    "assistant:eval": "tsx scripts/assistant-eval.ts",
+    "assistant:endpoint-check": "tsx scripts/assistant-endpoint-check.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

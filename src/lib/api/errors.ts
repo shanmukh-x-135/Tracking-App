@@ -7,6 +7,8 @@ export type ApiErrorCode =
   | "VALIDATION_ERROR"
   | "CONFLICT"
   | "PROVIDER_UNAVAILABLE"
+  | "RATE_LIMITED"
+  | "ASSISTANT_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export interface ApiErrorBody {

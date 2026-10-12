@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -151,6 +151,7 @@ export function DiscoverPage({ initialSections = [], initialFailures = [], initi
       <div className="masthead-controls">
         <div className="medium-nav" role="group" aria-label="Discover media type">{filters.map(([label, value]) => <button type="button" key={label} data-medium={value ?? "all"} className={type === value ? "active" : ""} aria-pressed={type === value} onClick={() => chooseType(value)}>{label}</button>)}</div>
         <button type="button" className="masthead-search" onClick={() => window.dispatchEvent(new Event("mosaic:search"))}><Search size={16}/><span>Search every catalog</span></button>
+        {user && <Link className="masthead-search" href="/ask?q=Recommend%20something%20based%20on%20what%20I%20rated%20highly"><Sparkles size={16}/><span>Ask for a recommendation</span></Link>}
       </div>
     </header>
     <section className="genre-module" aria-labelledby="provider-genres">

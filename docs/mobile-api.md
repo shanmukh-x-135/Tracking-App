@@ -469,6 +469,64 @@ Related, season, watch-provider, discover, theme, genre, and episode-rating
 routes remain web-facing ancillary APIs and are not part of this mobile
 Milestone 2 contract.
 
+## Mosaic AI assistant (`POST /api/me/assistant`)
+
+A read-only assistant over the caller's own records. It is web-only for now:
+iOS should not ship against it until production enablement is approved, but the
+contract below is designed so a native client needs no business logic of its own.
+The model key never leaves the server.
+
+**Auth and availability.** Cookie or Bearer, exactly like the other `/api/me/*`
+routes. The server-side kill switch (`MOSAIC_AI_ENABLED`, off by default) and the
+private-beta allowlist (`MOSAIC_AI_ALLOWED_USERS`) are checked before any model or
+data access.
+
+**Request** (`application/json`; unknown fields are rejected):
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `message` | string, 1–1000 chars | The question. |
+| `history` | `{ role: "user" \| "assistant", text }[]`, at most 8, text ≤ 4000 | Plain text of earlier turns (render `[[rN]]` tokens to titles first). Treated as unverified; refs are never carried over. |
+| `about` | provider key, optional | e.g. `tmdb:tv:1399`, for "ask about this title". |
+
+**Response.** `200 application/x-ndjson`: one JSON event per line.
+
+| Event | Fields | Meaning |
+| --- | --- | --- |
+| `status` | `tool`, `label` | A read-only tool is running ("Checking your library"). |
+| `text` | `delta` | Answer text. Titles appear only as `[[rN]]` tokens. |
+| `refs` | `refs[]` | Titles the tools returned; render tokens with these. |
+| `scope` | `items[{ tool, summary }]` | What data was consulted ("Library · watchlist · movies · 14 titles"). |
+| `done` | `truncated`, `cited[]`, `usage` | Final. `cited` lists the ref ids the answer mentions, in order. |
+| `error` | `code`, `message`, `retryable` | A failure after streaming started. |
+
+A **ref** is `{ id, origin, media: { provider, mediaType, providerId, title, posterUrl?, releaseYear? }, facts?, reason?, seed? }`.
+`origin: "your_mosaic"` is a title in the user's records, and its `facts`
+(status, userRating, favourite) are copied by the server from those records.
+`origin: "catalog"` is a suggestion, never a claim about the user; `reason` is
+server-written and `seed` points to the ref it came from. Build routes from the
+identity tuple; the server never sends URLs. Unknown or invented tokens are
+removed by the server before they reach the client.
+
+**Errors before streaming** use the standard envelope:
+
+| Status | Code | When | Retry? |
+| --- | --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Invalid body, unknown field, bad `about` | No |
+| 401 | `UNAUTHORIZED` | No valid session or token | After sign-in |
+| 403 | `FORBIDDEN` | Not in the private beta | No |
+| 429 | `RATE_LIMITED` | `x-mosaic-limit-scope: user` (asking too quickly) or `service` (free model capacity used); `Retry-After` in seconds | After `Retry-After` |
+| 503 | `ASSISTANT_UNAVAILABLE` | Disabled, not configured, model unavailable, or upstream failure | Yes, later |
+| 500 | `INTERNAL_ERROR` | The user's data could not be loaded | Yes |
+
+**Data rules the answers follow.** Personal ratings are the user's 0.5–5 values,
+never community scores. Movie and episode dates are real events. Game and book
+dates are the record's last update (`dateKind: "last_updated"`), never sessions,
+and no game completion or book finish date is stated. When a title has several
+playthrough or reading records, progress comes from the most recent and records
+are never added together. Reviews, notes, list descriptions and catalog
+descriptions are never sent to the model.
+
 ## Not ready for a native client
 
 The following route families have not yet been normalized to the private API
@@ -493,6 +551,7 @@ native-ready while preserving their existing web behavior.
 | Current/Continue | `src/lib/current-media/`, `src/lib/tv/series-progress.ts` | `GET /api/me/continue` |
 | Library/lists | `src/lib/persistence/` | `GET /api/me/library`, `GET /api/me/lists` |
 | Activity/stats | `src/lib/activity/`, `src/lib/analytics/` | `GET /api/me/activity`, `GET /api/me/stats` |
+| Mosaic AI | `src/lib/assistant/` (tools, loop, OpenRouter adapter) | `POST /api/me/assistant` |
 
 `src/lib/services/mosaic.ts` is the server-only service boundary shared by
 the normalized API routes. React components continue to use their current

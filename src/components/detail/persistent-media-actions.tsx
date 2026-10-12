@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Heart, ListPlus, Plus, Star } from "lucide-react";
+import Link from "next/link";
+import { Check, Heart, ListPlus, Plus, Sparkles, Star } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -72,6 +73,7 @@ export function PersistentMediaActions({ media }: { media: CatalogMedia }) {
       {isSeries && <label className="series-status-control">Series status<select aria-label="Series tracking status" value={entry?.status ?? "watchlist"} onChange={(event) => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: event.target.value as typeof seriesStatuses[number][0] }), "Series status updated.")}>{seriesStatuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
       <button className="button" onClick={() => setShowReview((value) => !value)}><Star size={16}/>{review ? "Edit review" : "Review"}</button>
       <button className="button" onClick={() => setShowLists((value) => !value)}><ListPlus size={16}/>Add to list</button>
+      {user && <Link className="button" href={`/ask?about=${encodeURIComponent(mediaKey(media))}`}><Sparkles size={16}/>Ask Mosaic</Link>}
       <button className={`icon-button glass ${entry?.isFavorite ? "active" : ""}`} aria-label="Favourite" onClick={() => void authenticatedMutation(() => mutate({ type: "library.upsert", media, status: entry?.status ?? defaultLibraryStatus(media), isFavorite: !entry?.isFavorite }), "Favourite updated.")}><Heart size={17} fill={entry?.isFavorite ? "currentColor" : "none"}/></button>
     </div>
     <RatingInput value={rating} onChange={(value) => void authenticatedMutation(() => mutate({ type: "rating.set", media, value }), "Rating saved.")}/>

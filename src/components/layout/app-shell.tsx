@@ -19,6 +19,7 @@ declare global {
 const links = [
   { href: "/home", label: "Home" }, { href: "/discover", label: "Discover" },
   { href: "/library", label: "Library" }, { href: "/lists", label: "Lists" },
+  { href: "/ask", label: "Ask" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

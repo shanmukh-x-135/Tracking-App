@@ -14,6 +14,11 @@ const serverSchema = z.object({
   igdbClientId: z.string().min(1).optional(),
   igdbClientSecret: z.string().min(1).optional(),
   googleBooksApiKey: z.string().min(1).optional(),
+  openRouterApiKey: z.string().min(1).optional(),
+  aiModel: z.string().min(1).optional(),
+  aiProvider: z.string().min(1).optional(),
+  aiEnabled: z.boolean(),
+  aiAllowedUsers: z.array(z.string().min(1)),
 });
 
 export type PublicEnvironment = z.infer<typeof publicSchema>;
@@ -36,6 +41,12 @@ export function getServerEnvironment() {
     igdbClientId: process.env.IGDB_CLIENT_ID || undefined,
     igdbClientSecret: process.env.IGDB_CLIENT_SECRET || undefined,
     googleBooksApiKey: process.env.GOOGLE_BOOKS_API_KEY || undefined,
+    openRouterApiKey: process.env.OPENROUTER_API_KEY || undefined,
+    aiModel: process.env.MOSAIC_AI_MODEL || undefined,
+    aiProvider: process.env.MOSAIC_AI_PROVIDER || undefined,
+    // Kill switch: Mosaic AI is off unless explicitly set to "true".
+    aiEnabled: process.env.MOSAIC_AI_ENABLED === "true",
+    aiAllowedUsers: (process.env.MOSAIC_AI_ALLOWED_USERS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   });
 }
 
