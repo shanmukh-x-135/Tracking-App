@@ -124,6 +124,26 @@ test("the spotlight indicator stays valid across navigation and media switches",
   await expect(spotlight(page).locator(".spotlight-thumb[aria-current='true']")).toHaveCount(1);
 });
 
+test("genres are one compact, keyboard-usable row between the medium tabs and the spotlight", async ({ page }) => {
+  for (const width of [1440, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.goto("/discover");
+    const genres = page.locator(".genre-module");
+    const box = (await genres.boundingBox())!;
+    expect(box.height).toBeLessThan(80);
+    expect(box.y).toBeLessThan((await page.locator(".discover-spotlight").boundingBox())!.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  const action = page.locator(".genre-module").getByRole("button", { name: "Drama", exact: true });
+  await action.focus();
+  await page.keyboard.press("Enter");
+  await expect(action).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".genre-results .poster-link").first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(action).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".genre-results")).toHaveCount(0);
+});
+
 test("genre chips are the current medium's provider genres and filter that medium", async ({ page }) => {
   await page.goto("/discover?type=tv");
   const genres = page.locator(".genre-module");

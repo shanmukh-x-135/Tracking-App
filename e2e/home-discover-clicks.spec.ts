@@ -108,3 +108,29 @@ test("Continue cards make every non-action surface a semantic detail link", asyn
   await expect(page.getByRole("heading", { name: "In progress" })).toBeVisible();
   await page.screenshot({ path: "artifacts/immediate-pass/library-in-progress-390.png", fullPage: true });
 });
+
+test("Continue shows explicitly watching series without a stored episode total, without a percentage, and never completed ones", async ({ page }) => {
+  await page.addInitScript(() => {
+    const bare = (providerId: string, title: string) => ({ provider: "mock", providerId, mediaType: "tv", title, genres: [] });
+    const watching = bare("severance", "Severance"), finished = bare("the-bear", "The Bear");
+    window.localStorage.setItem("mosaic:mock-user", JSON.stringify({ id: "mock-continue-bare", email: "bare@example.com", displayName: "Bare Tester" }));
+    window.localStorage.setItem("mosaic:state:mock-continue-bare", JSON.stringify({
+      library: [{ media: watching, status: "watching", isFavorite: false, updatedAt: "2026-09-25T00:00:00.000Z" }, { media: finished, status: "completed", isFavorite: false, updatedAt: "2026-09-25T00:00:00.000Z" }],
+      episodeWatches: [
+        { id: "a", series: watching, seasonNumber: 1, episodeNumber: 2, watchedAt: "2026-09-25T00:00:00.000Z" },
+        { id: "b", series: finished, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-09-26T00:00:00.000Z" },
+      ],
+      ratings: [], reviews: [], lists: [], movieWatches: [], seasonStates: [], seriesStates: [], tvHistory: [], gamePlaythroughs: [], bookReadings: [],
+    }));
+  });
+  await page.goto("/home");
+  const cards = page.locator(".continue-card");
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText("Last watched · S01E02");
+  await expect(cards.first()).toContainText("1 episode watched");
+  await expect(cards.first().locator(".progress-track")).toHaveCount(0);
+  await page.reload();
+  await expect(cards).toHaveCount(1);
+  await cards.first().getByRole("link", { name: "View Severance" }).click();
+  await expect(page).toHaveURL(/\/series\/mock(?:%3A|:)tv(?:%3A|:)severance/i);
+});

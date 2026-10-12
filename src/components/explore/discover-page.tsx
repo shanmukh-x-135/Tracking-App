@@ -153,16 +153,15 @@ export function DiscoverPage({ initialSections = [], initialFailures = [], initi
         <button type="button" className="masthead-search" onClick={() => window.dispatchEvent(new Event("mosaic:search"))}><Search size={16}/><span>Search every catalog</span></button>
       </div>
     </header>
+    <section className="genre-module" aria-labelledby="provider-genres">
+      <div className="genre-bar"><h2 id="provider-genres">Genres</h2>{genreCatalog ? <><div className="genre-strip" role="group" aria-label={genreCatalog.label}>{genreCatalog.genres.map((genre) => <button key={genre.id} type="button" className={selectedGenre === genre.id ? "active" : ""} aria-pressed={selectedGenre === genre.id} onClick={() => chooseGenre(genre.id)}>{genre.name}</button>)}</div><span className="strip-source">{genreCatalog.label}</span></>
+        : <p className="strip-note">Genre browsing isn&apos;t available for books: Google Books doesn&apos;t offer a category filter that returns results reliably.</p>}</div>
+      {selectedGenre !== undefined && genreCatalog && <div className="genre-results"><ResultsShelf results={genreResults} label="Provider genre results" loading="Finding provider results…" failed="Genre results are temporarily unavailable. Try again shortly." empty="The provider has no titles for this genre right now."/></div>}
+    </section>
     {message && <p className="search-notice atlas-notice" role="status">{message}</p>}
 
     {activeSpotlight && <Spotlight items={spotlight} activeIndex={activeIndex} source={spotlightSource} reducedMotion={Boolean(reducedMotion)} onSelect={selectSpotlight} onPause={setSpotlightPaused} onSwipeStart={(x) => { touchStartX.current = x; }} onSwipeEnd={finishSwipe}/>}
 
-    <section className="genre-module" aria-labelledby="provider-genres">
-      <div className="strip-head"><h2 id="provider-genres">Browse by genre</h2>{genreCatalog && <span className="strip-source">{genreCatalog.label}</span>}</div>
-      {genreCatalog ? <div className="genre-strip" role="group" aria-label={genreCatalog.label}>{genreCatalog.genres.map((genre) => <button key={genre.id} type="button" className={selectedGenre === genre.id ? "active" : ""} aria-pressed={selectedGenre === genre.id} onClick={() => chooseGenre(genre.id)}>{genre.name}</button>)}</div>
-        : <p className="strip-note">Genre browsing isn&apos;t available for books: Google Books doesn&apos;t offer a category filter that returns results reliably.</p>}
-      {selectedGenre !== undefined && genreCatalog && <div className="genre-results"><ResultsShelf results={genreResults} label="Provider genre results" loading="Finding provider results…" failed="Genre results are temporarily unavailable. Try again shortly." empty="The provider has no titles for this genre right now."/></div>}
-    </section>
 
     <section className="theme-module" aria-labelledby="mosaic-themes">
       <div className="strip-head"><div><h2 id="mosaic-themes">Mosaic themes</h2><p className="strip-note">Story shapes, matched to each provider&apos;s own keywords.</p></div>{selectedTheme && <button type="button" className="text-link" onClick={() => setSelectedTheme(undefined)}>Clear theme</button>}</div>

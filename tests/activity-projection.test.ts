@@ -92,6 +92,31 @@ test("future episode logs do not advance released-series progress", () => {
   assert.equal(item, undefined);
 });
 
+test("series without a stored episode total continue only when explicitly watching, without a fabricated percentage", () => {
+  const state = emptyMosaicState();
+  const bare = (providerId: string): CatalogSeries => ({ ...series, providerId, episodeCount: undefined, eligibleEpisodeCount: undefined, seasonEpisodeCounts: undefined, eligibleEpisodeCounts: undefined });
+  const watching = bare("watching"), noStatus = bare("no-status"), completed = bare("completed"), unstarted = bare("unstarted");
+  state.library = [
+    { media: watching, status: "watching", isFavorite: false, updatedAt: "2026-05-01T00:00:00.000Z" },
+    { media: completed, status: "completed", isFavorite: false, updatedAt: "2026-05-01T00:00:00.000Z" },
+    { media: unstarted, status: "watching", isFavorite: false, updatedAt: "2026-05-01T00:00:00.000Z" },
+  ];
+  state.episodeWatches = [
+    { id: "a", series: watching, seasonNumber: 1, episodeNumber: 4, watchedAt: "2026-05-02T00:00:00.000Z" },
+    { id: "b", series: watching, seasonNumber: 2, episodeNumber: 1, watchedAt: "2026-05-03T00:00:00.000Z" },
+    { id: "c", series: watching, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-05-04T00:00:00.000Z", isRewatch: true },
+    { id: "d", series: noStatus, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-05-02T00:00:00.000Z" },
+    { id: "e", series: completed, seasonNumber: 1, episodeNumber: 1, watchedAt: "2026-05-02T00:00:00.000Z" },
+  ];
+  const items = deriveContinue(state);
+  assert.deepEqual(items.map(({ media }) => media.providerId), ["watching"]);
+  assert.equal(items[0].progress, undefined);
+  assert.equal(items[0].label, "Last watched · S02E01");
+  assert.equal(items[0].detail, "3 episodes watched");
+  assert.equal(items[0].occurredAt, "2026-05-03T00:00:00.000Z");
+  assert.deepEqual(projectContinueItems(state)[0].progress, { watchedEpisodes: 3, totalEpisodes: null, percent: null });
+});
+
 test("Home continuation can be capped while Library retains the complete active set", () => {
   const state = emptyMosaicState();
   state.gamePlaythroughs = Array.from({ length: 9 }, (_, index) => ({ id: String(index), media: { ...game, providerId: `game-${index}`, title: `Game ${index}` }, status: "playing" as const, playtimeMinutes: 0, progressPercent: 25, updatedAt: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z` }));

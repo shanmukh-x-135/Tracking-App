@@ -105,11 +105,16 @@ export function deriveCurrentMedia(state: MosaicState, options: { limit?: number
     const progress = deriveSeriesProgress(state, series);
     // Continue is an activity surface: a status alone is never enough. The
     // released denominator protects currently-airing shows from future episodes.
-    if (!progress.eligibleEpisodes || progress.watchedEpisodes <= 0 || progress.watchedEpisodes >= progress.eligibleEpisodes) continue;
+    // Most stored snapshots lack an episode total; then only an explicit
+    // "watching" status proves the show is unfinished, and no percentage is shown.
+    const total = progress.eligibleEpisodes;
+    if (progress.watchedEpisodes <= 0 || (total === undefined ? current.status !== "watching" : progress.watchedEpisodes >= total)) continue;
     if (["completed", "dropped", "watchlist", "paused", "watched"].includes(current.status ?? "")) continue;
-    const label = progress.nextEpisode ? `Next · S${String(progress.nextEpisode.seasonNumber).padStart(2, "0")}E${String(progress.nextEpisode.episodeNumber).padStart(2, "0")}` : "Continue watching";
     const latestWatch = state.episodeWatches.filter((watch) => !watch.isRewatch && mediaKey(watch.series) === mediaKey(series)).sort((first, second) => second.watchedAt.localeCompare(first.watchedAt))[0];
-    add({ kind: "series", media: series, status: "watching", label, detail: `${progress.watchedEpisodes} / ${progress.eligibleEpisodes} released episodes`, progress: progress.progress, occurredAt: latestWatch?.watchedAt ?? current.updatedAt ?? "" });
+    const episodeCode = (episode: { seasonNumber: number; episodeNumber: number }) => `S${String(episode.seasonNumber).padStart(2, "0")}E${String(episode.episodeNumber).padStart(2, "0")}`;
+    const label = progress.nextEpisode ? `Next · ${episodeCode(progress.nextEpisode)}` : latestWatch ? `Last watched · ${episodeCode(latestWatch)}` : "Continue watching";
+    const detail = total === undefined ? `${progress.watchedEpisodes} episode${progress.watchedEpisodes === 1 ? "" : "s"} watched` : `${progress.watchedEpisodes} / ${total} released episodes`;
+    add({ kind: "series", media: series, status: "watching", label, detail, progress: total === undefined ? undefined : progress.progress, occurredAt: latestWatch?.watchedAt ?? current.updatedAt ?? "" });
   }
   for (const reading of state.bookReadings) {
     const progress = calculateBookProgress(reading.currentPage, reading.totalPages, reading.progressPercent);
