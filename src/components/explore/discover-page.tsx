@@ -19,6 +19,7 @@ import { findTheme, themeSupports, themesForMediaType } from "@/lib/media/themes
 import type { CatalogDiscoverySection, CatalogFailure, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
 import type { MediaType } from "@/types/media";
+import { isAssistantUiEnabled } from "@/lib/config/env";
 
 const filters: ReadonlyArray<[string, MediaType | null]> = [["All", null], ["Movies", "movie"], ["Series", "tv"], ["Games", "game"], ["Books", "book"]];
 const mediumIntros: Record<MediaType, string> = {
@@ -151,7 +152,7 @@ export function DiscoverPage({ initialSections = [], initialFailures = [], initi
       <div className="masthead-controls">
         <div className="medium-nav" role="group" aria-label="Discover media type">{filters.map(([label, value]) => <button type="button" key={label} data-medium={value ?? "all"} className={type === value ? "active" : ""} aria-pressed={type === value} onClick={() => chooseType(value)}>{label}</button>)}</div>
         <button type="button" className="masthead-search" onClick={() => window.dispatchEvent(new Event("mosaic:search"))}><Search size={16}/><span>Search every catalog</span></button>
-        {user && <Link className="masthead-search" href="/ask?q=Recommend%20something%20based%20on%20what%20I%20rated%20highly"><Sparkles size={16}/><span>Ask for a recommendation</span></Link>}
+        {user && isAssistantUiEnabled() && <Link className="masthead-search" href="/ask?q=Recommend%20something%20based%20on%20what%20I%20rated%20highly"><Sparkles size={16}/><span>Ask for a recommendation</span></Link>}
       </div>
     </header>
     <section className="genre-module" aria-labelledby="provider-genres">

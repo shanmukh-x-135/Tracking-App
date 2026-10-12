@@ -50,6 +50,11 @@ export function getServerEnvironment() {
   });
 }
 
+/** Mosaic AI entry points are hidden in live builds until NEXT_PUBLIC_MOSAIC_AI_UI=true (dark launch). */
+export function isAssistantUiEnabled(): boolean {
+  return getPublicEnvironment().dataMode === "mock" || process.env.NEXT_PUBLIC_MOSAIC_AI_UI === "true";
+}
+
 export function isLiveMode(): boolean {
   return getPublicEnvironment().dataMode === "live";
 }

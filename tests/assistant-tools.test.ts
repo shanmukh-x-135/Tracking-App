@@ -185,3 +185,16 @@ test("the assistant modules cannot write: no mutation code is imported", () => {
     assert.ok(!/applySupabaseMutation|applyMutation|applyMosaicMutation|persistence\/gateway|mock-gateway|live-gateway|supabase-state|\.insert\(|\.update\(|\.delete\(|\.upsert\(|\.rpc\(/.test(source), file);
   }
 });
+
+test("answer rendering drops echoed titles, Markdown emphasis and leading blank lines", async () => {
+  const { answerParts } = await import("../src/lib/assistant/answer-text");
+  const table = new RefTable();
+  const state = assistantFixtureState();
+  const low = table.add(state.library.find(({ media }) => media.title === "Low Tide")!.media, "your_mosaic");
+  const glass = table.add(state.library.find(({ media }) => media.title === "Glass Orchard")!.media, "your_mosaic");
+  const refs = new Map([low, glass].map((id) => [id, table.get(id)!]));
+  // Shape observed from the live model in Phase 0 (synthetic fixture titles).
+  const parts = answerParts(`\n\n\n\nYou have:\n- [[${low}]] — *Low Tide* (2023, movie)\n- [[${glass}]] (Glass Orchard) and **soon** [[r99]].`, refs);
+  const rendered = parts.map((part) => (part.type === "ref" ? `<${part.ref.media.title}>` : part.text)).join("");
+  assert.equal(rendered, "You have:\n- <Low Tide> (2023, movie)\n- <Glass Orchard> and soon .");
+});

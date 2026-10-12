@@ -11,6 +11,7 @@ import { SearchDialog } from "@/components/search/search-dialog";
 import { MosaicMotion, PageTransition } from "@/components/motion/motion";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { CatalogMedia } from "@/lib/media/types";
+import { isAssistantUiEnabled } from "@/lib/config/env";
 
 declare global {
   interface Window { __mosaicQuickLogContext?: CatalogMedia }
@@ -19,7 +20,7 @@ declare global {
 const links = [
   { href: "/home", label: "Home" }, { href: "/discover", label: "Discover" },
   { href: "/library", label: "Library" }, { href: "/lists", label: "Lists" },
-  { href: "/ask", label: "Ask" },
+  ...(isAssistantUiEnabled() ? [{ href: "/ask", label: "Ask" }] : []),
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

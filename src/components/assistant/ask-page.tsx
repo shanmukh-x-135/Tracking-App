@@ -9,9 +9,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { statusLabels } from "@/components/explore/library-card";
 import { mediaHref } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
+import { answerParts } from "@/lib/assistant/answer-text";
 import { askMosaic, AssistantRequestError, plainAnswer } from "@/lib/assistant/client";
 import type { AssistantRef } from "@/lib/assistant/contract";
-import { getPublicEnvironment } from "@/lib/config/env";
+import { getPublicEnvironment, isAssistantUiEnabled } from "@/lib/config/env";
 import { parseProviderKey } from "@/lib/media/identity";
 import type { CatalogMedia } from "@/lib/media/types";
 import { mediaKey } from "@/lib/persistence/domain";
@@ -72,13 +73,9 @@ function errorText(error: unknown): string {
 }
 
 function AnswerText({ text, refs }: { text: string; refs: Map<string, AssistantRef> }) {
-  const parts = text.split(/(\[\[r\d+\]\])/g);
-  return <p className="ask-answer-text">{parts.map((part, index) => {
-    const id = /^\[\[(r\d+)\]\]$/.exec(part)?.[1];
-    if (!id) return <Fragment key={index}>{part}</Fragment>;
-    const ref = refs.get(id);
-    return ref ? <Link key={index} className={`ask-chip ${ref.origin}`} href={refHref(ref)}>{ref.media.title}</Link> : null;
-  })}</p>;
+  return <p className="ask-answer-text">{answerParts(text, refs).map((part, index) => part.type === "text"
+    ? <Fragment key={index}>{part.text}</Fragment>
+    : <Link key={index} className={`ask-chip ${part.ref.origin}`} href={refHref(part.ref)}>{part.ref.media.title}</Link>)}</p>;
 }
 
 function factLine(ref: AssistantRef): string {
@@ -175,6 +172,7 @@ export function AskPage() {
     composer.current?.focus();
   };
 
+  if (!isAssistantUiEnabled()) return <main className="page ask-page"><div className="ask-shell"><div className="empty-state"><h2>Mosaic AI isn&apos;t available yet</h2><p>It&apos;s being tested privately. Your Library has everything in the meantime.</p><Link className="button primary" href="/library">Open Library</Link></div></div></main>;
   if (isLoading) return <main className="page ask-page" aria-busy="true"/>;
   if (!user) return <main className="page ask-page"><div className="ask-shell"><div className="empty-state"><h2>Sign in to ask your Mosaic</h2><p>Mosaic AI answers from your own library, ratings and history.</p><Link className="button primary" href="/login?returnTo=%2Fask">Sign in</Link></div></div></main>;
 
