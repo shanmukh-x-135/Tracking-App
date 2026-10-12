@@ -16,6 +16,8 @@ export interface ThemeRules {
 export interface MediaTheme {
   id: ThemeId;
   label: string;
+  /** One line of editorial copy describing the idea; never a claim about specific titles. */
+  tagline: string;
   rules: ThemeRules;
   /** Words matched against title, genres and description of mock fixtures, which carry no provider keywords. */
   concepts: readonly string[];
@@ -28,21 +30,21 @@ export interface MediaTheme {
  * adaptations).
  */
 export const mediaThemes: readonly MediaTheme[] = [
-  { id: "time-loop", label: "Time Loop", rules: { tmdbKeywords: [10854], igdb: { keywords: [2158] }, bookQuery: "time loop novel" }, concepts: ["time loop", "loop", "time"] },
-  { id: "slow-burn", label: "Slow Burn", rules: { tmdbKeywords: [277551] }, concepts: ["quiet", "slow", "psychological"] },
-  { id: "found-family", label: "Found Family", rules: { tmdbKeywords: [248927], bookQuery: "found family fantasy novel" }, concepts: ["found family", "friendship", "ensemble"] },
-  { id: "cyberpunk", label: "Cyberpunk", rules: { tmdbKeywords: [12190], igdb: { keywords: [103] }, bookQuery: "cyberpunk novel" }, concepts: ["cyberpunk", "dystopian", "technology"] },
-  { id: "cosmic-horror", label: "Cosmic Horror", rules: { tmdbKeywords: [215959, 287274], igdb: { keywords: [2379, 1295] }, bookQuery: "cosmic horror fiction" }, concepts: ["cosmic", "eldritch", "horror"] },
-  { id: "heist", label: "Heist", rules: { tmdbKeywords: [10051], igdb: { keywords: [243] }, bookQuery: "heist thriller novel" }, concepts: ["heist", "robbery", "thief"] },
-  { id: "courtroom", label: "Courtroom", rules: { tmdbKeywords: [33519, 222517], bookQuery: "legal thriller novel" }, concepts: ["court", "trial", "legal"] },
-  { id: "political-intrigue", label: "Political Intrigue", rules: { tmdbKeywords: [41282, 6078], igdb: { keywords: [214] }, bookQuery: "political thriller novel" }, concepts: ["political", "government", "power"] },
-  { id: "workplace", label: "Workplace", rules: { tmdbKeywords: [6282, 210605], igdb: { keywords: [42053] } }, concepts: ["office", "workplace", "career"] },
-  { id: "medical", label: "Medical", rules: { tmdbKeywords: [11612, 208788], igdb: { keywords: [1296] }, bookQuery: "medical thriller novel" }, concepts: ["medical", "hospital", "doctor"] },
-  { id: "prison", label: "Prison", rules: { tmdbKeywords: [378], igdb: { keywords: [49713, 57599] }, bookQuery: "prison novel" }, concepts: ["prison", "inmate", "incarceration"] },
-  { id: "coming-of-age", label: "Coming of Age", rules: { tmdbKeywords: [10683], igdb: { keywords: [5329] }, bookQuery: "coming of age novel" }, concepts: ["coming of age", "teen", "youth"] },
-  { id: "based-on-a-book", label: "Based on a Book", rules: { tmdbKeywords: [818] }, concepts: ["based on", "novel", "adaptation"] },
-  { id: "mystery", label: "Mystery", rules: { tmdbKeywords: [12570, 316332], igdb: { keywords: [215], themes: [43] }, bookQuery: "detective mystery novel" }, concepts: ["mystery", "detective", "whodunit"] },
-  { id: "survival", label: "Survival", rules: { tmdbKeywords: [10349], igdb: { themes: [21] }, bookQuery: "survival novel" }, concepts: ["survival", "wilderness", "disaster"] },
+  { id: "time-loop", label: "Time Loop", tagline: "The same day, until it isn't", rules: { tmdbKeywords: [10854], igdb: { keywords: [2158] }, bookQuery: "time loop novel" }, concepts: ["time loop", "loop", "time"] },
+  { id: "slow-burn", label: "Slow Burn", tagline: "Patience, rewarded", rules: { tmdbKeywords: [277551] }, concepts: ["quiet", "slow", "psychological"] },
+  { id: "found-family", label: "Found Family", tagline: "Strangers who become home", rules: { tmdbKeywords: [248927], bookQuery: "found family fantasy novel" }, concepts: ["found family", "friendship", "ensemble"] },
+  { id: "cyberpunk", label: "Cyberpunk", tagline: "Neon, chrome and corporate rot", rules: { tmdbKeywords: [12190], igdb: { keywords: [103] }, bookQuery: "cyberpunk novel" }, concepts: ["cyberpunk", "dystopian", "technology"] },
+  { id: "cosmic-horror", label: "Cosmic Horror", tagline: "Dread at a scale beyond us", rules: { tmdbKeywords: [215959, 287274], igdb: { keywords: [2379, 1295] }, bookQuery: "cosmic horror fiction" }, concepts: ["cosmic", "eldritch", "horror"] },
+  { id: "heist", label: "Heist", tagline: "One last job, timed to the minute", rules: { tmdbKeywords: [10051], igdb: { keywords: [243] }, bookQuery: "heist thriller novel" }, concepts: ["heist", "robbery", "thief"] },
+  { id: "courtroom", label: "Courtroom", tagline: "Truth argued in public", rules: { tmdbKeywords: [33519, 222517], bookQuery: "legal thriller novel" }, concepts: ["court", "trial", "legal"] },
+  { id: "political-intrigue", label: "Political Intrigue", tagline: "Power, quietly negotiated", rules: { tmdbKeywords: [41282, 6078], igdb: { keywords: [214] }, bookQuery: "political thriller novel" }, concepts: ["political", "government", "power"] },
+  { id: "workplace", label: "Workplace", tagline: "Lives between nine and five", rules: { tmdbKeywords: [6282, 210605], igdb: { keywords: [42053] } }, concepts: ["office", "workplace", "career"] },
+  { id: "medical", label: "Medical", tagline: "Stakes measured in heartbeats", rules: { tmdbKeywords: [11612, 208788], igdb: { keywords: [1296] }, bookQuery: "medical thriller novel" }, concepts: ["medical", "hospital", "doctor"] },
+  { id: "prison", label: "Prison", tagline: "Walls, rules and the way out", rules: { tmdbKeywords: [378], igdb: { keywords: [49713, 57599] }, bookQuery: "prison novel" }, concepts: ["prison", "inmate", "incarceration"] },
+  { id: "coming-of-age", label: "Coming of Age", tagline: "The summer everything changed", rules: { tmdbKeywords: [10683], igdb: { keywords: [5329] }, bookQuery: "coming of age novel" }, concepts: ["coming of age", "teen", "youth"] },
+  { id: "based-on-a-book", label: "Based on a Book", tagline: "Stories that began on the page", rules: { tmdbKeywords: [818] }, concepts: ["based on", "novel", "adaptation"] },
+  { id: "mystery", label: "Mystery", tagline: "Clues worth following", rules: { tmdbKeywords: [12570, 316332], igdb: { keywords: [215], themes: [43] }, bookQuery: "detective mystery novel" }, concepts: ["mystery", "detective", "whodunit"] },
+  { id: "survival", label: "Survival", tagline: "Endurance at the edge", rules: { tmdbKeywords: [10349], igdb: { themes: [21] }, bookQuery: "survival novel" }, concepts: ["survival", "wilderness", "disaster"] },
 ];
 
 export function findTheme(value: string | null): MediaTheme | undefined {

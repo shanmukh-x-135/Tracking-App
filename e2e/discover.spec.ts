@@ -21,14 +21,14 @@ async function signIn(page: Page, library: Tracked[] = [], extra: Extra = {}) {
 }
 const stored = (page: Page) => page.evaluate(() => JSON.parse(window.localStorage.getItem("mosaic:state:mock-discover")!));
 const spotlight = (page: Page) => page.locator("main .discover-spotlight");
-const indicator = (page: Page) => spotlight(page).locator(".spotlight-copy .eyebrow");
+const indicator = (page: Page) => spotlight(page).locator(".spotlight-count");
 
 test.use({ reducedMotion: "reduce" }); // no autoplay, so slide positions are deterministic
 
 test("Save for later adds the spotlight title with its planned status and survives a reload", async ({ page }) => {
   await signIn(page);
   await page.goto("/discover?type=tv");
-  const title = await spotlight(page).getByRole("heading", { level: 1 }).textContent();
+  const title = await spotlight(page).getByRole("heading", { level: 2 }).textContent();
   await spotlight(page).getByRole("button", { name: "Save for later" }).click();
   await expect(spotlight(page).getByRole("status").filter({ hasText: "In your library" })).toBeVisible();
   await page.reload();
@@ -51,7 +51,7 @@ test("a failed save is announced, saves nothing, and can be retried", async ({ p
   });
   await page.goto("/discover");
   await page.evaluate(() => window.sessionStorage.setItem("fail-save", "1"));
-  const title = await spotlight(page).getByRole("heading", { level: 1 }).textContent();
+  const title = await spotlight(page).getByRole("heading", { level: 2 }).textContent();
   await spotlight(page).getByRole("button", { name: "Save for later" }).click();
   await expect(spotlight(page).getByRole("alert")).toHaveText(`Couldn't add ${title}. Try again.`);
   // Readable over artwork and on its own row below the actions, at desktop and phone widths.
@@ -77,7 +77,7 @@ test("a failed save is announced, saves nothing, and can be retried", async ({ p
 
 test("an already-tracked spotlight title is never reset", async ({ page }) => {
   await page.goto("/discover");
-  const title = (await spotlight(page).getByRole("heading", { level: 1 }).textContent())!;
+  const title = (await spotlight(page).getByRole("heading", { level: 2 }).textContent())!;
   const href = decodeURIComponent((await spotlight(page).getByRole("link", { name: "View story" }).getAttribute("href"))!);
   await signIn(page, [{ id: href.split(":").pop()!, type: "movie", title, status: "watched", favourite: true }]);
   await page.reload();
@@ -95,12 +95,13 @@ test("signed-out Save for later goes to sign-in instead of the Library", async (
 test("All has one correctly scoped rail per medium; each tab shows only its medium", async ({ page }) => {
   await page.goto("/discover");
   const rails = page.locator(".discovery-rail");
-  await expect(rails.locator(".eyebrow")).toHaveText(["Movies", "Series", "Games", "Books"]);
-  await expect(rails.locator("h2")).toHaveText(["Movie catalog", "Series catalog", "Game catalog", "Book catalog"]);
+  await expect(rails.locator(".chapter-medium")).toHaveText(["Movies", "Series", "Games", "Books"]);
+  await expect(rails.locator(".chapter-section")).toHaveText(["Movie catalog", "Series catalog", "Game catalog", "Book catalog"]);
   for (const [tab, type, path] of [["Movies", "movie", "movie"], ["Series", "tv", "series"], ["Games", "game", "game"], ["Books", "book", "book"]] as const) {
     await page.getByRole("button", { name: tab, exact: true }).click();
-    await expect(rails.locator(".eyebrow")).toHaveText([tab]);
-    const hrefs = await rails.locator(".poster-link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    await expect(page.locator(".medium-intro h2")).toHaveText(tab);
+    expect(await rails.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-medium")))).toEqual([type]);
+    const hrefs = await rails.locator(".poster-link, .lead-art").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) expect(decodeURIComponent(href!)).toMatch(new RegExp(`^/${path}/mock:${type}:`));
   }
@@ -120,7 +121,7 @@ test("the spotlight indicator stays valid across navigation and media switches",
   expect(Number(current)).toBeLessThanOrEqual(Number(total));
   // Dots mark the current slide without claiming tab semantics.
   await expect(spotlight(page).getByRole("tab")).toHaveCount(0);
-  await expect(spotlight(page).locator(".spotlight-dot[aria-current='true']")).toHaveCount(1);
+  await expect(spotlight(page).locator(".spotlight-thumb[aria-current='true']")).toHaveCount(1);
 });
 
 test("genre chips are the current medium's provider genres and filter that medium", async ({ page }) => {

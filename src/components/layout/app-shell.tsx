@@ -38,8 +38,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         event.preventDefault(); setSearchOpen(true);
       }
     };
+    // Pages can open the same search (Discover's masthead does) without owning the dialog.
+    const open = () => setSearchOpen(true);
     window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
+    window.addEventListener("mosaic:search", open);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("mosaic:search", open); };
   }, []);
 
   useEffect(() => {

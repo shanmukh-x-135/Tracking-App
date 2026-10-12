@@ -2,23 +2,31 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { BookmarkCheck, ChevronLeft, ChevronRight, Compass, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { MediaShelf, mediaHref, useLibrarySave } from "@/components/media/media-card";
+import { BecauseRow, Chapter, Spotlight } from "@/components/explore/discover-parts";
+import { MediaShelf } from "@/components/media/media-card";
 import { useMosaicState } from "@/components/persistence/mosaic-state-provider";
-import { AnimatePresence, motion, useReducedMotion } from "@/components/motion/motion";
+import { motion, useReducedMotion } from "@/components/motion/motion";
+import "./discover.css";
 import { discoveryRails, mediaPluralLabels, spotlightPosition } from "@/lib/media/discovery";
 import { genreAfterSwitch, genresFor } from "@/lib/media/genres";
 import { buildRecommendations, recommendationSeeds } from "@/lib/media/recommendations";
 import { discoveryRegion, regionStorageKey } from "@/lib/media/region";
 import { findTheme, themeSupports, themesForMediaType } from "@/lib/media/themes";
 import type { CatalogDiscoverySection, CatalogFailure, CatalogMedia, CatalogSearchResult } from "@/lib/media/types";
-import { mediaKey, saveForLaterStatus } from "@/lib/persistence/domain";
+import { mediaKey } from "@/lib/persistence/domain";
 import type { MediaType } from "@/types/media";
 
 const filters: ReadonlyArray<[string, MediaType | null]> = [["All", null], ["Movies", "movie"], ["Series", "tv"], ["Games", "game"], ["Books", "book"]];
+const mediumIntros: Record<MediaType, string> = {
+  movie: "What's trending, playing and coming to theaters.",
+  tv: "Series people are watching now, and the ones still on the air.",
+  game: "Games across release windows, from IGDB.",
+  book: "Fiction from Google Books.",
+};
 const partialMessage = "Some catalog sources are temporarily unavailable. Showing the stories we found.";
 
 function uniqueMedia(items: CatalogMedia[]): CatalogMedia[] {
@@ -47,12 +55,6 @@ function ResultsShelf({ results, label, loading, failed, empty }: { results: Cat
   if (results.failed) return <p className="muted" role="alert">{failed}</p>;
   if (!results.items.length) return <p className="muted">{empty}</p>;
   return <>{results.partial && <p className="muted" role="status">Some providers are unavailable; showing what they returned.</p>}<MediaShelf items={results.items} showType label={label}/></>;
-}
-
-function SpotlightSave({ media }: { media: CatalogMedia }): React.JSX.Element {
-  const { isSaved, pending, error, save } = useLibrarySave(media, saveForLaterStatus(media));
-  if (isSaved) return <span className="button ghost" role="status"><BookmarkCheck size={16}/> In your library</span>;
-  return <><button type="button" className="button ghost" disabled={pending} onClick={() => void save()}>{pending ? "Saving…" : "Save for later"}</button>{error && <p className="form-error" role="alert">{error}</p>}</>;
 }
 
 export function DiscoverPage({ initialSections = [], initialFailures = [], initialRegion }: { initialSections?: CatalogDiscoverySection[]; initialFailures?: CatalogFailure[]; initialRegion: string }): React.JSX.Element {
@@ -137,37 +139,59 @@ export function DiscoverPage({ initialSections = [], initialFailures = [], initi
   function chooseGenre(next: number): void { setSelectedGenre((current) => current === next ? undefined : next); }
   const showRecommendations = type !== "game" && type !== "book";
 
-  return <div className="discover-bridge-page">
-    {activeSpotlight && <section className="discover-spotlight" onMouseEnter={() => setSpotlightPaused(true)} onMouseLeave={() => setSpotlightPaused(false)} onFocusCapture={() => setSpotlightPaused(true)} onBlurCapture={() => setSpotlightPaused(false)} onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX; }} onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}>
-      <div className="spotlight-ambient" aria-hidden="true"><Image src={activeSpotlight.backdropUrl ?? activeSpotlight.posterUrl ?? "/media-placeholder.svg"} alt="" fill sizes="100vw"/></div>
-      <div className="spotlight-art"><AnimatePresence mode="sync"><motion.div key={`${activeSpotlight.provider}:${activeSpotlight.providerId}`} className="spotlight-image" initial={reducedMotion ? false : { opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? undefined : { opacity: 0, x: -12 }} transition={{ duration: reducedMotion ? 0 : .46, ease: [0.22, 1, 0.36, 1] }}><Image src={activeSpotlight.backdropUrl ?? activeSpotlight.posterUrl ?? "/media-placeholder.svg"} alt="" fill priority sizes="100vw"/></motion.div></AnimatePresence></div>
-      <div className="spotlight-copy"><span className="eyebrow">Mosaic spotlight · {activeIndex + 1} of {spotlight.length}</span><h1>{activeSpotlight.title}</h1><p>{activeSpotlight.description ?? "A fresh story from the providers Mosaic has connected."}</p><div className="spotlight-meta"><span>{activeSpotlight.releaseYear ?? "New"}</span>{activeSpotlight.genres.slice(0, 2).map((genre) => <span key={genre}>{genre}</span>)}</div><div className="actions"><Link className="button primary" href={mediaHref(activeSpotlight)}>View story</Link><SpotlightSave key={mediaKey(activeSpotlight)} media={activeSpotlight}/></div></div>
-      {spotlight.length > 1 && <div className="spotlight-nav"><button type="button" className="icon-button" aria-label="Previous spotlight" onClick={() => selectSpotlight(activeIndex - 1)}><ChevronLeft size={18}/></button><div role="group" aria-label="Choose spotlight">{spotlight.map((item, index) => <button key={`${item.provider}:${item.providerId}`} type="button" className={`spotlight-dot ${index === activeIndex ? "active" : ""}`} aria-current={index === activeIndex ? "true" : undefined} aria-label={`Show ${item.title}`} onClick={() => selectSpotlight(index)}/>)}</div><button type="button" className="icon-button" aria-label="Next spotlight" onClick={() => selectSpotlight(activeIndex + 1)}><ChevronRight size={18}/></button></div>}
+  const spotlightSource = filteredSections.find((section) => section.items.length)?.label;
+  const activeTheme = findTheme(selectedTheme ?? null);
+  const themeArt = themeResults?.items.find((item) => item.backdropUrl || item.posterUrl);
+  // Tab changes cross-fade in place: nothing moves, so content is readable and clickable at once.
+  const motionIn = reducedMotion ? { initial: false as const } : { initial: { opacity: 0 } };
+
+  return <div className="discover-atlas">
+    <header className="discover-masthead">
+      <div className="masthead-title"><h1>Discover</h1><p>Films, series, games and books worth your next evening, drawn from the catalogs Mosaic connects to.</p></div>
+      <div className="masthead-controls">
+        <div className="medium-nav" role="group" aria-label="Discover media type">{filters.map(([label, value]) => <button type="button" key={label} data-medium={value ?? "all"} className={type === value ? "active" : ""} aria-pressed={type === value} onClick={() => chooseType(value)}>{label}</button>)}</div>
+        <button type="button" className="masthead-search" onClick={() => window.dispatchEvent(new Event("mosaic:search"))}><Search size={16}/><span>Search every catalog</span></button>
+      </div>
+    </header>
+    {message && <p className="search-notice atlas-notice" role="status">{message}</p>}
+
+    {activeSpotlight && <Spotlight items={spotlight} activeIndex={activeIndex} source={spotlightSource} reducedMotion={Boolean(reducedMotion)} onSelect={selectSpotlight} onPause={setSpotlightPaused} onSwipeStart={(x) => { touchStartX.current = x; }} onSwipeEnd={finishSwipe}/>}
+
+    <section className="genre-module" aria-labelledby="provider-genres">
+      <div className="strip-head"><h2 id="provider-genres">Browse by genre</h2>{genreCatalog && <span className="strip-source">{genreCatalog.label}</span>}</div>
+      {genreCatalog ? <div className="genre-strip" role="group" aria-label={genreCatalog.label}>{genreCatalog.genres.map((genre) => <button key={genre.id} type="button" className={selectedGenre === genre.id ? "active" : ""} aria-pressed={selectedGenre === genre.id} onClick={() => chooseGenre(genre.id)}>{genre.name}</button>)}</div>
+        : <p className="strip-note">Genre browsing isn&apos;t available for books: Google Books doesn&apos;t offer a category filter that returns results reliably.</p>}
+      {selectedGenre !== undefined && genreCatalog && <div className="genre-results"><ResultsShelf results={genreResults} label="Provider genre results" loading="Finding provider results…" failed="Genre results are temporarily unavailable. Try again shortly." empty="The provider has no titles for this genre right now."/></div>}
+    </section>
+
+    <section className="theme-module" aria-labelledby="mosaic-themes">
+      <div className="strip-head"><div><h2 id="mosaic-themes">Mosaic themes</h2><p className="strip-note">Story shapes, matched to each provider&apos;s own keywords.</p></div>{selectedTheme && <button type="button" className="text-link" onClick={() => setSelectedTheme(undefined)}>Clear theme</button>}</div>
+      <div className="theme-gallery">{themeOptions.map((theme, index) => {
+        const active = selectedTheme === theme.id;
+        const art = active ? themeArt : undefined;
+        return <button key={theme.id} type="button" className={`theme-tile ${active ? "active" : ""} ${index % 5 === 0 ? "wide" : ""}`} data-tone={index % 4} aria-pressed={active} aria-label={theme.label} aria-describedby={`theme-${theme.id}`} onClick={() => chooseTheme(theme.id)}>
+          {art && <span className="theme-art" aria-hidden="true"><Image src={(art.backdropUrl ?? art.posterUrl)!} alt="" fill sizes="(max-width: 820px) 70vw, 30vw"/></span>}
+          <span className="theme-name">{theme.label}</span>
+          <span className="theme-tagline" id={`theme-${theme.id}`}>{theme.tagline}</span>
+        </button>;
+      })}</div>
+      {activeTheme && <div className="theme-results"><h3 className="theme-results-title">{activeTheme.label}{type ? ` in ${mediaPluralLabels[type].toLowerCase()}` : ""}</h3><ResultsShelf results={themeResults} label="Mosaic theme results" loading="Building this shelf from provider metadata…" failed="Theme results are temporarily unavailable. Try again shortly." empty="The providers have no titles tagged with this theme right now."/></div>}
+    </section>
+
+    <motion.div key={type ?? "all"} className="atlas-chapters" {...motionIn} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : .24, ease: [0.16, 1, 0.3, 1] }}>
+      {type && <header className="medium-intro" data-medium={type}><h2>{mediaPluralLabels[type]}</h2><p>{mediumIntros[type]}</p></header>}
+      {rails.map((section, index) => <Chapter key={section.id} section={section} chapter={!type} lead={!type || index === 0} onExplore={type ? undefined : () => chooseType(section.mediaType)}/>)}
+    </motion.div>
+
+    {showRecommendations && <section className="because-module" aria-labelledby="because-you-watched">
+      <div className="strip-head"><div><h2 id="because-you-watched">Because you watched</h2><p className="strip-note">Picked from the titles you logged most recently.</p></div></div>
+      {!user ? <p className="because-empty"><Link className="text-link" href="/login?returnTo=%2Fdiscover">Sign in</Link> and log what you watch to get recommendations based on your own history.</p>
+        : !seeds.length ? <p className="because-empty">Log a movie or an episode and Mosaic will recommend titles like it here.</p>
+        : !recommendations ? <p className="because-empty" role="status">Finding titles like the ones you watched…</p>
+        : recommendationsFailed ? <p className="because-empty" role="alert">Recommendations are temporarily unavailable. Try again shortly.</p>
+        : !recommendations.length ? <p className="because-empty">No new recommendations for what you watched recently: everything suggested is already in your library.</p>
+        : recommendations.map(({ seed, items }) => <BecauseRow key={mediaKey(seed)} seed={seed} items={items} showType={!type}/>)}
     </section>}
-
-    <div className="discover-bridge-content">
-      <header className="discover-heading"><span className="eyebrow">Editorial discovery</span><h1>Discover</h1><h2>Find your next obsession.</h2><p>Real-time catalogs, filtered through the stories you are already drawn to.</p></header>
-      <div className="discover-filter-bar glass" aria-label="Discover media type">{filters.map(([label, value]) => <button type="button" key={label} className={type === value ? "active" : ""} aria-pressed={type === value} onClick={() => chooseType(value)}>{label}</button>)}</div>
-      {type && <h2 className="discover-current-type">{mediaPluralLabels[type]}</h2>}
-      {message && <p className="search-notice" role="status">{message}</p>}
-
-      <section className="discover-module genre-module" aria-labelledby="provider-genres"><div className="section-head"><div><span className="eyebrow">Provider genres</span><h2 id="provider-genres">A familiar way in</h2></div>{genreCatalog && <span className="muted">{genreCatalog.label}</span>}</div>
-        {genreCatalog ? <><div className="genre-chips">{genreCatalog.genres.map((genre) => <button key={genre.id} type="button" className={selectedGenre === genre.id ? "active" : ""} aria-pressed={selectedGenre === genre.id} onClick={() => chooseGenre(genre.id)}>{genre.name}</button>)}</div>{selectedGenre !== undefined && <div className="genre-results"><ResultsShelf results={genreResults} label="Provider genre results" loading="Finding provider results…" failed="Genre results are temporarily unavailable. Try again shortly." empty="The provider has no titles for this genre right now."/></div>}</>
-          : <p className="muted">Genre browsing isn&apos;t available for books: Google Books doesn&apos;t offer a category filter that returns results reliably.</p>}
-      </section>
-
-      <section className="discover-module theme-module" aria-labelledby="mosaic-themes"><div className="section-head"><div><span className="eyebrow"><Sparkles size={12}/> Mosaic themes</span><h2 id="mosaic-themes">Browse by a feeling</h2></div>{selectedTheme && <button type="button" className="text-link" onClick={() => setSelectedTheme(undefined)}>Clear theme</button>}</div><div className="theme-chips">{themeOptions.map((theme) => <button key={theme.id} type="button" className={selectedTheme === theme.id ? "active" : ""} aria-pressed={selectedTheme === theme.id} onClick={() => chooseTheme(theme.id)}>{theme.label}</button>)}</div>{selectedTheme && <div className="theme-results"><ResultsShelf results={themeResults} label="Mosaic theme results" loading="Building this shelf from provider metadata…" failed="Theme results are temporarily unavailable. Try again shortly." empty="The providers have no titles tagged with this theme right now."/></div>}</section>
-
-      {rails.map((section, index) => <section className={`discover-section discover-module discovery-rail rail-${index}`} key={section.id}><div className="section-head"><div><span className="eyebrow">{mediaPluralLabels[section.mediaType]}</span><h2>{section.label}</h2></div>{section.region && <span className="muted">Release dates for {section.region}</span>}</div>{section.items.length ? <MediaShelf items={section.items} showType={!type} label={section.label}/> : <p className="muted">{section.error ?? "No stories are available in this section right now."}</p>}</section>)}
-      {showRecommendations && <section className="discover-module because-module" aria-labelledby="because-you-watched"><div className="section-head"><div><span className="eyebrow"><Compass size={12}/> Your history</span><h2 id="because-you-watched">Because you watched</h2></div></div>
-        {!user ? <p className="muted"><Link className="text-link" href="/login?returnTo=%2Fdiscover">Sign in</Link> and log what you watch to get recommendations based on your own history.</p>
-          : !seeds.length ? <p className="muted">Log a movie or an episode and Mosaic will recommend titles like it here.</p>
-          : !recommendations ? <p className="muted" role="status">Finding titles like the ones you watched…</p>
-          : recommendationsFailed ? <p className="muted" role="alert">Recommendations are temporarily unavailable. Try again shortly.</p>
-          : !recommendations.length ? <p className="muted">No new recommendations for what you watched recently: everything suggested is already in your library.</p>
-          : recommendations.map(({ seed, items }) => <div className="because-group" key={mediaKey(seed)}><h3>Because you watched <Link href={mediaHref(seed)}>{seed.title}</Link></h3><MediaShelf items={items} showType={!type} label={`Because you watched ${seed.title}`}/></div>)}
-      </section>}
-      {discovery.length > 0 && <section className="discover-module cross-media-module"><div className="section-head"><div><span className="eyebrow">Across Mosaic</span><h2>More than one kind of story</h2></div></div><MediaShelf items={discovery} showType label="Cross-media discovery"/></section>}
-    </div>
+    {discovery.length > 0 && <section className="cross-media-module" aria-labelledby="cross-media"><div className="strip-head"><div><h2 id="cross-media">More than one kind of story</h2><p className="strip-note">Everything above in one place, for browsing across media.</p></div></div><MediaShelf items={discovery} showType label="Cross-media discovery"/></section>}
   </div>;
 }
